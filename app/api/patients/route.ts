@@ -20,6 +20,9 @@ interface Patient {
   sesionesAux?: string[]
 }
 
+export const maxDuration = 300 // Aumentar el timeout a 300 segundos
+export const dynamic = 'force-dynamic' // Asegurarse que la ruta sea dinámica
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -27,18 +30,29 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
 
+    // Agregar timeout a la promesa de Firebase
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Database timeout')), 10000)
+    })
+
     const patientsRef = db.ref('pacientes')
-    const snapshot = await patientsRef.get()
+    const dataPromise = patientsRef.get()
     
-    let patients: Patient[] = []
+    // Race entre el timeout y la petición
+    const snapshot = await Promise.race([dataPromise, timeoutPromise])
+      .catch(error => {
+        console.error('Database error:', error)
+        throw new Error('Database connection timeout')
+      })
+
+    let patients = []
     
-    if (snapshot.exists()) {
+    if (snapshot && snapshot.exists()) {
       patients = Object.entries(snapshot.val()).map(([id, data]) => ({
         id,
         ...(data as unknown as Patient),
       }))
 
-      // Aplicar filtro de búsqueda
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase()
         patients = patients.filter(patient => 
@@ -48,11 +62,9 @@ export async function GET(request: Request) {
         )
       }
 
-      // Ordenar por nombre
       patients.sort((a, b) => a.nombre.localeCompare(b.nombre))
     }
 
-    // Calcular paginación
     const totalItems = patients.length
     const totalPages = Math.ceil(totalItems / limit)
     const startIndex = (page - 1) * limit
@@ -69,8 +81,8 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Error fetching patients:', error)
     return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
+      { error: error.message || 'Error interno del servidor' },
+      { status: error.message === 'Database connection timeout' ? 504 : 500 }
     )
   }
 } 

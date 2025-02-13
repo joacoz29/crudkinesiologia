@@ -83,23 +83,43 @@ export default function PatientsPage() {
   }, [currentUser]) // Removed unnecessary dependencies: searchTerm, currentPage
 
   const fetchPatients = async () => {
-    try {
-      const searchParams = new URLSearchParams({
-        search: searchTerm,
-        page: currentPage.toString(),
-        limit: patientsPerPage.toString()
-      })
+    const maxRetries = 3
+    let attempt = 0
 
-      const response = await fetch(`/api/patients?${searchParams}`)
-      if (!response.ok) {
-        throw new Error('Error al obtener pacientes')
+    while (attempt < maxRetries) {
+      try {
+        const searchParams = new URLSearchParams({
+          search: searchTerm,
+          page: currentPage.toString(),
+          limit: patientsPerPage.toString()
+        })
+
+        const response = await fetch(`/api/patients?${searchParams}`, {
+          // Aumentar el timeout del cliente
+          next: { revalidate: 0 }, // No cache
+          cache: 'no-store'
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const data = await response.json()
+        setPatients(data.patients)
+        setTotalPages(data.pagination.totalPages)
+        break // Si llegamos aquí, la petición fue exitosa
+      } catch (error) {
+        attempt++
+        console.error(`Attempt ${attempt} failed:`, error)
+        
+        if (attempt === maxRetries) {
+          console.error("Error fetching patients after all retries:", error)
+          // Podrías mostrar un mensaje de error al usuario aquí
+        } else {
+          // Esperar antes de reintentar
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+        }
       }
-
-      const data = await response.json()
-      setPatients(data.patients)
-      setTotalPages(data.pagination.totalPages)
-    } catch (error) {
-      console.error("Error fetching patients:", error)
     }
   }
 

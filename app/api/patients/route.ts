@@ -19,8 +19,8 @@ interface Patient {
   sesionesAux?: string[]
 }
 
-// Ajustar a 60 segundos máximo para plan Hobby de Vercel
-export const maxDuration = 60
+// Ajustar a 10 segundos máximo para plan Hobby de Vercel
+export const maxDuration = 10
 export const dynamic = 'force-dynamic' // Asegurarse que la ruta sea dinámica
 
 export async function GET(request: Request) {
@@ -30,25 +30,32 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
 
+    console.log('Database URL:', process.env.FIREBASE_DATABASE_URL)
+    console.log('Attempting to fetch patients...')
+
     const patientsRef = db.ref('pacientes')
-    
-    // Simplificar la obtención de datos
-    const snapshot = await patientsRef.once('value')
-    
-    if (!snapshot.exists()) {
+    const snapshot = await patientsRef.once('value', (snapshot) => {
+      console.log('Data fetched successfully')
+      return snapshot
+    }, (error) => {
+      console.error('Error fetching data:', error)
+      throw error
+    })
+
+    if (!snapshot || !snapshot.exists()) {
+      console.log('No data found')
       return NextResponse.json({
         patients: [],
-        pagination: {
-          currentPage: page,
-          totalPages: 0,
-          totalItems: 0,
-        }
+        pagination: { currentPage: page, totalPages: 0, totalItems: 0 }
       })
     }
 
-    let patients = Object.entries(snapshot.val()).map(([id, data]) => ({
+    const data = snapshot.val()
+    console.log('Data received:', Object.keys(data).length, 'patients')
+
+    let patients = Object.entries(data).map(([id, data]) => ({
       id,
-      ...(data as unknown as Patient),
+      ...(data as any)
     }))
 
     if (searchTerm) {
@@ -76,9 +83,9 @@ export async function GET(request: Request) {
       }
     })
   } catch (error) {
-    console.error('Error fetching patients:', error)
+    console.error('Error in GET /api/patients:', error)
     return NextResponse.json(
-      { error: 'Error al obtener pacientes' },
+      { error: 'Error al obtener pacientes', details: error.message },
       { status: 500 }
     )
   }

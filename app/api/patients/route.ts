@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebase-admin'
-import { getDatabase } from 'firebase-admin/database'
 
 interface Patient {
   nombre: string
@@ -31,39 +30,37 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
 
-    // Reducir el timeout a 8 segundos para dar margen
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Database timeout')), 8000)
-    })
-
     const patientsRef = db.ref('pacientes')
-    const dataPromise = patientsRef.get()
     
-    const snapshot = await Promise.race([dataPromise, timeoutPromise])
-      .catch(error => {
-        console.error('Database error:', error)
-        throw new Error('Database connection timeout')
+    // Simplificar la obtención de datos
+    const snapshot = await patientsRef.once('value')
+    
+    if (!snapshot.exists()) {
+      return NextResponse.json({
+        patients: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 0,
+          totalItems: 0,
+        }
       })
-
-    let patients = []
-    
-    if (snapshot && snapshot.exists()) {
-      patients = Object.entries(snapshot.val()).map(([id, data]) => ({
-        id,
-        ...(data as unknown as Patient),
-      }))
-
-      if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase()
-        patients = patients.filter(patient => 
-          patient.nombre.toLowerCase().includes(searchLower) ||
-          patient.apellido.toLowerCase().includes(searchLower) ||
-          patient.dni.toLowerCase().includes(searchLower)
-        )
-      }
-
-      patients.sort((a, b) => a.nombre.localeCompare(b.nombre))
     }
+
+    let patients = Object.entries(snapshot.val()).map(([id, data]) => ({
+      id,
+      ...(data as unknown as Patient),
+    }))
+
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase()
+      patients = patients.filter(patient => 
+        patient.nombre.toLowerCase().includes(searchLower) ||
+        patient.apellido.toLowerCase().includes(searchLower) ||
+        patient.dni.toLowerCase().includes(searchLower)
+      )
+    }
+
+    patients.sort((a, b) => a.nombre.localeCompare(b.nombre))
 
     const totalItems = patients.length
     const totalPages = Math.ceil(totalItems / limit)
@@ -81,8 +78,8 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Error fetching patients:', error)
     return NextResponse.json(
-      { error: error.message || 'Error interno del servidor' },
-      { status: error.message === 'Database connection timeout' ? 504 : 500 }
+      { error: 'Error al obtener pacientes' },
+      { status: 500 }
     )
   }
 } 

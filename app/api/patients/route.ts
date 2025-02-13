@@ -20,7 +20,8 @@ interface Patient {
   sesionesAux?: string[]
 }
 
-export const maxDuration = 300 // Aumentar el timeout a 300 segundos
+// Ajustar a 60 segundos máximo para plan Hobby de Vercel
+export const maxDuration = 60
 export const dynamic = 'force-dynamic' // Asegurarse que la ruta sea dinámica
 
 export async function GET(request: Request) {
@@ -30,15 +31,14 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
 
-    // Agregar timeout a la promesa de Firebase
+    // Reducir el timeout a 8 segundos para dar margen
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Database timeout')), 10000)
+      setTimeout(() => reject(new Error('Database timeout')), 8000)
     })
 
     const patientsRef = db.ref('pacientes')
     const dataPromise = patientsRef.get()
     
-    // Race entre el timeout y la petición
     const snapshot = await Promise.race([dataPromise, timeoutPromise])
       .catch(error => {
         console.error('Database error:', error)

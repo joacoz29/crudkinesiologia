@@ -34,10 +34,10 @@ export async function GET(request: Request) {
     console.log('Attempting to fetch patients...')
 
     const patientsRef = db.ref('pacientes')
-    const snapshot = await patientsRef.once('value', (snapshot) => {
+    const snapshot = await patientsRef.once('value', (snapshot: any) => {
       console.log('Data fetched successfully')
       return snapshot
-    }, (error) => {
+    }, (error: any) => {
       console.error('Error fetching data:', error)
       throw error
     })

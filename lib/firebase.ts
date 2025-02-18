@@ -12,17 +12,31 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 }
 
+// Verificar que tenemos la configuración necesaria
+if (!firebaseConfig.projectId) {
+  throw new Error('Firebase Project ID is required')
+}
+
+if (!firebaseConfig.databaseURL) {
+  throw new Error('Firebase Database URL is required')
+}
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig)
 
 // Initialize Realtime Database and get a reference to the service
 export const db = getDatabase(app)
-export const libroDiarioDB = getDatabase(app, "https://librodiario-7d332.firebaseio.com")
+
+// Para el libro diario, usar una URL específica
+export const libroDiarioDB = getDatabase(app, process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL)
 
 export const auth = getAuth(app)
 
-// Add this line to enable Firebase debugging
+// Add this line to enable Firebase debugging in development
 if (process.env.NODE_ENV !== "production") {
-  console.log("Firebase config:", firebaseConfig)
+  console.log("Firebase config:", {
+    ...firebaseConfig,
+    apiKey: 'HIDDEN'  // No mostrar la API key en logs
+  })
 }
 

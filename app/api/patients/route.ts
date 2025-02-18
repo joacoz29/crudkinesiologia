@@ -85,7 +85,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Error in GET /api/patients:', error)
     return NextResponse.json(
-      { error: 'Error al obtener pacientes', details: error.message },
+      { error: 'Error al obtener pacientes', details: (error as Error).message },
       { status: 500 }
     )
   }

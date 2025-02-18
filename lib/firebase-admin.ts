@@ -6,6 +6,13 @@ function getFirebaseAdmin() {
   
   if (!apps.length) {
     try {
+      console.log('Starting Firebase Admin initialization...')
+      console.log('Checking environment variables:')
+      console.log('Project ID exists:', !!process.env.FIREBASE_PROJECT_ID)
+      console.log('Client Email exists:', !!process.env.FIREBASE_CLIENT_EMAIL)
+      console.log('Private Key exists:', !!process.env.FIREBASE_PRIVATE_KEY)
+      console.log('Database URL exists:', !!process.env.FIREBASE_DATABASE_URL)
+
       return initializeApp({
         credential: cert({
           projectId: process.env.FIREBASE_PROJECT_ID,

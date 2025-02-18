@@ -14,25 +14,7 @@ import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import { debounce } from "lodash"
-
-interface Patient {
-  id: string
-  nombre: string
-  apellido: string
-  edad: string
-  dni: string
-  obraSocial: string
-  nroAFL: string
-  telefono: string
-  diagnostico: string
-  doctor: string
-  sexo?: string
-  domicilio?: string
-  anotaciones?: string
-  tto?: string
-  sesiones?: string[]
-  sesionesAux?: string[]
-}
+import { Patient } from "@/types"
 
 export default function PatientsPage() {
   const [modalOpen, setModalOpen] = useState(false)
@@ -360,6 +342,7 @@ export default function PatientsPage() {
               patient={selectedPatient}
               onSave={handleSaveEdit}
               onAddToDiario={handleAddToDiario}
+              setLibroDiarioUpdateTrigger={setLibroDiarioUpdateTrigger}
             />
             <DeletePatientDialog
               isOpen={isDeleteDialogOpen}

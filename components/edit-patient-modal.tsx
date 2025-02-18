@@ -13,6 +13,7 @@ import { auth } from "@/lib/firebase"
 import { ref, update } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { addToLibroDiario } from "@/lib/helpers"
+import { Patient } from "@/types"
 
 interface EditPatientModalProps {
   open: boolean
@@ -20,6 +21,7 @@ interface EditPatientModalProps {
   patient: Patient | null
   onSave: (updatedPatient: Patient) => void
   onAddToDiario: (nombreApellido: string) => void
+  setLibroDiarioUpdateTrigger: (value: (prev: number) => number) => void
 }
 
 function getNextSessionNumber(sessions: string[]): number {
@@ -42,9 +44,16 @@ function getCurrentArgentinaDateTime() {
   return argentinaTime
 }
 
-export function EditPatientModal({ open, onOpenChange, patient, onSave, onAddToDiario }: EditPatientModalProps) {
+export function EditPatientModal({ 
+  open, 
+  onOpenChange, 
+  patient, 
+  onSave, 
+  onAddToDiario,
+  setLibroDiarioUpdateTrigger 
+}: EditPatientModalProps) {
   const [editedPatient, setEditedPatient] = useState<Patient | null>(null)
-  const [sesiones, setSesiones] = useState<string>("")
+  const [sesiones, setSesiones] = useState<string | string[]>("")
   const [sesionesAux, setSesionesAux] = useState<string[]>([])
   const [newSessionAdded, setNewSessionAdded] = useState(false)
 
@@ -53,14 +62,12 @@ export function EditPatientModal({ open, onOpenChange, patient, onSave, onAddToD
       console.log("Patient data received:", patient)
       setEditedPatient(patient)
       console.log("Patient sesiones:", patient.sesiones)
-      setSesiones(patient.sesiones || "")
+      setSesiones(Array.isArray(patient.sesiones) ? patient.sesiones.join(", ") : patient.sesiones || "")
       // Inicializa sesionesAux con los datos de sesiones si es un array, o lo convierte a array si es string
       setSesionesAux(
         Array.isArray(patient.sesiones)
           ? patient.sesiones
-          : typeof patient.sesiones === "string"
-            ? patient.sesiones.split(", ")
-            : [],
+          : (patient.sesiones as string)?.split(", ") || []
       )
     }
   }, [patient])
@@ -79,14 +86,13 @@ export function EditPatientModal({ open, onOpenChange, patient, onSave, onAddToD
 
   const handleSave = async () => {
     if (editedPatient) {
-      const currentUser = auth.currentUser
-      const updatedPatient = {
+      const updatedPatient: Patient = {
         ...editedPatient,
-        sesiones: sesionesAux.join(", "),
+        sesiones: sesionesAux,
         sesionesAux,
         ultima_actualizacion: {
           fecha: new Date().toISOString(),
-          usuario: currentUser ? currentUser.displayName || currentUser.email : "Unknown",
+          usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Unknown",
         },
       }
 

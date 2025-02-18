@@ -1,23 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebase-admin'
-
-interface Patient {
-  nombre: string
-  apellido: string
-  edad: string
-  dni: string
-  obraSocial: string
-  nroAFL: string
-  telefono: string
-  diagnostico: string
-  doctor: string
-  sexo?: string
-  domicilio?: string
-  anotaciones?: string
-  tto?: string
-  sesiones?: string[]
-  sesionesAux?: string[]
-}
+import { Patient } from "@/types"
 
 // Ajustar a 10 segundos máximo para plan Hobby de Vercel
 export const maxDuration = 10

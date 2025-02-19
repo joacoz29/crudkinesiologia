@@ -118,6 +118,6 @@ try {
   const newPaciente = createPaciente(examplePaciente)
   console.log("Patient record created successfully:", newPaciente)
 } catch (error) {
-  console.error("Error creating patient record:", error.message)
+  console.error("Error creating patient record:", error instanceof Error ? error.message : String(error))
 }
 

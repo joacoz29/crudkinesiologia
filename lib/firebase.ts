@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase/app"
+import { initializeApp, getApps } from "firebase/app"
 import { getDatabase } from "firebase/database"
 import { getAuth } from "firebase/auth"
 
@@ -22,13 +22,13 @@ if (!firebaseConfig.databaseURL) {
 }
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
 
 // Initialize Realtime Database and get a reference to the service
 export const db = getDatabase(app)
 
-// Para el libro diario, usar una URL específica
-export const libroDiarioDB = getDatabase(app, process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL)
+// Para el libro diario, usar la misma instancia de database
+export const libroDiarioDB = db
 
 export const auth = getAuth(app)
 

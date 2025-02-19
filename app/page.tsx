@@ -16,7 +16,15 @@ import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import { debounce } from "lodash"
 import { Patient } from "@/types"
 
-export default function PatientsPage() {
+export default function Page() {
+  return (
+    <div suppressHydrationWarning>
+      <PatientsPage />
+    </div>
+  )
+}
+
+function PatientsPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [patients, setPatients] = useState<Patient[]>([])

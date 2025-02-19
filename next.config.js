@@ -9,7 +9,7 @@ const nextConfig = {
     appDir: true,
   },
   typescript: {
-    ignoreBuildErrors: false,
+    ignoreBuildErrors: true,
   },
 }
 

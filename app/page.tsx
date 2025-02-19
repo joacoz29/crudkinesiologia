@@ -1,3 +1,7 @@
+export default function Page() {
+  return <ClientPage />
+}
+
 "use client"
 
 import { Button } from "@/components/ui/button"
@@ -9,22 +13,14 @@ import { LibroDiario } from "@/components/libro-diario"
 import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { db, auth } from "@/lib/firebase"
-import { ref, query, get, remove, update } from "firebase/database"
+import { ref, remove, update } from "firebase/database"
 import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import { debounce } from "lodash"
 import { Patient } from "@/types"
 
-export default function Page() {
-  return (
-    <div suppressHydrationWarning>
-      <PatientsPage />
-    </div>
-  )
-}
-
-function PatientsPage() {
+function ClientPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [patients, setPatients] = useState<Patient[]>([])
@@ -44,7 +40,7 @@ function PatientsPage() {
 
   useEffect(() => {
     console.log("PatientsPage component mounted")
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
       if (user) {
         console.log("User authenticated:", user.email)
         if (user.email === "kinesiologiaintegral@gmail.com") {
@@ -159,7 +155,7 @@ function PatientsPage() {
     setEditModalOpen(false)
 
     // Trigger Libro Diario update
-    setLibroDiarioUpdateTrigger((prev) => prev + 1)
+    setLibroDiarioUpdateTrigger((prev: number) => prev + 1)
   }
 
   const debouncedFetch = debounce((value: string) => {

@@ -1,7 +1,3 @@
-export default function Page() {
-  return <ClientPage />
-}
-
 "use client"
 
 import { Button } from "@/components/ui/button"
@@ -20,7 +16,7 @@ import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import { debounce } from "lodash"
 import { Patient } from "@/types"
 
-function ClientPage() {
+export default function Page() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [patients, setPatients] = useState<Patient[]>([])
@@ -34,7 +30,7 @@ function ClientPage() {
   const [activeTab, setActiveTab] = useState("pacientes")
   const [newDiarioEntry, setNewDiarioEntry] = useState<{ nombreApellido: string; id: string } | null>(null)
   const router = useRouter()
-  const [libroDiarioUpdateTrigger, setLibroDiarioUpdateTrigger] = useState(0) // Added state for Libro Diario update trigger
+  const [libroDiarioUpdateTrigger, setLibroDiarioUpdateTrigger] = useState(0)
 
   const patientsPerPage = 10
 

@@ -70,18 +70,10 @@ export default function Page() {
 
     while (attempt < maxRetries) {
       try {
-        const searchParams = new URLSearchParams({
-          search: searchTerm,
-          page: currentPage.toString(),
-          limit: patientsPerPage.toString()
-        })
-
-        const response = await fetch(`/api/patients?${searchParams}`, {
-          // Aumentar el timeout del cliente
-          next: { revalidate: 0 }, // No cache
-          cache: 'no-store'
-        })
-
+        const response = await fetch(
+          `/api/patients?search=${searchTerm}&page=${currentPage}&limit=${patientsPerPage}`
+        )
+        
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`)
         }
@@ -89,14 +81,12 @@ export default function Page() {
         const data = await response.json()
         setPatients(data.patients)
         setTotalPages(data.pagination.totalPages)
-        break // Si llegamos aquí, la petición fue exitosa
+        return
       } catch (error) {
         attempt++
         console.error(`Attempt ${attempt} failed:`, error)
-        
         if (attempt === maxRetries) {
-          console.error("Error fetching patients after all retries:", error)
-          // Podrías mostrar un mensaje de error al usuario aquí
+          console.error('Error fetching patients after all retries:', error)
         } else {
           // Esperar antes de reintentar
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt))

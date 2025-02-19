@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebase-admin'
 import { Patient } from "@/types"
 
-// Ajustar a 10 segundos máximo para plan Hobby de Vercel
-export const maxDuration = 10
+// Ajustar a 5 segundos máximo para plan Hobby de Vercel
+export const maxDuration = 5
 export const dynamic = 'force-dynamic' // Asegurarse que la ruta sea dinámica
 
 export async function GET(request: Request) {
@@ -17,15 +17,9 @@ export async function GET(request: Request) {
     console.log('Attempting to fetch patients...')
 
     const patientsRef = db.ref('pacientes')
-    const snapshot = await patientsRef.once('value', (snapshot: any) => {
-      console.log('Data fetched successfully')
-      return snapshot
-    }, (error: any) => {
-      console.error('Error fetching data:', error)
-      throw error
-    })
+    const snapshot = await patientsRef.once('value')
 
-    if (!snapshot || !snapshot.exists()) {
+    if (!snapshot.exists()) {
       console.log('No data found')
       return NextResponse.json({
         patients: [],
@@ -36,7 +30,7 @@ export async function GET(request: Request) {
     const data = snapshot.val()
     console.log('Data received:', Object.keys(data).length, 'patients')
 
-    let patients = Object.entries(data).map(([id, data]) => ({
+    let patients = Object.entries(data || {}).map(([id, data]) => ({
       id,
       ...(data as any)
     }))
@@ -44,9 +38,9 @@ export async function GET(request: Request) {
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase()
       patients = patients.filter(patient => 
-        patient.nombre.toLowerCase().includes(searchLower) ||
-        patient.apellido.toLowerCase().includes(searchLower) ||
-        patient.dni.toLowerCase().includes(searchLower)
+        patient.nombre?.toLowerCase().includes(searchLower) ||
+        patient.apellido?.toLowerCase().includes(searchLower) ||
+        patient.dni?.toLowerCase().includes(searchLower)
       )
     }
 

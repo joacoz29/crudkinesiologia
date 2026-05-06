@@ -34,6 +34,15 @@ function getCurrentArgentinaDateTime() {
   return format(new Date(), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
 }
 
+// Inserta salto de línea antes de cada entrada de sesión (N-)
+function formatSesiones(text: string): string {
+  return text.replace(/\s+(\d+-)/g, '\n$1').trim()
+}
+
+function countSessions(text: string): number {
+  return [...text.matchAll(/\d+-/g)].length
+}
+
 export function EditPatientModal({
   open,
   onOpenChange,
@@ -51,14 +60,14 @@ export function EditPatientModal({
     if (patient) {
       setEditedPatient(patient)
       setSesionesText(
-        Array.isArray(patient.sesiones) ? patient.sesiones.join(" ") : ""
+        Array.isArray(patient.sesiones) ? formatSesiones(patient.sesiones.join(" ")) : ""
       )
     }
   }, [patient])
 
   const addSession = () => {
     const newEntry = `${getNextSessionNumber(sesionesText)}- ${getCurrentArgentinaDateTime()}`
-    setSesionesText(prev => prev.trimEnd() ? `${prev.trimEnd()} ${newEntry}` : newEntry)
+    setSesionesText(prev => prev.trimEnd() ? `${prev.trimEnd()}\n${newEntry}` : newEntry)
     setNewSessionAdded(true)
   }
 
@@ -250,7 +259,13 @@ export function EditPatientModal({
 
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <Label htmlFor="sesiones">Sesiones</Label>
+              <Label htmlFor="sesiones">
+                Sesiones{countSessions(sesionesText) > 0 && (
+                  <span className="ml-2 text-xs font-normal text-gray-500">
+                    {countSessions(sesionesText)} turnos
+                  </span>
+                )}
+              </Label>
               <Button
                 type="button"
                 variant="outline"

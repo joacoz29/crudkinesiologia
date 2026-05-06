@@ -17,6 +17,7 @@ import { Loader2, Trash2 } from "lucide-react"
 
 interface EntradaLibroDiario {
   id: string
+  tipo: "Paciente" | "Gasto"
   nombreApellido: string
   cobertura: "Particular" | "Obra Social"
   obraSocial: string
@@ -127,6 +128,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       if (!exists) {
         append({
           id: (fields.length + 1).toString(),
+          tipo: "Paciente",
           nombreApellido: newEntry.nombreApellido,
           cobertura: "Particular",
           obraSocial: "-",
@@ -151,10 +153,14 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
 
         if (snapshot.exists()) {
           const data = snapshot.val()
-          setValue("entradas", data.entradas || [])
+          const normalized = (data.entradas || []).map((e: EntradaLibroDiario) => ({
+            ...e,
+            tipo: e.tipo ?? "Paciente",
+          }))
+          setValue("entradas", normalized)
           setTotalHaber(data.totalHaber || 0)
           setTotalDebe(data.totalDebe || 0)
-          setLastSavedData(JSON.stringify(data.entradas || []))
+          setLastSavedData(JSON.stringify(normalized))
         } else {
           setValue("entradas", [])
           setTotalHaber(0)
@@ -184,9 +190,10 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     }
   }, [updateTrigger, fecha, fetchEntriesForDate])
 
-  const agregarFila = () => {
+  const agregarFila = (tipo: "Paciente" | "Gasto" = "Paciente") => {
     append({
       id: (fields.length + 1).toString(),
+      tipo,
       nombreApellido: "",
       cobertura: "Particular",
       obraSocial: "-",
@@ -215,16 +222,17 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
 
       autoTable(doc, {
         startY: 24,
-        head: [["N°", "Nombre y Apellido", "Cobertura", "Obra Social", "Debe", "Haber"]],
+        head: [["N°", "Tipo", "Nombre / Descripción", "Cobertura", "Obra Social", "Debe", "Haber"]],
         body: watchEntradas.map((e, i) => [
           i + 1,
+          e.tipo ?? "Paciente",
           e.nombreApellido,
-          e.cobertura,
-          e.obraSocial,
+          e.tipo === "Gasto" ? "—" : e.cobertura,
+          e.tipo === "Gasto" ? "—" : e.obraSocial,
           `$${e.debe.toFixed(2)}`,
           `$${e.haber.toFixed(2)}`,
         ]),
-        foot: [["", "", "", "Totales", `$${totalDebe.toFixed(2)}`, `$${totalHaber.toFixed(2)}`]],
+        foot: [["", "", "", "", "Totales", `$${totalDebe.toFixed(2)}`, `$${totalHaber.toFixed(2)}`]],
         footStyles: { fontStyle: "bold" },
       })
 
@@ -264,8 +272,9 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           <Table>
             <TableHeader>
               <TableRow className="bg-[#001633] hover:bg-[#001633]">
-                <TableHead className="text-white font-semibold w-12 text-center">N°</TableHead>
-                <TableHead className="text-white font-semibold">Nombre y Apellido</TableHead>
+                <TableHead className="text-white font-semibold w-10 text-center">N°</TableHead>
+                <TableHead className="text-white font-semibold w-28">Tipo</TableHead>
+                <TableHead className="text-white font-semibold">Nombre / Descripción</TableHead>
                 <TableHead className="text-white font-semibold">Cobertura</TableHead>
                 <TableHead className="text-white font-semibold">Obra Social</TableHead>
                 <TableHead className="text-white font-semibold">Debe</TableHead>
@@ -276,78 +285,112 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
             <TableBody>
               {!fields.length ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                     No hay entradas para este día.
                   </TableCell>
                 </TableRow>
               ) : (
-                fields.map((field, index) => (
-                  <TableRow key={field.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                    <TableCell className="text-center text-sm">{index + 1}</TableCell>
-                    <TableCell>
-                      <Input
-                        {...register(`entradas.${index}.nombreApellido`)}
-                        placeholder="Nombre y Apellido"
-                        className="border-gray-300 focus:border-[#001633]"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={watchEntradas[index]?.cobertura ?? "Particular"}
-                        onValueChange={(value) => {
-                          setValue(`entradas.${index}.cobertura`, value as "Particular" | "Obra Social")
-                          if (value === "Particular") {
-                            setValue(`entradas.${index}.obraSocial`, "-")
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="border-gray-300 focus:border-[#001633]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Particular">Particular</SelectItem>
-                          <SelectItem value="Obra Social">Obra Social</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        {...register(`entradas.${index}.obraSocial`)}
-                        disabled={watchEntradas[index]?.cobertura === "Particular"}
-                        className="border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        {...register(`entradas.${index}.debe`, { valueAsNumber: true })}
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        className="border-gray-300 focus:border-[#001633]"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        {...register(`entradas.${index}.haber`, { valueAsNumber: true })}
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        className="border-gray-300 focus:border-[#001633]"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white transition-colors"
-                        onClick={() => handleRemove(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                fields.map((field, index) => {
+                  const tipo = watchEntradas[index]?.tipo ?? "Paciente"
+                  const esGasto = tipo === "Gasto"
+                  return (
+                    <TableRow key={field.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                      <TableCell className="text-center text-sm">{index + 1}</TableCell>
+                      <TableCell>
+                        <Select
+                          value={tipo}
+                          onValueChange={(value) => {
+                            setValue(`entradas.${index}.tipo`, value as "Paciente" | "Gasto")
+                            if (value === "Gasto") {
+                              setValue(`entradas.${index}.cobertura`, "Particular")
+                              setValue(`entradas.${index}.obraSocial`, "-")
+                              setValue(`entradas.${index}.haber`, 0)
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`border-gray-300 focus:border-[#001633] text-xs ${esGasto ? "border-orange-300 bg-orange-50" : ""}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Paciente">Paciente</SelectItem>
+                            <SelectItem value="Gasto">Gasto</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          {...register(`entradas.${index}.nombreApellido`)}
+                          placeholder={esGasto ? "Descripción del gasto" : "Nombre y Apellido"}
+                          className="border-gray-300 focus:border-[#001633]"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {esGasto ? (
+                          <span className="text-gray-400 text-sm px-2">—</span>
+                        ) : (
+                          <Select
+                            value={watchEntradas[index]?.cobertura ?? "Particular"}
+                            onValueChange={(value) => {
+                              setValue(`entradas.${index}.cobertura`, value as "Particular" | "Obra Social")
+                              if (value === "Particular") {
+                                setValue(`entradas.${index}.obraSocial`, "-")
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="border-gray-300 focus:border-[#001633]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Particular">Particular</SelectItem>
+                              <SelectItem value="Obra Social">Obra Social</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {esGasto ? (
+                          <span className="text-gray-400 text-sm px-2">—</span>
+                        ) : (
+                          <Input
+                            {...register(`entradas.${index}.obraSocial`)}
+                            disabled={watchEntradas[index]?.cobertura === "Particular"}
+                            className="border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400"
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          {...register(`entradas.${index}.debe`, { valueAsNumber: true })}
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          className="border-gray-300 focus:border-[#001633]"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          {...register(`entradas.${index}.haber`, { valueAsNumber: true })}
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          disabled={esGasto}
+                          className="border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white transition-colors"
+                          onClick={() => handleRemove(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>
@@ -355,13 +398,23 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       </div>
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <Button
-          type="button"
-          onClick={agregarFila}
-          className="bg-[#001633] hover:bg-[#002966] transition-colors"
-        >
-          + Agregar fila
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            onClick={() => agregarFila("Paciente")}
+            className="bg-[#001633] hover:bg-[#002966] transition-colors"
+          >
+            + Paciente
+          </Button>
+          <Button
+            type="button"
+            onClick={() => agregarFila("Gasto")}
+            variant="outline"
+            className="border-orange-400 text-orange-600 hover:bg-orange-50 transition-colors"
+          >
+            + Gasto
+          </Button>
+        </div>
 
         <div className="flex gap-6 text-sm">
           <div className="text-center">

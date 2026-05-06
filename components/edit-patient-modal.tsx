@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, X } from "lucide-react"
+import { Plus } from "lucide-react"
 import { useState, useEffect } from "react"
 import { format } from "date-fns-tz"
 import { auth } from "@/lib/firebase"
@@ -23,90 +23,74 @@ interface EditPatientModalProps {
   setLibroDiarioUpdateTrigger: (value: (prev: number) => number) => void
 }
 
-function getNextSessionNumber(sessions: string[]): number {
-  if (sessions.length === 0) return 1
-
-  const lastSession = sessions[sessions.length - 1]
-  const match = lastSession.match(/^(\d+)-/)
-
-  if (match) {
-    const lastNumber = Number.parseInt(match[1], 10)
-    return lastNumber >= 10 ? 1 : lastNumber + 1
-  }
-
-  return 1
+function getNextSessionNumber(text: string): number {
+  const matches = [...text.matchAll(/(\d+)-/g)]
+  if (matches.length === 0) return 1
+  const numbers = matches.map(m => parseInt(m[1], 10))
+  return Math.max(...numbers) + 1
 }
 
 function getCurrentArgentinaDateTime() {
-  const now = new Date()
-  const argentinaTime = format(now, "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
-  return argentinaTime
+  return format(new Date(), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
 }
 
-export function EditPatientModal({ 
-  open, 
-  onOpenChange, 
-  patient, 
-  onSave, 
+export function EditPatientModal({
+  open,
+  onOpenChange,
+  patient,
+  onSave,
   onAddToDiario,
-  setLibroDiarioUpdateTrigger 
+  setLibroDiarioUpdateTrigger,
 }: EditPatientModalProps) {
   const [editedPatient, setEditedPatient] = useState<Patient | null>(null)
-  const [sesionesAux, setSesionesAux] = useState<string[]>([])
+  const [sesionesText, setSesionesText] = useState("")
   const [newSessionAdded, setNewSessionAdded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     if (patient) {
       setEditedPatient(patient)
-      setSesionesAux(Array.isArray(patient.sesiones) ? patient.sesiones : [])
+      setSesionesText(
+        Array.isArray(patient.sesiones) ? patient.sesiones.join(" ") : ""
+      )
     }
   }, [patient])
 
   const addSession = () => {
-    const currentDateTime = getCurrentArgentinaDateTime()
-    const nextNumber = getNextSessionNumber(sesionesAux)
-    const newSession = `${nextNumber}- ${currentDateTime}`
-    setSesionesAux([...sesionesAux, newSession])
+    const newEntry = `${getNextSessionNumber(sesionesText)}- ${getCurrentArgentinaDateTime()}`
+    setSesionesText(prev => prev.trimEnd() ? `${prev.trimEnd()} ${newEntry}` : newEntry)
     setNewSessionAdded(true)
   }
 
-  const removeSession = (index: number) => {
-    setSesionesAux(sesionesAux.filter((_, i) => i !== index))
-  }
-
   const handleSave = async () => {
-    if (editedPatient) {
-      setIsSaving(true)
-      try {
-        const updatedPatient: Patient = {
-          ...editedPatient,
-          sesiones: sesionesAux,
-          sesionesAux,
-          ultima_actualizacion: {
-            fecha: new Date().toISOString(),
-            usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Unknown",
-          },
-        }
-
-        if (newSessionAdded) {
-          await addToLibroDiario({
-            nombreApellido: `${updatedPatient.nombre} ${updatedPatient.apellido}`,
-            obraSocial: updatedPatient.obraSocial,
-          })
-        }
-
-        onSave(updatedPatient)
-        onOpenChange(false)
-        setNewSessionAdded(false)
-        setLibroDiarioUpdateTrigger((prev) => prev + 1)
-        toast.success('Paciente actualizado correctamente')
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Error al guardar los cambios'
-        toast.error(errorMessage)
-      } finally {
-        setIsSaving(false)
+    if (!editedPatient) return
+    setIsSaving(true)
+    try {
+      const updatedPatient: Patient = {
+        ...editedPatient,
+        sesiones: sesionesText ? [sesionesText] : [],
+        ultima_actualizacion: {
+          fecha: new Date().toISOString(),
+          usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Unknown",
+        },
       }
+
+      if (newSessionAdded) {
+        await addToLibroDiario({
+          nombreApellido: `${updatedPatient.nombre} ${updatedPatient.apellido}`,
+          obraSocial: updatedPatient.obraSocial,
+        })
+      }
+
+      onSave(updatedPatient)
+      onOpenChange(false)
+      setNewSessionAdded(false)
+      setLibroDiarioUpdateTrigger((prev) => prev + 1)
+      toast.success('Paciente actualizado correctamente')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al guardar los cambios')
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -266,41 +250,35 @@ export function EditPatientModal({
 
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <Label>Sesiones (Editable)</Label>
-              <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={addSession}>
-                <Plus className="h-4 w-4" />
+              <Label htmlFor="sesiones">Sesiones</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-1 text-xs border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
+                onClick={addSession}
+              >
+                <Plus className="h-3 w-3" />
+                Nueva sesión
               </Button>
             </div>
-            <div className="border rounded-md p-4 space-y-2">
-              {sesionesAux.map((sesion, index) => (
-                <div key={index} className="flex items-center space-x-2">
-                  <Input
-                    value={sesion}
-                    onChange={(e) => {
-                      const newSesionesAux = [...sesionesAux]
-                      newSesionesAux[index] = e.target.value
-                      setSesionesAux(newSesionesAux)
-                    }}
-                    className="flex-grow border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => removeSession(index)}
-                    aria-label={`Remove session ${index + 1}`}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <Textarea
+              id="sesiones"
+              value={sesionesText}
+              onChange={(e) => setSesionesText(e.target.value)}
+              className="min-h-[100px] border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
+              placeholder="Ej: Autorizació 1-28/3/23 2-30/3/23 3-3/4/23"
+            />
           </div>
 
-          <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors" disabled={isSaving}>
+          <Button
+            type="submit"
+            className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors"
+            disabled={isSaving}
+          >
             {isSaving ? 'Guardando...' : 'Guardar Cambios'}
           </Button>
+
           <div className="text-sm text-gray-500 mt-4">
             Última actualización: {editedPatient.ultima_actualizacion?.usuario || "N/A"} —{" "}
             {editedPatient.ultima_actualizacion?.fecha

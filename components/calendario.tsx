@@ -13,10 +13,11 @@ import {
   isToday,
 } from "date-fns"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
 import { fetchTurnosPorMes } from "@/lib/helpers"
+import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 
 const DAYS_OF_WEEK = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
@@ -32,7 +33,6 @@ function getCalendarDays(month: Date): Date[] {
   const end = endOfMonth(month)
   const days = eachDayOfInterval({ start, end })
 
-  // Week starts on Monday (Argentina). getDay: 0=Sun → position 6
   let startPad = getDay(start) - 1
   if (startPad < 0) startPad = 6
 
@@ -59,6 +59,8 @@ export function Calendario() {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()))
   const [turnosPorFecha, setTurnosPorFecha] = useState<Record<string, Turno[]>>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
 
   const today = new Date()
   const isCurrentMonth =
@@ -68,13 +70,10 @@ export function Calendario() {
   const loadTurnos = useCallback(async (month: Date) => {
     setIsLoading(true)
     try {
-      const data = await fetchTurnosPorMes(
-        month.getFullYear(),
-        month.getMonth() + 1
-      )
+      const data = await fetchTurnosPorMes(month.getFullYear(), month.getMonth() + 1)
       setTurnosPorFecha(data)
     } catch {
-      // silent — empty grid is fine
+      // empty grid is fine
     } finally {
       setIsLoading(false)
     }
@@ -83,6 +82,15 @@ export function Calendario() {
   useEffect(() => {
     loadTurnos(currentMonth)
   }, [currentMonth, loadTurnos])
+
+  const handleDayClick = (day: Date) => {
+    setSelectedDay(day)
+    setModalOpen(true)
+  }
+
+  const handleTurnoSaved = () => {
+    loadTurnos(currentMonth)
+  }
 
   const days = getCalendarDays(currentMonth)
   const weeks: Date[][] = []
@@ -105,9 +113,7 @@ export function Calendario() {
               {totalTurnos} turno{totalTurnos !== 1 ? "s" : ""}
             </span>
           )}
-          {isLoading && (
-            <span className="text-sm text-gray-400">Cargando...</span>
-          )}
+          {isLoading && <span className="text-sm text-gray-400">Cargando...</span>}
         </div>
         <div className="flex items-center gap-2">
           {!isCurrentMonth && (
@@ -165,36 +171,41 @@ export function Calendario() {
               return (
                 <div
                   key={di}
+                  onClick={() => handleDayClick(day)}
                   className={[
                     "min-h-[100px] p-1.5 flex flex-col gap-1 border-b border-gray-200",
-                    !inMonth && "bg-gray-50",
-                    today_ && "bg-blue-50",
+                    "cursor-pointer group transition-colors",
+                    !inMonth ? "bg-gray-50 hover:bg-gray-100" : "hover:bg-slate-50",
+                    today_ && "bg-blue-50 hover:bg-blue-100",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  {/* Day number */}
-                  <span
-                    className={[
-                      "text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full self-start",
-                      today_
-                        ? "bg-[#001633] text-white"
-                        : inMonth
-                        ? "text-gray-800"
-                        : "text-gray-400",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    {format(day, "d")}
-                  </span>
+                  {/* Day number + add button on hover */}
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={[
+                        "text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full",
+                        today_
+                          ? "bg-[#001633] text-white"
+                          : inMonth
+                          ? "text-gray-800"
+                          : "text-gray-400",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      {format(day, "d")}
+                    </span>
+                    <Plus className="h-3.5 w-3.5 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                  </div>
 
                   {/* Turno chips */}
                   {turnos.map((turno) => (
                     <div
                       key={turno.id}
                       className={[
-                        "text-xs px-1.5 py-0.5 rounded border truncate cursor-pointer",
+                        "text-xs px-1.5 py-0.5 rounded border truncate",
                         ESTADO_STYLES[turno.estado],
                       ].join(" ")}
                       title={`${turno.hora} — ${turno.nombre} ${turno.apellido}${turno.notas ? `\n${turno.notas}` : ""}`}
@@ -211,14 +222,28 @@ export function Calendario() {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-500">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
         <span className="font-medium">Estados:</span>
         {(Object.entries(ESTADO_STYLES) as [TurnoEstado, string][]).map(([estado, cls]) => (
-          <span key={estado} className={`px-2 py-0.5 rounded border ${cls}`}>
+          <span
+            key={estado}
+            className={`px-2 py-0.5 rounded border ${cls.replace("line-through", "")}`}
+          >
             {estado === "asistio" ? "asistió" : estado}
           </span>
         ))}
+        <span className="text-gray-400 ml-auto">Click en un día para agregar turno</span>
       </div>
+
+      {/* Modal */}
+      {selectedDay && (
+        <NuevoTurnoModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          fecha={selectedDay}
+          onSaved={handleTurnoSaved}
+        />
+      )}
     </div>
   )
 }

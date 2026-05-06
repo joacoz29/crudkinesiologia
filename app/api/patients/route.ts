@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/firebase-admin'
+import { db, initError } from '@/lib/firebase-admin'
 import { Patient } from "@/types"
 
 // Ajustar a 5 segundos máximo para plan Hobby de Vercel
@@ -11,10 +11,12 @@ export async function GET(request: Request) {
     if (!db) {
       const missing = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY', 'FIREBASE_DATABASE_URL']
         .filter(key => !process.env[key])
-      console.error('[/api/patients] Firebase Admin DB not initialized. Missing env vars:', missing)
+      console.error('[/api/patients] db is null. Missing:', missing, 'initError:', initError)
       return NextResponse.json({
         error: 'Database not initialized',
-        details: `Missing env vars: ${missing.length ? missing.join(', ') : 'none — initialization may have failed silently'}`
+        _build: '415a385-v2',
+        missing: missing.length ? missing : [],
+        initError: initError ?? 'no error captured — check env vars',
       }, { status: 500 })
     }
 

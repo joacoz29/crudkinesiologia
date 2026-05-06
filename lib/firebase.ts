@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from "firebase/app"
-import { getDatabase } from "firebase/database"
-import { getAuth } from "firebase/auth"
+import { getDatabase, Database } from "firebase/database"
+import { getAuth, Auth } from "firebase/auth"
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API,
@@ -12,6 +12,14 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 }
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
-export const db = getDatabase(app)
-export const auth = getAuth(app)
+// Definite assignment: these are only accessed in browser ("use client" components)
+let db!: Database
+let auth!: Auth
+
+if (typeof window !== "undefined") {
+  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
+  db = getDatabase(app)
+  auth = getAuth(app)
+}
+
+export { db, auth }

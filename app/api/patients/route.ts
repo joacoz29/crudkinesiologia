@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic' // Asegurarse que la ruta sea dinámica
 export async function GET(request: Request) {
   try {
     if (!db) {
+      console.error('[/api/patients] Firebase Admin DB not initialized. FIREBASE_PROJECT_ID set:', !!process.env.FIREBASE_PROJECT_ID)
       return NextResponse.json({ error: 'Database not initialized' }, { status: 500 })
     }
 
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
       })
     }
 
-    const data = snapshot.val() as Record<string, Record<string, unknown>>
+    const data = (snapshot.val() || {}) as Record<string, Record<string, unknown>>
 
     let patients = Object.entries(data).map(([id, record]) => {
       const raw = record as Record<string, unknown>
@@ -66,7 +67,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Error in GET /api/patients:', error)
     return NextResponse.json(
-      { error: 'Error al obtener pacientes' },
+      { error: 'Error al obtener pacientes', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     )
   }

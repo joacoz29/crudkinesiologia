@@ -23,7 +23,8 @@ if (process.env.FIREBASE_PROJECT_ID) {
       db = getDatabase(apps[0])
     }
   } catch (error) {
-    throw new Error(`Firebase admin initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    console.error('Firebase admin initialization failed:', error instanceof Error ? error.message : String(error))
+    // db remains null — route.ts null guard handles this gracefully
   }
 }
 

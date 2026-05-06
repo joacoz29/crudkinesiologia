@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { NewPatientModal } from "@/components/new-patient-modal"
 import { EditPatientModal } from "@/components/edit-patient-modal"
 import { LibroDiario } from "@/components/libro-diario"
+import { Calendario } from "@/components/calendario"
 import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle } from "lucide-react"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
@@ -192,6 +193,13 @@ export default function Page() {
             >
               Libro Diario
             </Button>
+            <Button
+              variant={activeTab === "calendario" ? "secondary" : "ghost"}
+              onClick={() => setActiveTab("calendario")}
+              className="text-white hover:text-white hover:bg-[#002966]"
+            >
+              Calendario
+            </Button>
           </nav>
         </div>
       </header>
@@ -353,12 +361,14 @@ export default function Page() {
               patientName={patientToDelete ? `${patientToDelete.nombre} ${patientToDelete.apellido}` : ""}
             />
           </>
-        ) : (
+        ) : activeTab === "libroDiario" ? (
           <LibroDiario
             newEntry={newDiarioEntry}
             key={newDiarioEntry?.id || "default"}
             updateTrigger={libroDiarioUpdateTrigger}
           />
+        ) : (
+          <Calendario />
         )}
       </main>
     </div>

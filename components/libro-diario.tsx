@@ -6,6 +6,16 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DatePicker } from "@/components/ui/date-picker"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useForm, useFieldArray, useWatch } from "react-hook-form"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -13,7 +23,7 @@ import { ref, get, set } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { toast } from "sonner"
 import { format } from "date-fns-tz"
-import { Loader2, Trash2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, ClipboardCopy, Loader2, Trash2 } from "lucide-react"
 
 type TipoEntrada = "Paciente" | "Gasto" | "Ingreso"
 
@@ -38,6 +48,12 @@ function toLocalDateKey(date: Date): string {
   return format(date, "yyyy-MM-dd", { timeZone: TZ })
 }
 
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
 const TIPO_STYLES: Record<TipoEntrada, string> = {
   Paciente: "",
   Gasto: "border-orange-300 bg-orange-50",
@@ -57,10 +73,14 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
   const [entryAdded, setEntryAdded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isCopying, setIsCopying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastSavedData, setLastSavedData] = useState("")
+  const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
   const skipNextSave = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const isToday = toLocalDateKey(fecha) === toLocalDateKey(new Date())
 
   const { register, control, setValue } = useForm<{ entradas: EntradaLibroDiario[] }>({
     defaultValues: { entradas: [] },
@@ -72,7 +92,6 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     name: "entradas",
   })
 
-  // useWatch dispara en cada cambio de campo, incluyendo inputs numéricos
   const watchEntradas = useWatch({ control, name: "entradas" })
 
   const saveEntries = useCallback(
@@ -103,7 +122,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     [fecha],
   )
 
-  // Totales en tiempo real, sin esperar al guardado
+  // Totales en tiempo real
   useEffect(() => {
     if (Array.isArray(watchEntradas)) {
       setTotalHaber(watchEntradas.reduce((sum, e) => sum + (Number(e?.haber) || 0), 0))
@@ -114,7 +133,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     }
   }, [watchEntradas])
 
-  // Auto-save con debounce de 800ms tras cualquier cambio
+  // Auto-save con debounce de 800ms
   useEffect(() => {
     if (skipNextSave.current) {
       skipNextSave.current = false
@@ -215,9 +234,41 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     })
   }
 
-  const handleRemove = (index: number) => {
-    removeField(index)
-    toast.success('Entrada eliminada')
+  const confirmDelete = () => {
+    if (deleteIndex !== null) {
+      removeField(deleteIndex)
+      setDeleteIndex(null)
+      toast.success('Entrada eliminada')
+    }
+  }
+
+  const copyPrevDay = async () => {
+    setIsCopying(true)
+    try {
+      const prevDate = addDays(fecha, -1)
+      const snapshot = await get(ref(db, `libroDiario/${toLocalDateKey(prevDate)}`))
+
+      if (!snapshot.exists() || !snapshot.val().entradas?.length) {
+        toast.error('No hay entradas el día anterior')
+        return
+      }
+
+      const prevEntradas: EntradaLibroDiario[] = (snapshot.val().entradas || []).map(
+        (e: EntradaLibroDiario) => ({
+          ...e,
+          tipo: e.tipo ?? "Paciente",
+          debe: 0,
+          haber: 0,
+        })
+      )
+
+      prevEntradas.forEach(e => append(e))
+      toast.success(`${prevEntradas.length} entrada${prevEntradas.length !== 1 ? 's' : ''} copiada${prevEntradas.length !== 1 ? 's' : ''} del día anterior`)
+    } catch (error) {
+      toast.error('Error al copiar el día anterior')
+    } finally {
+      setIsCopying(false)
+    }
   }
 
   const exportarPDF = () => {
@@ -231,6 +282,8 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
 
       doc.setFontSize(14)
       doc.text(`Libro Diario — ${dateStr}`, 14, 16)
+
+      const saldo = totalHaber - totalDebe
 
       autoTable(doc, {
         startY: 24,
@@ -266,9 +319,15 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div className="flex items-center gap-3">
           <h2 className="text-2xl sm:text-3xl font-semibold text-[#001633]">Libro Diario</h2>
+          {fields.length > 0 && (
+            <span className="text-sm text-gray-500 font-normal">
+              {fields.length} entrada{fields.length !== 1 ? 's' : ''}
+            </span>
+          )}
           {isSaving && (
             <span className="flex items-center gap-1 text-xs text-gray-400">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -276,7 +335,37 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
             </span>
           )}
         </div>
-        <DatePicker date={fecha} setDate={setFecha} />
+
+        {/* Navegación de fecha */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 w-9 p-0"
+            onClick={() => setFecha(addDays(fecha, -1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <DatePicker date={fecha} setDate={setFecha} />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 w-9 p-0"
+            onClick={() => setFecha(addDays(fecha, 1))}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          {!isToday && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-9 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
+              onClick={() => setFecha(new Date())}
+            >
+              Hoy
+            </Button>
+          )}
+        </div>
       </div>
 
       {isLoading && <div className="text-center py-4 text-gray-600">Cargando...</div>}
@@ -286,6 +375,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
         </div>
       )}
 
+      {/* Tabla */}
       <div className="overflow-x-auto">
         <div className="border border-[#001633] rounded-lg overflow-hidden">
           <Table>
@@ -412,7 +502,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white transition-colors"
-                          onClick={() => handleRemove(index)}
+                          onClick={() => setDeleteIndex(index)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -426,6 +516,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
         </div>
       </div>
 
+      {/* Acciones y saldo */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex gap-2 flex-wrap">
           <Button
@@ -451,6 +542,19 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           >
             + Ingreso
           </Button>
+          <Button
+            type="button"
+            onClick={copyPrevDay}
+            variant="outline"
+            disabled={isCopying}
+            className="border-gray-400 text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1"
+          >
+            {isCopying
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <ClipboardCopy className="h-3 w-3" />
+            }
+            Copiar día anterior
+          </Button>
         </div>
 
         <div className="text-center">
@@ -471,6 +575,30 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           Exportar PDF
         </Button>
       </div>
+
+      {/* Confirmación de eliminación */}
+      <AlertDialog open={deleteIndex !== null} onOpenChange={(open) => !open && setDeleteIndex(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar entrada?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteIndex !== null && watchEntradas?.[deleteIndex]?.nombreApellido
+                ? `Se eliminará la entrada de "${watchEntradas[deleteIndex].nombreApellido}". Esta acción no se puede deshacer.`
+                : 'Esta acción no se puede deshacer.'
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

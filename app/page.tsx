@@ -6,15 +6,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { NewPatientModal } from "@/components/new-patient-modal"
 import { EditPatientModal } from "@/components/edit-patient-modal"
 import { LibroDiario } from "@/components/libro-diario"
-import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2 } from "lucide-react"
+import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle } from "lucide-react"
 import { useState, useEffect } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, remove, update } from "firebase/database"
 import { useRouter } from "next/navigation"
-import { onAuthStateChanged, signOut } from "firebase/auth"
+import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import { debounce } from "lodash"
 import { Patient } from "@/types"
+import { getUserDisplayName } from "@/lib/auth-helper"
+import { toast } from "sonner"
 
 export default function Page() {
   const [modalOpen, setModalOpen] = useState(false)
@@ -29,28 +31,20 @@ export default function Page() {
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
   const [activeTab, setActiveTab] = useState("pacientes")
   const [newDiarioEntry, setNewDiarioEntry] = useState<{ nombreApellido: string; id: string } | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const [libroDiarioUpdateTrigger, setLibroDiarioUpdateTrigger] = useState(0)
 
   const patientsPerPage = 10
 
   useEffect(() => {
-    console.log("PatientsPage component mounted")
-    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
+    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
-        console.log("User authenticated:", user.email)
-        if (user.email === "kinesiologiaintegral@gmail.com") {
-          setCurrentUser("Ana la Jefa")
-        } else if (user.email === "eugenia@kinesiologia.com") {
-          setCurrentUser("Eugenia Funk Martinez")
-        } else if (user.email === "joaco@gmail.com") {
-          setCurrentUser("Joaco")
-        } else {
-          setCurrentUser(user.displayName || user.email)
-        }
+        const displayName = getUserDisplayName(user)
+        setCurrentUser(displayName)
         fetchPatients()
       } else {
-        console.log("User not authenticated, redirecting to login")
         router.push("/login")
       }
     })
@@ -62,11 +56,13 @@ export default function Page() {
     if (currentUser) {
       fetchPatients()
     }
-  }, [currentUser]) // Removed unnecessary dependencies: searchTerm, currentPage
+  }, [currentUser])
 
   const fetchPatients = async () => {
     const maxRetries = 3
     let attempt = 0
+    setIsLoading(true)
+    setError(null)
 
     while (attempt < maxRetries) {
       try {
@@ -81,14 +77,17 @@ export default function Page() {
         const data = await response.json()
         setPatients(data.patients)
         setTotalPages(data.pagination.totalPages)
+        setIsLoading(false)
         return
       } catch (error) {
         attempt++
-        console.error(`Attempt ${attempt} failed:`, error)
         if (attempt === maxRetries) {
-          console.error('Error fetching patients after all retries:', error)
+          const errorMessage = error instanceof Error ? error.message : 'Error al cargar los pacientes'
+          setError(errorMessage)
+          toast.error(errorMessage)
+          setIsLoading(false)
         } else {
-          // Esperar antes de reintentar
+          // Wait before retrying
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
         }
       }
@@ -96,52 +95,58 @@ export default function Page() {
   }
 
   const handleEdit = (patient: Patient) => {
-    console.log("Editing patient:", patient)
     setSelectedPatient(patient)
     setEditModalOpen(true)
   }
 
   const handleDelete = (patient: Patient) => {
-    console.log("Preparing to delete patient:", patient.id)
     setPatientToDelete(patient)
     setIsDeleteDialogOpen(true)
   }
 
   const confirmDelete = async () => {
     if (patientToDelete) {
-      console.log("Confirming delete for patient:", patientToDelete.id)
-      const patientRef = ref(db, `pacientes/${patientToDelete.id}`)
-      await remove(patientRef)
-      console.log("Patient deleted successfully")
-      fetchPatients()
-      setIsDeleteDialogOpen(false)
-      setPatientToDelete(null)
+      try {
+        const patientRef = ref(db, `pacientes/${patientToDelete.id}`)
+        await remove(patientRef)
+        toast.success('Paciente eliminado correctamente')
+        fetchPatients()
+        setIsDeleteDialogOpen(false)
+        setPatientToDelete(null)
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Error al eliminar el paciente'
+        setError(errorMessage)
+        toast.error(errorMessage)
+      }
     }
   }
 
   const handleSaveEdit = async (updatedPatient: Patient) => {
-    console.log("Saving edited patient:", updatedPatient)
-    const patientRef = ref(db, `pacientes/${updatedPatient.id}`)
+    try {
+      const patientRef = ref(db, `pacientes/${updatedPatient.id}`)
 
-    const patientToSave = {
-      ...updatedPatient,
-      sesiones: Array.isArray(updatedPatient.sesiones)
-        ? updatedPatient.sesiones.join(", ")
-        : updatedPatient.sesiones || "",
-      sesionesAux: Array.isArray(updatedPatient.sesionesAux)
-        ? updatedPatient.sesionesAux
-        : updatedPatient.sesionesAux
-          ? (updatedPatient.sesionesAux as string).split(", ")
-          : [],
+      const patientToSave = {
+        ...updatedPatient,
+        sesiones: Array.isArray(updatedPatient.sesiones)
+          ? updatedPatient.sesiones.join(", ")
+          : updatedPatient.sesiones || "",
+        sesionesAux: Array.isArray(updatedPatient.sesionesAux)
+          ? updatedPatient.sesionesAux
+          : updatedPatient.sesionesAux
+            ? (updatedPatient.sesionesAux as string).split(", ")
+            : [],
+      }
+
+      await update(patientRef, patientToSave)
+      toast.success('Paciente actualizado correctamente')
+      fetchPatients()
+      setEditModalOpen(false)
+      setLibroDiarioUpdateTrigger((prev: number) => prev + 1)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al guardar los cambios'
+      setError(errorMessage)
+      toast.error(errorMessage)
     }
-
-    await update(patientRef, patientToSave)
-    console.log("Patient updated successfully")
-    fetchPatients()
-    setEditModalOpen(false)
-
-    // Trigger Libro Diario update
-    setLibroDiarioUpdateTrigger((prev: number) => prev + 1)
   }
 
   const debouncedFetch = debounce((value: string) => {
@@ -210,6 +215,13 @@ export default function Page() {
       </header>
 
       <main className="max-w-7xl mx-auto py-8 px-4">
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="text-red-800">{error}</div>
+          </div>
+        )}
+        
         {activeTab === "pacientes" ? (
           <>
             <h1 className="text-2xl sm:text-3xl font-semibold text-[#001633] mb-8">Pacientes Registrados</h1>
@@ -222,99 +234,117 @@ export default function Page() {
                   className="pl-3 pr-10 border-[#001633] focus:ring-[#001633] focus:border-[#001633] w-full"
                   value={searchTerm}
                   onChange={handleSearch}
+                  disabled={isLoading}
                 />
                 <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
               </div>
               <Button
                 className="bg-[#001633] hover:bg-[#002966] transition-colors w-full sm:w-auto"
                 onClick={() => setModalOpen(true)}
+                disabled={isLoading}
               >
                 + Nuevo Paciente
               </Button>
             </div>
 
-            <div className="overflow-x-auto">
-              <div className="border border-[#001633] rounded-lg overflow-hidden min-w-full">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-[#001633] text-white">
-                      <TableHead className="font-semibold w-12 text-center hidden sm:table-cell">#</TableHead>
-                      <TableHead className="font-semibold">Nombre</TableHead>
-                      <TableHead className="font-semibold">Apellido</TableHead>
-                      <TableHead className="font-semibold hidden sm:table-cell">Edad</TableHead>
-                      <TableHead className="font-semibold hidden sm:table-cell">DNI</TableHead>
-                      <TableHead className="font-semibold hidden sm:table-cell">O.S</TableHead>
-                      <TableHead className="font-semibold hidden sm:table-cell">N°AFL</TableHead>
-                      <TableHead className="font-semibold hidden sm:table-cell">Teléfono</TableHead>
-                      <TableHead className="font-semibold hidden sm:table-cell">DX</TableHead>
-                      <TableHead className="font-semibold hidden sm:table-cell">DR</TableHead>
-                      <TableHead className="font-semibold">Opciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {patients.map((patient, index) => (
-                      <TableRow key={patient.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                        <TableCell className="text-center hidden sm:table-cell">
-                          {(currentPage - 1) * patientsPerPage + index + 1}
-                        </TableCell>
-                        <TableCell>{patient.nombre}</TableCell>
-                        <TableCell>{patient.apellido}</TableCell>
-                        <TableCell className="hidden sm:table-cell">{patient.edad}</TableCell>
-                        <TableCell className="hidden sm:table-cell">{patient.dni}</TableCell>
-                        <TableCell className="hidden sm:table-cell">{patient.obraSocial}</TableCell>
-                        <TableCell className="hidden sm:table-cell">{patient.nroAFL}</TableCell>
-                        <TableCell className="hidden sm:table-cell">{patient.telefono}</TableCell>
-                        <TableCell className="hidden sm:table-cell">{patient.diagnostico}</TableCell>
-                        <TableCell className="hidden sm:table-cell">{patient.doctor}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-[#001633] hover:text-white transition-colors"
-                              onClick={() => handleEdit(patient)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white transition-colors"
-                              onClick={() => handleDelete(patient)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+            {isLoading && (
+              <div className="text-center py-8 text-gray-600">Cargando pacientes...</div>
+            )}
 
-            {totalPages > 1 && (
-              <div className="flex justify-center items-center mt-4 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm">
-                  Página {currentPage} de {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+            {!isLoading && (
+              <>
+                <div className="overflow-x-auto">
+                  <div className="border border-[#001633] rounded-lg overflow-hidden min-w-full">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-[#001633] text-white">
+                          <TableHead className="font-semibold w-12 text-center hidden sm:table-cell">#</TableHead>
+                          <TableHead className="font-semibold">Nombre</TableHead>
+                          <TableHead className="font-semibold">Apellido</TableHead>
+                          <TableHead className="font-semibold hidden sm:table-cell">Edad</TableHead>
+                          <TableHead className="font-semibold hidden sm:table-cell">DNI</TableHead>
+                          <TableHead className="font-semibold hidden sm:table-cell">O.S</TableHead>
+                          <TableHead className="font-semibold hidden sm:table-cell">N°AFL</TableHead>
+                          <TableHead className="font-semibold hidden sm:table-cell">Teléfono</TableHead>
+                          <TableHead className="font-semibold hidden sm:table-cell">DX</TableHead>
+                          <TableHead className="font-semibold hidden sm:table-cell">DR</TableHead>
+                          <TableHead className="font-semibold">Opciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {patients.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={11} className="text-center py-8 text-gray-600">
+                              No hay pacientes registrados
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          patients.map((patient, index) => (
+                            <TableRow key={patient.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                              <TableCell className="text-center hidden sm:table-cell">
+                                {(currentPage - 1) * patientsPerPage + index + 1}
+                              </TableCell>
+                              <TableCell>{patient.nombre}</TableCell>
+                              <TableCell>{patient.apellido}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{patient.edad}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{patient.dni}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{patient.obraSocial}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{patient.nroAFL}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{patient.telefono}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{patient.diagnostico}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{patient.doctor}</TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0 hover:bg-[#001633] hover:text-white transition-colors"
+                                    onClick={() => handleEdit(patient)}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white transition-colors"
+                                    onClick={() => handleDelete(patient)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center mt-4 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm">
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
 
             <NewPatientModal
@@ -352,4 +382,3 @@ export default function Page() {
     </div>
   )
 }
-

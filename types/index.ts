@@ -12,11 +12,11 @@ export interface Patient {
   sexo?: string
   domicilio?: string
   anotaciones?: string
-  tto?: string
-  sesiones: string[]
+  tratamiento?: string
+  sesiones: string[] | string
   sesionesAux?: string[]
   ultima_actualizacion?: {
     fecha: string
     usuario: string
   }
-} 
+}

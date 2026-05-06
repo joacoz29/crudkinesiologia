@@ -11,6 +11,7 @@ import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { ref, get, set, remove as firebaseRemove } from "firebase/database"
 import { libroDiarioDB as db } from "@/lib/firebase"
+import { toast } from "sonner"
 
 interface EntradaLibroDiario {
   id: string
@@ -56,9 +57,6 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       setIsLoading(true)
       setError(null)
       try {
-        console.log("Saving to database:", entries)
-        console.log("Database reference:", db)
-
         if (!Array.isArray(entries)) {
           throw new Error("Entries is not an array")
         }
@@ -74,15 +72,14 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           totalHaber: newTotalHaber,
         })
 
-        console.log("Libro Diario entry saved successfully")
-
         // Update local state
         setValue("entradas", entries)
         setTotalHaber(newTotalHaber)
         setLastSavedData(JSON.stringify(entries))
       } catch (error) {
-        console.error("Error saving Libro Diario entry:", error)
-        setError(`Error al guardar la entrada: ${error instanceof Error ? error.message : String(error)}`)
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+        setError(`Error al guardar la entrada: ${errorMessage}`)
+        toast.error(`Error al guardar: ${errorMessage}`)
       } finally {
         setIsLoading(false)
       }
@@ -94,12 +91,9 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     if (watchEntradas && Array.isArray(watchEntradas)) {
       const currentData = JSON.stringify(watchEntradas)
       if (currentData !== lastSavedData) {
-        console.log("Data changed, auto-saving...", watchEntradas)
         saveEntries(watchEntradas)
         setLastSavedData(currentData)
       }
-    } else {
-      console.log("watchEntradas is not ready yet:", watchEntradas)
     }
   }, [watchEntradas, lastSavedData, saveEntries])
 
@@ -108,7 +102,6 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       const total = watchEntradas.reduce((sum, entrada) => sum + (entrada?.haber || 0), 0)
       setTotalHaber(total)
     } else {
-      console.log("watchEntradas is not ready yet:", watchEntradas)
       setTotalHaber(0)
     }
   }, [watchEntradas])
@@ -149,24 +142,30 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
 
   const exportarPDF = () => {
     if (!watchEntradas || !Array.isArray(watchEntradas)) {
-      console.error("Cannot export PDF: watchEntradas is not an array", watchEntradas)
+      toast.error('No hay datos para exportar')
       return
     }
 
-    const doc = new jsPDF()
-    autoTable(doc, {
-      head: [["N°", "Nombre y Apellido", "Cobertura", "Obra Social", "Debe", "Haber"]],
-      body: watchEntradas.map((entrada, index) => [
-        index + 1,
-        entrada.nombreApellido,
-        entrada.cobertura,
-        entrada.obraSocial,
-        `$${entrada.debe.toFixed(2)}`,
-        `$${entrada.haber.toFixed(2)}`,
-      ]),
-      foot: [["", "", "", "Total", "", `$${totalHaber.toFixed(2)}`]],
-    })
-    doc.save(`${fecha.toISOString().split("T")[0]}_LibroDiario.pdf`)
+    try {
+      const doc = new jsPDF()
+      autoTable(doc, {
+        head: [["N°", "Nombre y Apellido", "Cobertura", "Obra Social", "Debe", "Haber"]],
+        body: watchEntradas.map((entrada, index) => [
+          index + 1,
+          entrada.nombreApellido,
+          entrada.cobertura,
+          entrada.obraSocial,
+          `$${entrada.debe.toFixed(2)}`,
+          `$${entrada.haber.toFixed(2)}`,
+        ]),
+        foot: [[""o, "", "", "Total", "", `$${totalHaber.toFixed(2)}`]],
+      })
+      doc.save(`${fecha.toISOString().split("T")[0]}_LibroDiario.pdf`)
+      toast.success('PDF exportado correctamente')
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error(`Error al exportar PDF: ${errorMessage}`)
+    }
   }
 
   const handleRemove = async (index: number) => {
@@ -175,10 +174,11 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       const entryRef = ref(db, `libroDiario/${formattedDate}/entradas/${index}`)
       await firebaseRemove(entryRef)
       removeField(index)
-      console.log(`Entry at index ${index} removed successfully`)
+      toast.success('Entrada eliminada correctamente')
     } catch (error) {
-      console.error("Error removing entry:", error)
-      setError(`Error al eliminar la entrada: ${error instanceof Error ? error.message : String(error)}`)
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      setError(`Error al eliminar la entrada: ${errorMessage}`)
+      toast.error(`Error: ${errorMessage}`)
     }
   }
 
@@ -191,27 +191,22 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       const libroDiarioRef = ref(db, `libroDiario/${formattedDate}`)
 
       try {
-        console.log("Fetching entries for date:", formattedDate)
-        console.log("Database reference:", libroDiarioRef)
-
         const snapshot = await get(libroDiarioRef)
-        console.log("Snapshot data:", snapshot.val())
 
         if (snapshot.exists()) {
           const data = snapshot.val()
-          console.log("Found entries for date:", data)
           setValue("entradas", data.entradas || [])
           setTotalHaber(data.totalHaber || 0)
           setLastSavedData(JSON.stringify(data.entradas || []))
         } else {
-          console.log("No entries found for the selected date")
           setValue("entradas", [])
           setTotalHaber(0)
           setLastSavedData("")
         }
       } catch (error) {
-        console.error("Error fetching Libro Diario entries:", error)
-        setError(`Error al cargar las entradas: ${error instanceof Error ? error.message : String(error)}`)
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+        setError(`Error al cargar las entradas: ${errorMessage}`)
+        toast.error(`Error: ${errorMessage}`)
       } finally {
         setIsLoading(false)
       }
@@ -233,7 +228,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
         <h2 className="text-2xl font-bold">Libro Diario</h2>
         <DatePicker date={fecha} setDate={setFecha} />
       </div>
-      {isLoading && <div className="text-center py-4">Cargando...</div>}
+      {isLoading && <div className="text-center py-4 text-gray-600">Cargando...</div>}
       {error && <div className="text-red-500 text-center py-4">{error}</div>}
       <div className="overflow-x-auto">
         <Table>
@@ -251,7 +246,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           <TableBody>
             {!watchEntradas || watchEntradas.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-4">
+                <TableCell colSpan={7} className="text-center py-4 text-gray-600">
                   No hay entradas en el libro diario.
                 </TableCell>
               </TableRow>
@@ -326,4 +321,3 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     </div>
   )
 }
-

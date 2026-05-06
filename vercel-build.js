@@ -1,4 +1,4 @@
-// Verificar variables de entorno durante el build
+// Verify required environment variables during build
 const requiredEnvVars = [
   'FIREBASE_PROJECT_ID',
   'FIREBASE_CLIENT_EMAIL',
@@ -6,14 +6,16 @@ const requiredEnvVars = [
   'FIREBASE_DATABASE_URL'
 ]
 
+let missingVars = []
+
 requiredEnvVars.forEach(envVar => {
   if (!process.env[envVar]) {
-    throw new Error(`Missing required environment variable: ${envVar}`)
+    missingVars.push(envVar)
   }
-  if (envVar === 'FIREBASE_PRIVATE_KEY') {
-    console.log('FIREBASE_PRIVATE_KEY length:', process.env[envVar].length)
-    console.log('FIREBASE_PRIVATE_KEY starts with:', process.env[envVar].substring(0, 27))
-  } else {
-    console.log(`${envVar}:`, process.env[envVar])
-  }
-}) 
+})
+
+if (missingVars.length > 0) {
+  throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`)
+}
+
+console.log('✓ All required environment variables are present')

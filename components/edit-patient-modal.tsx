@@ -10,10 +10,9 @@ import { Plus, X } from "lucide-react"
 import { useState, useEffect } from "react"
 import { format } from "date-fns-tz"
 import { auth } from "@/lib/firebase"
-import { ref, update } from "firebase/database"
-import { db } from "@/lib/firebase"
 import { addToLibroDiario } from "@/lib/helpers"
 import { Patient } from "@/types"
+import { toast } from "sonner"
 
 interface EditPatientModalProps {
   open: boolean
@@ -56,14 +55,12 @@ export function EditPatientModal({
   const [sesiones, setSesiones] = useState<string | string[]>("")
   const [sesionesAux, setSesionesAux] = useState<string[]>([])
   const [newSessionAdded, setNewSessionAdded] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     if (patient) {
-      console.log("Patient data received:", patient)
       setEditedPatient(patient)
-      console.log("Patient sesiones:", patient.sesiones)
       setSesiones(Array.isArray(patient.sesiones) ? patient.sesiones.join(", ") : patient.sesiones || "")
-      // Inicializa sesionesAux con los datos de sesiones si es un array, o lo convierte a array si es string
       setSesionesAux(
         Array.isArray(patient.sesiones)
           ? patient.sesiones
@@ -86,34 +83,36 @@ export function EditPatientModal({
 
   const handleSave = async () => {
     if (editedPatient) {
-      const updatedPatient: Patient = {
-        ...editedPatient,
-        sesiones: sesionesAux,
-        sesionesAux,
-        ultima_actualizacion: {
-          fecha: new Date().toISOString(),
-          usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Unknown",
-        },
+      setIsSaving(true)
+      try {
+        const updatedPatient: Patient = {
+          ...editedPatient,
+          sesiones: sesionesAux,
+          sesionesAux,
+          ultima_actualizacion: {
+            fecha: new Date().toISOString(),
+            usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Unknown",
+          },
+        }
+
+        if (newSessionAdded) {
+          await addToLibroDiario({
+            nombreApellido: `${updatedPatient.nombre} ${updatedPatient.apellido}`,
+            obraSocial: updatedPatient.obraSocial,
+          })
+        }
+
+        onSave(updatedPatient)
+        onOpenChange(false)
+        setNewSessionAdded(false)
+        setLibroDiarioUpdateTrigger((prev) => prev + 1)
+        toast.success('Paciente actualizado correctamente')
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Error al guardar los cambios'
+        toast.error(errorMessage)
+      } finally {
+        setIsSaving(false)
       }
-
-      const patientRef = ref(db, `pacientes/${updatedPatient.id}`)
-      await update(patientRef, updatedPatient)
-
-      // Si se agregó una nueva sesión, actualizar el libro diario
-      if (newSessionAdded) {
-        await addToLibroDiario({
-          nombreApellido: `${updatedPatient.nombre} ${updatedPatient.apellido}`,
-          obraSocial: updatedPatient.obraSocial,
-        })
-      }
-
-      console.log("Patient updated successfully")
-      onSave(updatedPatient)
-      onOpenChange(false)
-      setNewSessionAdded(false)
-
-      // Trigger Libro Diario update
-      setLibroDiarioUpdateTrigger((prev) => prev + 1)
     }
   }
 
@@ -156,7 +155,7 @@ export function EditPatientModal({
           <div className="space-y-2">
             <Label>Sexo</Label>
             <RadioGroup
-              value={editedPatient.sexo}
+              value={editedPatient.sexo || ""}
               onValueChange={(value) => setEditedPatient({ ...editedPatient, sexo: value })}
               className="flex gap-4"
             >
@@ -265,8 +264,8 @@ export function EditPatientModal({
             <Label htmlFor="tratamiento">Tratamiento</Label>
             <Textarea
               id="tratamiento"
-              value={editedPatient.tto || ""}
-              onChange={(e) => setEditedPatient({ ...editedPatient, tto: e.target.value })}
+              value={editedPatient.tratamiento || ""}
+              onChange={(e) => setEditedPatient({ ...editedPatient, tratamiento: e.target.value })}
               className="min-h-[100px] border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
             />
           </div>
@@ -295,10 +294,7 @@ export function EditPatientModal({
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0"
-                    onClick={() => {
-                      const newSesionesAux = sesionesAux.filter((_, i) => i !== index)
-                      setSesionesAux(newSesionesAux)
-                    }}
+                    onClick={() => removeSession(index)}
                     aria-label={`Remove session ${index + 1}`}
                   >
                     <X className="h-4 w-4" />
@@ -317,11 +313,11 @@ export function EditPatientModal({
             />
           </div>
 
-          <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors">
-            Guardar Cambios
+          <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors" disabled={isSaving}>
+            {isSaving ? 'Guardando...' : 'Guardar Cambios'}
           </Button>
           <div className="text-sm text-gray-500 mt-4">
-            Última actualización: {editedPatient.ultima_actualizacion?.usuario || "N/A"} -{" "}
+            Última actualización: {editedPatient.ultima_actualizacion?.usuario || "N/A"} —{" "}
             {editedPatient.ultima_actualizacion?.fecha
               ? new Date(editedPatient.ultima_actualizacion.fecha).toLocaleString()
               : "N/A"}
@@ -331,4 +327,3 @@ export function EditPatientModal({
     </Dialog>
   )
 }
-

@@ -1,12 +1,12 @@
 "use client"
 
 import { initializeApp, getApps } from "firebase/app"
-import { getDatabase } from "firebase/database"
-import { getAuth } from "firebase/auth"
+import { getDatabase, Database } from "firebase/database"
+import { getAuth, Auth } from "firebase/auth"
 
-let app: any = null
-let db: any = null
-let auth: any = null
+let app: ReturnType<typeof initializeApp> | null = null
+let db: Database | null = null
+let auth: Auth | null = null
 
 if (typeof window !== "undefined") {
   const firebaseConfig = {
@@ -26,12 +26,3 @@ if (typeof window !== "undefined") {
 
 export { db, auth }
 export const libroDiarioDB = db
-
-// Add this line to enable Firebase debugging in development
-if (process.env.NODE_ENV !== "production") {
-  console.log("Firebase config:", {
-    ...firebaseConfig,
-    apiKey: 'HIDDEN'  // No mostrar la API key en logs
-  })
-}
-

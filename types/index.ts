@@ -1,3 +1,15 @@
+export type TurnoEstado = "pendiente" | "asistio" | "ausente" | "cancelado"
+
+export interface Turno {
+  id: string
+  patientId?: string
+  nombre: string
+  apellido: string
+  hora: string
+  notas?: string
+  estado: TurnoEstado
+}
+
 export interface Patient {
   id: string
   nombre: string

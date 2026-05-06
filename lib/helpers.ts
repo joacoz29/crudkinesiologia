@@ -1,5 +1,6 @@
-import { ref, set, get } from "firebase/database"
+import { ref, set, get, push, remove, update, query, orderByKey, startAt, endAt } from "firebase/database"
 import { db } from "@/lib/firebase"
+import { Turno } from "@/types"
 
 interface LibroDiarioEntry {
   nombreApellido: string
@@ -41,4 +42,54 @@ export async function addToLibroDiario(entry: {
     entradas: updatedEntradas,
     totalHaber,
   })
-} 
+}
+
+export async function fetchTurnosPorMes(
+  year: number,
+  month: number
+): Promise<Record<string, Turno[]>> {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const start = `${year}-${pad(month)}-01`
+  const end = `${year}-${pad(month)}-31`
+
+  const turnosQuery = query(
+    ref(db, "turnos"),
+    orderByKey(),
+    startAt(start),
+    endAt(end)
+  )
+
+  const snapshot = await get(turnosQuery)
+  if (!snapshot.exists()) return {}
+
+  const result: Record<string, Turno[]> = {}
+  snapshot.forEach((dateSnap) => {
+    const fecha = dateSnap.key!
+    const entries: Turno[] = []
+    dateSnap.forEach((turnoSnap) => {
+      entries.push({ id: turnoSnap.key!, ...turnoSnap.val() } as Turno)
+    })
+    result[fecha] = entries.sort((a, b) => a.hora.localeCompare(b.hora))
+  })
+  return result
+}
+
+export async function saveTurno(
+  fecha: string,
+  turno: Omit<Turno, "id">
+): Promise<string> {
+  const newRef = await push(ref(db, `turnos/${fecha}`), turno)
+  return newRef.key!
+}
+
+export async function updateTurno(
+  fecha: string,
+  id: string,
+  data: Partial<Omit<Turno, "id">>
+): Promise<void> {
+  await update(ref(db, `turnos/${fecha}/${id}`), data)
+}
+
+export async function deleteTurno(fecha: string, id: string): Promise<void> {
+  await remove(ref(db, `turnos/${fecha}/${id}`))
+}

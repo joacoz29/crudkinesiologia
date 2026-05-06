@@ -91,8 +91,6 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           totalDebe: newTotalDebe,
         })
 
-        setTotalHaber(newTotalHaber)
-        setTotalDebe(newTotalDebe)
         setLastSavedData(JSON.stringify(entries))
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Error desconocido'
@@ -250,8 +248,11 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
             `$${(Number(e.haber) || 0).toFixed(2)}`,
           ]
         }),
-        foot: [["", "", "", "", "Totales", `$${totalDebe.toFixed(2)}`, `$${totalHaber.toFixed(2)}`]],
-        footStyles: { fontStyle: "bold" },
+        foot: [[{
+          content: `Saldo de caja: $${saldo.toFixed(2)}`,
+          colSpan: 7,
+          styles: { halign: "right", fontStyle: "bold" },
+        }]],
       })
 
       doc.save(`${toLocalDateKey(fecha)}_LibroDiario.pdf`)
@@ -452,20 +453,10 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           </Button>
         </div>
 
-        <div className="flex gap-6 text-sm">
-          <div className="text-center">
-            <div className="text-gray-500 text-xs uppercase tracking-wide">Debe</div>
-            <div className="font-bold text-lg">${totalDebe.toFixed(2)}</div>
-          </div>
-          <div className="text-center">
-            <div className="text-gray-500 text-xs uppercase tracking-wide">Haber</div>
-            <div className="font-bold text-lg">${totalHaber.toFixed(2)}</div>
-          </div>
-          <div className="text-center">
-            <div className="text-gray-500 text-xs uppercase tracking-wide">Saldo</div>
-            <div className={`font-bold text-lg ${saldo >= 0 ? "text-green-600" : "text-red-600"}`}>
-              ${saldo.toFixed(2)}
-            </div>
+        <div className="text-center">
+          <div className="text-gray-500 text-xs uppercase tracking-wide">Saldo de caja</div>
+          <div className={`font-bold text-2xl ${saldo >= 0 ? "text-green-600" : "text-red-600"}`}>
+            ${saldo.toFixed(2)}
           </div>
         </div>
       </div>

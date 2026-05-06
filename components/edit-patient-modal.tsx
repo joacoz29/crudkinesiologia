@@ -52,7 +52,6 @@ export function EditPatientModal({
   setLibroDiarioUpdateTrigger 
 }: EditPatientModalProps) {
   const [editedPatient, setEditedPatient] = useState<Patient | null>(null)
-  const [sesiones, setSesiones] = useState<string | string[]>("")
   const [sesionesAux, setSesionesAux] = useState<string[]>([])
   const [newSessionAdded, setNewSessionAdded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -60,12 +59,7 @@ export function EditPatientModal({
   useEffect(() => {
     if (patient) {
       setEditedPatient(patient)
-      setSesiones(Array.isArray(patient.sesiones) ? patient.sesiones.join(", ") : patient.sesiones || "")
-      setSesionesAux(
-        Array.isArray(patient.sesiones)
-          ? patient.sesiones
-          : (patient.sesiones as string)?.split(", ") || []
-      )
+      setSesionesAux(Array.isArray(patient.sesiones) ? patient.sesiones : [])
     }
   }, [patient])
 
@@ -302,15 +296,6 @@ export function EditPatientModal({
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Sesiones (Formato Original)</Label>
-            <Textarea
-              value={sesiones}
-              readOnly
-              className="min-h-[100px] border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
           </div>
 
           <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors" disabled={isSaving}>

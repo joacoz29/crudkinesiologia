@@ -13,7 +13,7 @@ export interface Patient {
   domicilio?: string
   anotaciones?: string
   tratamiento?: string
-  sesiones: string[] | string
+  sesiones: string[]
   sesionesAux?: string[]
   ultima_actualizacion?: {
     fecha: string

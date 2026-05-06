@@ -1,5 +1,5 @@
 import { ref, set, get } from "firebase/database"
-import { libroDiarioDB } from "@/lib/firebase"
+import { db } from "@/lib/firebase"
 
 interface LibroDiarioEntry {
   nombreApellido: string
@@ -14,7 +14,7 @@ export async function addToLibroDiario(entry: {
   obraSocial: string
 }) {
   const today = new Date().toISOString().split('T')[0]
-  const libroDiarioRef = ref(libroDiarioDB, `libroDiario/${today}`)
+  const libroDiarioRef = ref(db, `libroDiario/${today}`)
   
   // Obtener entradas existentes
   const snapshot = await get(libroDiarioRef)

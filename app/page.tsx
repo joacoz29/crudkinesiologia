@@ -7,13 +7,13 @@ import { NewPatientModal } from "@/components/new-patient-modal"
 import { EditPatientModal } from "@/components/edit-patient-modal"
 import { LibroDiario } from "@/components/libro-diario"
 import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, remove, update } from "firebase/database"
 import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
-import { debounce } from "lodash"
+import debounce from "lodash/debounce"
 import { Patient } from "@/types"
 import { getUserDisplayName } from "@/lib/auth-helper"
 import { toast } from "sonner"
@@ -38,27 +38,7 @@ export default function Page() {
 
   const patientsPerPage = 10
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
-      if (user) {
-        const displayName = getUserDisplayName(user)
-        setCurrentUser(displayName)
-        fetchPatients()
-      } else {
-        router.push("/login")
-      }
-    })
-
-    return () => unsubscribe()
-  }, [router])
-
-  useEffect(() => {
-    if (currentUser) {
-      fetchPatients()
-    }
-  }, [currentUser])
-
-  const fetchPatients = async () => {
+  const fetchPatients = useCallback(async (search: string, page: number) => {
     const maxRetries = 3
     let attempt = 0
     setIsLoading(true)
@@ -67,9 +47,9 @@ export default function Page() {
     while (attempt < maxRetries) {
       try {
         const response = await fetch(
-          `/api/patients?search=${searchTerm}&page=${currentPage}&limit=${patientsPerPage}`
+          `/api/patients?search=${encodeURIComponent(search)}&page=${page}&limit=${patientsPerPage}`
         )
-        
+
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`)
         }
@@ -87,12 +67,25 @@ export default function Page() {
           toast.error(errorMessage)
           setIsLoading(false)
         } else {
-          // Wait before retrying
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
         }
       }
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+      if (user) {
+        const displayName = getUserDisplayName(user)
+        setCurrentUser(displayName)
+        fetchPatients("", 1)
+      } else {
+        router.push("/login")
+      }
+    })
+
+    return () => unsubscribe()
+  }, [router, fetchPatients])
 
   const handleEdit = (patient: Patient) => {
     setSelectedPatient(patient)
@@ -110,7 +103,7 @@ export default function Page() {
         const patientRef = ref(db, `pacientes/${patientToDelete.id}`)
         await remove(patientRef)
         toast.success('Paciente eliminado correctamente')
-        fetchPatients()
+        fetchPatients(searchTerm, currentPage)
         setIsDeleteDialogOpen(false)
         setPatientToDelete(null)
       } catch (error) {
@@ -124,22 +117,9 @@ export default function Page() {
   const handleSaveEdit = async (updatedPatient: Patient) => {
     try {
       const patientRef = ref(db, `pacientes/${updatedPatient.id}`)
-
-      const patientToSave = {
-        ...updatedPatient,
-        sesiones: Array.isArray(updatedPatient.sesiones)
-          ? updatedPatient.sesiones.join(", ")
-          : updatedPatient.sesiones || "",
-        sesionesAux: Array.isArray(updatedPatient.sesionesAux)
-          ? updatedPatient.sesionesAux
-          : updatedPatient.sesionesAux
-            ? (updatedPatient.sesionesAux as string).split(", ")
-            : [],
-      }
-
-      await update(patientRef, patientToSave)
+      await update(patientRef, updatedPatient)
       toast.success('Paciente actualizado correctamente')
-      fetchPatients()
+      fetchPatients(searchTerm, currentPage)
       setEditModalOpen(false)
       setLibroDiarioUpdateTrigger((prev: number) => prev + 1)
     } catch (error) {
@@ -149,19 +129,21 @@ export default function Page() {
     }
   }
 
-  const debouncedFetch = debounce((value: string) => {
-    setSearchTerm(value)
-    setCurrentPage(1)
-    fetchPatients()
-  }, 300)
+  const debouncedSearch = useMemo(
+    () => debounce((value: string) => fetchPatients(value, 1), 300),
+    [fetchPatients]
+  )
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    debouncedFetch(e.target.value)
+    const value = e.target.value
+    setSearchTerm(value)
+    setCurrentPage(1)
+    debouncedSearch(value)
   }
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    fetchPatients()
+    fetchPatients(searchTerm, page)
   }
 
   const handleAddToDiario = (nombreApellido: string) => {
@@ -352,7 +334,7 @@ export default function Page() {
               onOpenChange={(open) => {
                 setModalOpen(open)
                 if (!open) {
-                  fetchPatients()
+                  fetchPatients(searchTerm, currentPage)
                 }
               }}
             />

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -10,7 +10,7 @@ import { useForm, useFieldArray } from "react-hook-form"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { ref, get, set, remove as firebaseRemove } from "firebase/database"
-import { libroDiarioDB as db } from "@/lib/firebase"
+import { db } from "@/lib/firebase"
 import { toast } from "sonner"
 
 interface EntradaLibroDiario {
@@ -34,6 +34,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastSavedData, setLastSavedData] = useState<string>("")
+  const skipNextSave = useRef(false)
 
   const { register, control, watch, setValue } = useForm<{ entradas: EntradaLibroDiario[] }>({
     defaultValues: {
@@ -72,8 +73,6 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           totalHaber: newTotalHaber,
         })
 
-        // Update local state
-        setValue("entradas", entries)
         setTotalHaber(newTotalHaber)
         setLastSavedData(JSON.stringify(entries))
       } catch (error) {
@@ -84,10 +83,14 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
         setIsLoading(false)
       }
     },
-    [fecha, setValue],
+    [fecha],
   )
 
   useEffect(() => {
+    if (skipNextSave.current) {
+      skipNextSave.current = false
+      return
+    }
     if (watchEntradas && Array.isArray(watchEntradas)) {
       const currentData = JSON.stringify(watchEntradas)
       if (currentData !== lastSavedData) {
@@ -158,7 +161,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           `$${entrada.debe.toFixed(2)}`,
           `$${entrada.haber.toFixed(2)}`,
         ]),
-        foot: [[""o, "", "", "Total", "", `$${totalHaber.toFixed(2)}`]],
+        foot: [["", "", "", "Total", "", `$${totalHaber.toFixed(2)}`]],
       })
       doc.save(`${fecha.toISOString().split("T")[0]}_LibroDiario.pdf`)
       toast.success('PDF exportado correctamente')
@@ -198,10 +201,12 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           setValue("entradas", data.entradas || [])
           setTotalHaber(data.totalHaber || 0)
           setLastSavedData(JSON.stringify(data.entradas || []))
+          skipNextSave.current = true
         } else {
           setValue("entradas", [])
           setTotalHaber(0)
           setLastSavedData("")
+          skipNextSave.current = true
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
@@ -213,10 +218,6 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     },
     [setValue],
   )
-
-  useEffect(() => {
-    fetchEntriesForDate(new Date())
-  }, [fetchEntriesForDate])
 
   useEffect(() => {
     fetchEntriesForDate(fecha)

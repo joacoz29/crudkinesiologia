@@ -8,32 +8,36 @@ export const dynamic = 'force-dynamic' // Asegurarse que la ruta sea dinámica
 
 export async function GET(request: Request) {
   try {
+    if (!db) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 })
+    }
+
     const { searchParams } = new URL(request.url)
     const searchTerm = searchParams.get('search') || ''
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
 
-    console.log('Database URL:', process.env.FIREBASE_DATABASE_URL)
-    console.log('Attempting to fetch patients...')
-
     const patientsRef = db.ref('pacientes')
     const snapshot = await patientsRef.once('value')
 
     if (!snapshot.exists()) {
-      console.log('No data found')
       return NextResponse.json({
         patients: [],
         pagination: { currentPage: page, totalPages: 0, totalItems: 0 }
       })
     }
 
-    const data = snapshot.val()
-    console.log('Data received:', Object.keys(data).length, 'patients')
+    const data = snapshot.val() as Record<string, Record<string, unknown>>
 
-    let patients = Object.entries(data || {}).map(([id, data]) => ({
-      id,
-      ...(data as any)
-    }))
+    let patients = Object.entries(data).map(([id, record]) => {
+      const raw = record as Record<string, unknown>
+      const sesiones = Array.isArray(raw.sesiones)
+        ? raw.sesiones as string[]
+        : typeof raw.sesiones === "string"
+          ? (raw.sesiones as string).split(", ").filter(Boolean)
+          : []
+      return { id, ...raw, sesiones }
+    }) as unknown as Patient[]
 
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase()
@@ -62,7 +66,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Error in GET /api/patients:', error)
     return NextResponse.json(
-      { error: 'Error al obtener pacientes', details: (error as Error).message },
+      { error: 'Error al obtener pacientes' },
       { status: 500 }
     )
   }

@@ -6,16 +6,26 @@ let initError: string | null = null
 
 const projectId = process.env.FIREBASE_PROJECT_ID
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-const privateKey = process.env.FIREBASE_PRIVATE_KEY
+const rawKey = process.env.FIREBASE_PRIVATE_KEY ?? ''
 const databaseURL = process.env.FIREBASE_DATABASE_URL
 
+// Sanitize key: strip surrounding quotes (common copy-paste artifact),
+// then convert literal \n sequences to actual newlines
+let privateKey = rawKey.trim()
+if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+  privateKey = privateKey.slice(1, -1)
+}
+privateKey = privateKey.replace(/\\n/g, '\n')
+
 console.log('[firebase-admin] env check:', {
-  FIREBASE_PROJECT_ID: projectId ? `set (${projectId})` : 'MISSING',
-  FIREBASE_CLIENT_EMAIL: clientEmail ? `set (${clientEmail})` : 'MISSING',
-  FIREBASE_PRIVATE_KEY: privateKey
-    ? `set (length=${privateKey.length}, starts=${privateKey.slice(0, 27)})`
-    : 'MISSING',
-  FIREBASE_DATABASE_URL: databaseURL ? `set (${databaseURL})` : 'MISSING',
+  projectId: projectId ?? 'MISSING',
+  clientEmail: clientEmail ?? 'MISSING',
+  databaseURL: databaseURL ?? 'MISSING',
+  keyLength: privateKey.length,
+  keyStart: privateKey.slice(0, 27),
+  keyEnd: privateKey.slice(-25).replace(/\n/g, '\\n'),
+  hasNewlines: privateKey.includes('\n'),
+  startsCorrectly: privateKey.startsWith('-----BEGIN PRIVATE KEY-----'),
 })
 
 if (projectId) {
@@ -26,7 +36,7 @@ if (projectId) {
       const serviceAccount: ServiceAccount = {
         projectId,
         clientEmail,
-        privateKey: privateKey?.replace(/\\n/g, '\n'),
+        privateKey,
       }
 
       const app = initializeApp({

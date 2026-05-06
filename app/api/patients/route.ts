@@ -9,8 +9,13 @@ export const dynamic = 'force-dynamic' // Asegurarse que la ruta sea dinámica
 export async function GET(request: Request) {
   try {
     if (!db) {
-      console.error('[/api/patients] Firebase Admin DB not initialized. FIREBASE_PROJECT_ID set:', !!process.env.FIREBASE_PROJECT_ID)
-      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 })
+      const missing = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY', 'FIREBASE_DATABASE_URL']
+        .filter(key => !process.env[key])
+      console.error('[/api/patients] Firebase Admin DB not initialized. Missing env vars:', missing)
+      return NextResponse.json({
+        error: 'Database not initialized',
+        details: `Missing env vars: ${missing.length ? missing.join(', ') : 'none — initialization may have failed silently'}`
+      }, { status: 500 })
     }
 
     const { searchParams } = new URL(request.url)

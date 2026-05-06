@@ -15,6 +15,7 @@ export interface Patient {
   tratamiento?: string
   sesiones: string[]
   sesionesAux?: string[]
+  sesionesAutorizadas?: number
   ultima_actualizacion?: {
     fecha: string
     usuario: string

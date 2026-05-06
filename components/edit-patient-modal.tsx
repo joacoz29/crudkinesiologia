@@ -43,6 +43,14 @@ function countSessions(text: string): number {
   return [...text.matchAll(/\d+-/g)].length
 }
 
+function sessionCountColor(used: number, authorized: number | undefined): string {
+  if (!authorized) return "text-gray-500"
+  const ratio = used / authorized
+  if (ratio >= 1) return "text-red-600 font-medium"
+  if (ratio >= 0.8) return "text-orange-500 font-medium"
+  return "text-gray-500"
+}
+
 export function EditPatientModal({
   open,
   onOpenChange,
@@ -258,11 +266,29 @@ export function EditPatientModal({
           </div>
 
           <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Label htmlFor="sesiones-auth" className="whitespace-nowrap">Sesiones autorizadas</Label>
+              <Input
+                id="sesiones-auth"
+                type="number"
+                min={0}
+                value={editedPatient.sesionesAutorizadas ?? ""}
+                onChange={(e) => setEditedPatient({
+                  ...editedPatient,
+                  sesionesAutorizadas: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                })}
+                placeholder="—"
+                className="w-24 border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
+              />
+            </div>
             <div className="flex justify-between items-center">
               <Label htmlFor="sesiones">
                 Sesiones{countSessions(sesionesText) > 0 && (
-                  <span className="ml-2 text-xs font-normal text-gray-500">
-                    {countSessions(sesionesText)} turnos
+                  <span className={`ml-2 text-xs font-normal ${sessionCountColor(countSessions(sesionesText), editedPatient.sesionesAutorizadas)}`}>
+                    {editedPatient.sesionesAutorizadas
+                      ? `${countSessions(sesionesText)} / ${editedPatient.sesionesAutorizadas} turnos`
+                      : `${countSessions(sesionesText)} turnos`
+                    }
                   </span>
                 )}
               </Label>

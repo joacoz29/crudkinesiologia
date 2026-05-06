@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DatePicker } from "@/components/ui/date-picker"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm, useFieldArray, useWatch } from "react-hook-form"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { ref, get, set } from "firebase/database"
@@ -15,9 +15,11 @@ import { toast } from "sonner"
 import { format } from "date-fns-tz"
 import { Loader2, Trash2 } from "lucide-react"
 
+type TipoEntrada = "Paciente" | "Gasto" | "Ingreso"
+
 interface EntradaLibroDiario {
   id: string
-  tipo: "Paciente" | "Gasto"
+  tipo: TipoEntrada
   nombreApellido: string
   cobertura: "Particular" | "Obra Social"
   obraSocial: string
@@ -36,6 +38,18 @@ function toLocalDateKey(date: Date): string {
   return format(date, "yyyy-MM-dd", { timeZone: TZ })
 }
 
+const TIPO_STYLES: Record<TipoEntrada, string> = {
+  Paciente: "",
+  Gasto: "border-orange-300 bg-orange-50",
+  Ingreso: "border-green-300 bg-green-50",
+}
+
+const TIPO_PLACEHOLDER: Record<TipoEntrada, string> = {
+  Paciente: "Nombre y Apellido",
+  Gasto: "Descripción del gasto",
+  Ingreso: "Motivo del ingreso",
+}
+
 export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
   const [fecha, setFecha] = useState<Date>(new Date())
   const [totalDebe, setTotalDebe] = useState(0)
@@ -48,8 +62,9 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
   const skipNextSave = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { register, control, watch, setValue } = useForm<{ entradas: EntradaLibroDiario[] }>({
+  const { register, control, setValue } = useForm<{ entradas: EntradaLibroDiario[] }>({
     defaultValues: { entradas: [] },
+    mode: "onChange",
   })
 
   const { fields, append, remove: removeField } = useFieldArray({
@@ -57,7 +72,8 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     name: "entradas",
   })
 
-  const watchEntradas = watch("entradas")
+  // useWatch dispara en cada cambio de campo, incluyendo inputs numéricos
+  const watchEntradas = useWatch({ control, name: "entradas" })
 
   const saveEntries = useCallback(
     async (entries: EntradaLibroDiario[]) => {
@@ -65,8 +81,8 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       setError(null)
       try {
         const dateKey = toLocalDateKey(fecha)
-        const newTotalHaber = entries.reduce((sum, e) => sum + (e?.haber || 0), 0)
-        const newTotalDebe = entries.reduce((sum, e) => sum + (e?.debe || 0), 0)
+        const newTotalHaber = entries.reduce((sum, e) => sum + (Number(e?.haber) || 0), 0)
+        const newTotalDebe = entries.reduce((sum, e) => sum + (Number(e?.debe) || 0), 0)
 
         await set(ref(db, `libroDiario/${dateKey}`), {
           fecha: fecha.toISOString(),
@@ -89,7 +105,18 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     [fecha],
   )
 
-  // Auto-save con debounce de 1.5s para no escribir en Firebase en cada tecla
+  // Totales en tiempo real, sin esperar al guardado
+  useEffect(() => {
+    if (Array.isArray(watchEntradas)) {
+      setTotalHaber(watchEntradas.reduce((sum, e) => sum + (Number(e?.haber) || 0), 0))
+      setTotalDebe(watchEntradas.reduce((sum, e) => sum + (Number(e?.debe) || 0), 0))
+    } else {
+      setTotalHaber(0)
+      setTotalDebe(0)
+    }
+  }, [watchEntradas])
+
+  // Auto-save con debounce de 800ms tras cualquier cambio
   useEffect(() => {
     if (skipNextSave.current) {
       skipNextSave.current = false
@@ -102,24 +129,13 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
 
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      saveEntries(watchEntradas)
-    }, 1500)
+      saveEntries(watchEntradas as EntradaLibroDiario[])
+    }, 800)
 
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
     }
   }, [watchEntradas, lastSavedData, saveEntries])
-
-  // Totales reactivos
-  useEffect(() => {
-    if (Array.isArray(watchEntradas)) {
-      setTotalHaber(watchEntradas.reduce((sum, e) => sum + (e?.haber || 0), 0))
-      setTotalDebe(watchEntradas.reduce((sum, e) => sum + (e?.debe || 0), 0))
-    } else {
-      setTotalHaber(0)
-      setTotalDebe(0)
-    }
-  }, [watchEntradas])
 
   // Agregar entrada desde modal de paciente
   useEffect(() => {
@@ -155,7 +171,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           const data = snapshot.val()
           const normalized = (data.entradas || []).map((e: EntradaLibroDiario) => ({
             ...e,
-            tipo: e.tipo ?? "Paciente",
+            tipo: (e.tipo as TipoEntrada) ?? "Paciente",
           }))
           setValue("entradas", normalized)
           setTotalHaber(data.totalHaber || 0)
@@ -183,14 +199,13 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     fetchEntriesForDate(fecha)
   }, [fecha, fetchEntriesForDate])
 
-  // Refetch cuando se actualiza un paciente desde la tabla
   useEffect(() => {
     if (updateTrigger > 0) {
       fetchEntriesForDate(fecha)
     }
   }, [updateTrigger, fecha, fetchEntriesForDate])
 
-  const agregarFila = (tipo: "Paciente" | "Gasto" = "Paciente") => {
+  const agregarFila = (tipo: TipoEntrada = "Paciente") => {
     append({
       id: (fields.length + 1).toString(),
       tipo,
@@ -204,7 +219,6 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
 
   const handleRemove = (index: number) => {
     removeField(index)
-    // El auto-save detecta el cambio y actualiza Firebase
     toast.success('Entrada eliminada')
   }
 
@@ -223,15 +237,19 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       autoTable(doc, {
         startY: 24,
         head: [["N°", "Tipo", "Nombre / Descripción", "Cobertura", "Obra Social", "Debe", "Haber"]],
-        body: watchEntradas.map((e, i) => [
-          i + 1,
-          e.tipo ?? "Paciente",
-          e.nombreApellido,
-          e.tipo === "Gasto" ? "—" : e.cobertura,
-          e.tipo === "Gasto" ? "—" : e.obraSocial,
-          `$${e.debe.toFixed(2)}`,
-          `$${e.haber.toFixed(2)}`,
-        ]),
+        body: (watchEntradas as EntradaLibroDiario[]).map((e, i) => {
+          const tipo = e.tipo ?? "Paciente"
+          const esPaciente = tipo === "Paciente"
+          return [
+            i + 1,
+            tipo,
+            e.nombreApellido,
+            esPaciente ? e.cobertura : "—",
+            esPaciente ? e.obraSocial : "—",
+            `$${(Number(e.debe) || 0).toFixed(2)}`,
+            `$${(Number(e.haber) || 0).toFixed(2)}`,
+          ]
+        }),
         foot: [["", "", "", "", "Totales", `$${totalDebe.toFixed(2)}`, `$${totalHaber.toFixed(2)}`]],
         footStyles: { fontStyle: "bold" },
       })
@@ -291,8 +309,11 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
                 </TableRow>
               ) : (
                 fields.map((field, index) => {
-                  const tipo = watchEntradas[index]?.tipo ?? "Paciente"
+                  const tipo: TipoEntrada = (watchEntradas?.[index]?.tipo as TipoEntrada) ?? "Paciente"
+                  const esPaciente = tipo === "Paciente"
                   const esGasto = tipo === "Gasto"
+                  const esIngreso = tipo === "Ingreso"
+
                   return (
                     <TableRow key={field.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                       <TableCell className="text-center text-sm">{index + 1}</TableCell>
@@ -300,36 +321,40 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
                         <Select
                           value={tipo}
                           onValueChange={(value) => {
-                            setValue(`entradas.${index}.tipo`, value as "Paciente" | "Gasto")
+                            setValue(`entradas.${index}.tipo`, value as TipoEntrada)
                             if (value === "Gasto") {
                               setValue(`entradas.${index}.cobertura`, "Particular")
                               setValue(`entradas.${index}.obraSocial`, "-")
                               setValue(`entradas.${index}.haber`, 0)
                             }
+                            if (value === "Ingreso") {
+                              setValue(`entradas.${index}.cobertura`, "Particular")
+                              setValue(`entradas.${index}.obraSocial`, "-")
+                              setValue(`entradas.${index}.debe`, 0)
+                            }
                           }}
                         >
-                          <SelectTrigger className={`border-gray-300 focus:border-[#001633] text-xs ${esGasto ? "border-orange-300 bg-orange-50" : ""}`}>
+                          <SelectTrigger className={`border-gray-300 text-xs ${TIPO_STYLES[tipo]}`}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Paciente">Paciente</SelectItem>
                             <SelectItem value="Gasto">Gasto</SelectItem>
+                            <SelectItem value="Ingreso">Ingreso</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
                       <TableCell>
                         <Input
                           {...register(`entradas.${index}.nombreApellido`)}
-                          placeholder={esGasto ? "Descripción del gasto" : "Nombre y Apellido"}
+                          placeholder={TIPO_PLACEHOLDER[tipo]}
                           className="border-gray-300 focus:border-[#001633]"
                         />
                       </TableCell>
                       <TableCell>
-                        {esGasto ? (
-                          <span className="text-gray-400 text-sm px-2">—</span>
-                        ) : (
+                        {esPaciente ? (
                           <Select
-                            value={watchEntradas[index]?.cobertura ?? "Particular"}
+                            value={watchEntradas?.[index]?.cobertura ?? "Particular"}
                             onValueChange={(value) => {
                               setValue(`entradas.${index}.cobertura`, value as "Particular" | "Obra Social")
                               if (value === "Particular") {
@@ -345,17 +370,19 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
                               <SelectItem value="Obra Social">Obra Social</SelectItem>
                             </SelectContent>
                           </Select>
+                        ) : (
+                          <span className="text-gray-400 text-sm px-2">—</span>
                         )}
                       </TableCell>
                       <TableCell>
-                        {esGasto ? (
-                          <span className="text-gray-400 text-sm px-2">—</span>
-                        ) : (
+                        {esPaciente ? (
                           <Input
                             {...register(`entradas.${index}.obraSocial`)}
-                            disabled={watchEntradas[index]?.cobertura === "Particular"}
+                            disabled={watchEntradas?.[index]?.cobertura === "Particular"}
                             className="border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400"
                           />
+                        ) : (
+                          <span className="text-gray-400 text-sm px-2">—</span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -364,7 +391,8 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
                           type="number"
                           step="0.01"
                           min={0}
-                          className="border-gray-300 focus:border-[#001633]"
+                          disabled={esIngreso}
+                          className="border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400"
                         />
                       </TableCell>
                       <TableCell>
@@ -398,7 +426,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       </div>
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             type="button"
             onClick={() => agregarFila("Paciente")}
@@ -413,6 +441,14 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
             className="border-orange-400 text-orange-600 hover:bg-orange-50 transition-colors"
           >
             + Gasto
+          </Button>
+          <Button
+            type="button"
+            onClick={() => agregarFila("Ingreso")}
+            variant="outline"
+            className="border-green-500 text-green-700 hover:bg-green-50 transition-colors"
+          >
+            + Ingreso
           </Button>
         </div>
 

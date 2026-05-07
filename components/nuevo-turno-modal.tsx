@@ -25,10 +25,11 @@ const DIAS_SEMANA = [
 ]
 
 function snapToWeekday(d: Date): Date {
-  const day = d.getDay()
-  if (day === 6) d.setDate(d.getDate() + 2) // Sat → Mon
-  if (day === 0) d.setDate(d.getDate() + 1) // Sun → Mon
-  return d
+  const result = new Date(d)
+  const day = result.getDay()
+  if (day === 6) result.setDate(result.getDate() + 2) // Sat → Mon
+  if (day === 0) result.setDate(result.getDate() + 1) // Sun → Mon
+  return result
 }
 
 // Every N calendar days; if result is weekend, moves to Monday
@@ -207,23 +208,29 @@ export function NuevoTurnoModal({
       }
       if (notas.trim()) turnoBase.notas = notas.trim()
 
-      await Promise.all(
+      const results = await Promise.allSettled(
         fechasPreview.map((f) =>
           push(ref(db, `turnos/${format(f, "yyyy-MM-dd")}`), turnoBase)
         )
       )
 
-      const plural = fechasPreview.length > 1
-      toast.success(
-        plural
-          ? `${fechasPreview.length} turnos guardados`
-          : "Turno guardado"
-      )
-      onSaved()
-      onOpenChange(false)
-    } catch (err) {
-      console.error("[NuevoTurnoModal] save error:", err)
-      toast.error(err instanceof Error ? err.message : "Error al guardar el turno")
+      const saved = results.filter((r) => r.status === "fulfilled").length
+      const failed = results.filter((r) => r.status === "rejected").length
+
+      if (failed === 0) {
+        toast.success(saved > 1 ? `${saved} turnos guardados` : "Turno guardado")
+      } else if (saved === 0) {
+        toast.error("No se pudo guardar ningún turno")
+      } else {
+        toast.warning(`${saved} turno${saved !== 1 ? "s" : ""} guardado${saved !== 1 ? "s" : ""}, ${failed} fallaron`)
+      }
+
+      if (saved > 0) {
+        onSaved()
+        onOpenChange(false)
+      }
+    } catch {
+      toast.error("Error inesperado al guardar los turnos")
     } finally {
       setIsSaving(false)
     }

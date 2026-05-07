@@ -163,6 +163,14 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
             {isLoading && (
               <span className="text-xs text-gray-400 mt-0.5 block">Cargando...</span>
             )}
+            {!isLoading && !isSameMonth(selectedDate, currentMonth) && (
+              <button
+                onClick={() => setCurrentMonth(startOfMonth(selectedDate))}
+                className="text-[10px] text-blue-600 hover:text-blue-800 mt-0.5 block"
+              >
+                Agenda en {format(selectedDate, "MMMM", { locale: es })} →
+              </button>
+            )}
             {!isLoading && totalTurnos > 0 && (
               <div className="flex items-center gap-1 mt-1 flex-wrap">
                 {pendientes > 0 && (
@@ -278,7 +286,11 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
                     </span>
                     {turnosActivos.length > 0 && (
                       <span
-                        className={`text-[9px] leading-none font-semibold px-1 py-0.5 rounded-full ${countBadgeStyle(turnosActivos.length)}`}
+                        className={`text-[9px] leading-none font-semibold px-1 py-0.5 rounded-full ${
+                          today_
+                            ? "bg-white text-[#001633] border border-blue-200"
+                            : countBadgeStyle(turnosActivos.length)
+                        }`}
                       >
                         {turnosActivos.length}
                       </span>

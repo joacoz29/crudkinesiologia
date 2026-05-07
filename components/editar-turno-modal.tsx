@@ -35,7 +35,7 @@ import { ref, update, remove, get } from "firebase/database"
 import { db, auth } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
-import { addToLibroDiario } from "@/lib/helpers"
+import { addToLibroDiario, parseTratamientosRaw } from "@/lib/helpers"
 
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },
@@ -141,8 +141,9 @@ export function EditarTurnoModal({
         ? `${sesionesActual.trim()}\n${newEntry}`
         : newEntry
 
-      // 3. Update patient record
-      await update(ref(db, `pacientes/${turno.patientId}`), {
+      // 3. Sync to the latest tratamiento (if any)
+      const tratamientos = parseTratamientosRaw(raw.tratamientos)
+      const updatePayload: Record<string, unknown> = {
         sesiones: [updatedSesiones],
         ultima_actualizacion: {
           fecha: new Date().toISOString(),
@@ -151,14 +152,26 @@ export function EditarTurnoModal({
             auth.currentUser?.email ||
             "Calendario",
         },
-      })
+      }
+      if (tratamientos.length > 0) {
+        const latest = tratamientos[tratamientos.length - 1]
+        const sessionEntry = `Sesión ${latest.sesiones.length + 1} — ${day}/${month}/${year} ${hora}`
+        updatePayload.tratamientos = tratamientos.map((t, i) =>
+          i === tratamientos.length - 1
+            ? { ...t, sesiones: [...t.sesiones, sessionEntry] }
+            : t
+        )
+      }
 
-      // 4. Mark turno as asistió
+      // 4. Update patient record
+      await update(ref(db, `pacientes/${turno.patientId}`), updatePayload)
+
+      // 5. Mark turno as asistió
       await update(ref(db, `turnos/${fecha}/${turno.id}`), {
         estado: "asistio",
       })
 
-      // 5. Add to libro diario for that day
+      // 6. Add to libro diario for that day
       await addToLibroDiario({
         nombreApellido: `${turno.nombre} ${turno.apellido}`,
         obraSocial: (raw.obraSocial as string) || "-",

@@ -1,6 +1,27 @@
 import { ref, set, get, push, remove, update, query, orderByKey, startAt, endAt } from "firebase/database"
 import { db } from "@/lib/firebase"
-import { Turno, TurnoConFecha } from "@/types"
+import { Tratamiento, Turno, TurnoConFecha } from "@/types"
+
+export function parseTratamientosRaw(val: unknown): Tratamiento[] {
+  if (!val) return []
+  const items: unknown[] = Array.isArray(val) ? val : Object.values(val as object)
+  return items.filter(Boolean).map((item) => {
+    const t = item as Record<string, unknown>
+    const rawSesiones = t.sesiones
+    const sesiones: string[] = Array.isArray(rawSesiones)
+      ? (rawSesiones as string[]).filter(Boolean)
+      : rawSesiones && typeof rawSesiones === "object"
+      ? (Object.values(rawSesiones as object) as string[]).filter(Boolean)
+      : []
+    return {
+      id: String(t.id ?? Date.now()),
+      nroAutorizacion: String(t.nroAutorizacion ?? ""),
+      sesionesAutorizadas: Number(t.sesionesAutorizadas ?? 0),
+      fechaCreacion: String(t.fechaCreacion ?? ""),
+      sesiones,
+    }
+  })
+}
 
 interface LibroDiarioEntry {
   nombreApellido: string

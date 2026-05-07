@@ -53,6 +53,10 @@ function sessionBadgeClass(used: number, authorized: number): string {
   return "bg-green-50 text-green-700 border-green-200"
 }
 
+function formatSesiones(text: string): string {
+  return text.replace(/\s+(\d+-)/g, "\n$1").trim()
+}
+
 function parseTratamientos(val: unknown): Tratamiento[] {
   if (!val) return []
   const items: unknown[] = Array.isArray(val) ? val : Object.values(val as object)
@@ -82,6 +86,7 @@ export function EditPatientModal({
   setLibroDiarioUpdateTrigger,
 }: EditPatientModalProps) {
   const [editedPatient, setEditedPatient] = useState<Patient | null>(null)
+  const [sesionesText, setSesionesText] = useState("")
   const [newSessionAdded, setNewSessionAdded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [turnos, setTurnos] = useState<TurnoConFecha[]>([])
@@ -97,6 +102,7 @@ export function EditPatientModal({
   useEffect(() => {
     if (!patient) return
     setEditedPatient(patient)
+    setSesionesText(formatSesiones((patient.sesiones ?? []).join(" ")))
     setNewSessionAdded(false)
     setShowNewTreatmentForm(false)
     setNewTreatmentNroAuth("")
@@ -188,6 +194,7 @@ export function EditPatientModal({
       const updatedPatient: Patient = {
         ...editedPatient,
         tratamientos,
+        sesiones: sesionesText ? [sesionesText] : [],
         sesionesAutorizadas: latestTrat?.sesionesAutorizadas ?? editedPatient.sesionesAutorizadas,
         nroAutorizacion: latestTrat?.nroAutorizacion || editedPatient.nroAutorizacion,
         ultima_actualizacion: {
@@ -237,10 +244,6 @@ export function EditPatientModal({
 
   if (!editedPatient) return null
 
-  const legacySesiones =
-    tratamientos.length === 0 && (editedPatient.sesiones ?? []).length > 0
-      ? (editedPatient.sesiones ?? []).join(" ").trim()
-      : ""
 
   return (
     <>
@@ -410,13 +413,6 @@ export function EditPatientModal({
                 </div>
               )}
 
-              {/* Historial previo (datos legacy sin tratamientos) */}
-              {legacySesiones && (
-                <div className="border border-amber-200 rounded-lg p-3 bg-amber-50/40">
-                  <p className="text-xs font-medium text-amber-700 mb-1">Historial previo</p>
-                  <p className="text-xs text-amber-800 whitespace-pre-wrap font-mono">{legacySesiones}</p>
-                </div>
-              )}
 
               {/* Lista de tratamientos */}
               {tratamientos.length === 0 && !showNewTreatmentForm ? (
@@ -501,6 +497,17 @@ export function EditPatientModal({
                   })}
                 </div>
               )}
+            </div>
+
+            {/* Historial libre */}
+            <div className="space-y-2 border-t border-slate-100 pt-5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Historial libre</h3>
+              <Textarea
+                value={sesionesText}
+                onChange={(e) => setSesionesText(e.target.value)}
+                className="min-h-[100px] border-slate-200 focus:border-[#001633] font-mono text-sm"
+                placeholder="Ej: 1-28/3/23 2-30/3/23 3-3/4/23"
+              />
             </div>
 
             {/* Turnos agendados */}

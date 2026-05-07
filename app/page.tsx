@@ -264,16 +264,16 @@ export default function Page() {
                       <TableHeader>
                         <TableRow className="bg-[#001633] text-white hover:bg-[#001633]">
                           <TableHead className="w-10" />
-                          <TableHead className="font-semibold">Nombre</TableHead>
-                          <TableHead className="font-semibold">Apellido</TableHead>
-                          <TableHead className="font-semibold hidden sm:table-cell">Edad</TableHead>
-                          <TableHead className="font-semibold hidden sm:table-cell">DNI</TableHead>
-                          <TableHead className="font-semibold hidden sm:table-cell">O.S</TableHead>
-                          <TableHead className="font-semibold hidden sm:table-cell">N°AFL</TableHead>
-                          <TableHead className="font-semibold hidden sm:table-cell">Teléfono</TableHead>
-                          <TableHead className="font-semibold hidden sm:table-cell">DX</TableHead>
-                          <TableHead className="font-semibold hidden sm:table-cell">DR</TableHead>
-                          <TableHead className="font-semibold">Opciones</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80">Nombre</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80">Apellido</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Edad</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">DNI</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Obra Social</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">N°AFL</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Teléfono</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Diagnóstico</TableHead>
+                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Doctor</TableHead>
+                          <TableHead className="w-20" />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -285,38 +285,38 @@ export default function Page() {
                           </TableRow>
                         ) : (
                           patients.map((patient, index) => (
-                            <TableRow key={patient.id} className="bg-white hover:bg-slate-50 transition-colors">
-                              <TableCell className="pl-4 pr-0">
-                                <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-semibold ${getAvatarColor(patient.nombre + patient.apellido)}`}>
+                            <TableRow key={patient.id} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                              <TableCell className="pl-4 pr-0 py-3">
+                                <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0 ${getAvatarColor(patient.nombre + patient.apellido)}`}>
                                   {getInitials(patient.nombre, patient.apellido)}
                                 </div>
                               </TableCell>
-                              <TableCell className="font-medium">{patient.nombre}</TableCell>
-                              <TableCell>{patient.apellido}</TableCell>
-                              <TableCell className="hidden sm:table-cell">{patient.edad}</TableCell>
-                              <TableCell className="hidden sm:table-cell">{patient.dni}</TableCell>
-                              <TableCell className="hidden sm:table-cell">{patient.obraSocial}</TableCell>
-                              <TableCell className="hidden sm:table-cell">{patient.nroAFL}</TableCell>
-                              <TableCell className="hidden sm:table-cell">{patient.telefono}</TableCell>
-                              <TableCell className="hidden sm:table-cell">{patient.diagnostico}</TableCell>
-                              <TableCell className="hidden sm:table-cell">{patient.doctor}</TableCell>
-                              <TableCell>
-                                <div className="flex gap-2">
+                              <TableCell className="py-3 font-medium text-slate-800">{patient.nombre}</TableCell>
+                              <TableCell className="py-3 font-medium text-slate-800">{patient.apellido}</TableCell>
+                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.edad}</TableCell>
+                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.dni}</TableCell>
+                              <TableCell className="py-3 text-slate-700 hidden sm:table-cell">{patient.obraSocial}</TableCell>
+                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.nroAFL}</TableCell>
+                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.telefono}</TableCell>
+                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.diagnostico}</TableCell>
+                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.doctor}</TableCell>
+                              <TableCell className="py-3">
+                                <div className="flex gap-1">
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-8 w-8 p-0 hover:bg-[#001633] hover:text-white transition-colors"
+                                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-[#001633] transition-colors rounded-lg"
                                     onClick={() => handleEdit(patient)}
                                   >
-                                    <Pencil className="h-4 w-4" />
+                                    <Pencil className="h-3.5 w-3.5" />
                                   </Button>
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white transition-colors"
+                                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 transition-colors rounded-lg"
                                     onClick={() => handleDelete(patient)}
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 </div>
                               </TableCell>

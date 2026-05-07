@@ -1,8 +1,9 @@
 "use client"
 
-import { format } from "date-fns"
+import { format, isToday } from "date-fns"
 import { es } from "date-fns/locale"
-import { Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 8) // 8 → 19
@@ -32,9 +33,11 @@ interface AgendaDiaProps {
   turnos: Turno[]
   onNuevoTurno: (hora: string) => void
   onEditarTurno: (turno: Turno) => void
+  onPrevDay: () => void
+  onNextDay: () => void
 }
 
-export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno }: AgendaDiaProps) {
+export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno, onPrevDay, onNextDay }: AgendaDiaProps) {
   const turnosPorHora = HOURS.reduce<Record<number, Turno[]>>((acc, h) => {
     acc[h] = turnos.filter((t) => parseInt(t.hora.split(":")[0], 10) === h)
     return acc
@@ -50,10 +53,33 @@ export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno }: Agenda
         <div>
           <h3 className="text-lg font-semibold text-[#001633] capitalize">
             {format(fecha, "EEEE d 'de' MMMM", { locale: es })}
+            {isToday(fecha) && (
+              <span className="ml-2 text-xs font-normal text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                Hoy
+              </span>
+            )}
           </h3>
           <p className="text-xs text-gray-400 mt-0.5">
             {totalAgendados} turno{totalAgendados !== 1 ? "s" : ""} agendado{totalAgendados !== 1 ? "s" : ""} · {horasLibres} hora{horasLibres !== 1 ? "s" : ""} libre{horasLibres !== 1 ? "s" : ""}
           </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 border-gray-200 text-gray-500 hover:bg-gray-50"
+            onClick={onPrevDay}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 border-gray-200 text-gray-500 hover:bg-gray-50"
+            onClick={onNextDay}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 

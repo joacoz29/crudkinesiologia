@@ -9,6 +9,8 @@ import {
   getDay,
   addMonths,
   subMonths,
+  addDays,
+  subDays,
   isSameMonth,
   isToday,
   isSameDay,
@@ -107,8 +109,25 @@ export function Calendario() {
 
   const handleDayClick = (day: Date) => {
     setSelectedDate(day)
-    setNuevoTurnoHora("09:00")
-    setModalOpen(true)
+    if (!isSameMonth(day, currentMonth)) {
+      setCurrentMonth(startOfMonth(day))
+    }
+  }
+
+  const handlePrevDay = () => {
+    const prev = subDays(selectedDate, 1)
+    setSelectedDate(prev)
+    if (!isSameMonth(prev, currentMonth)) {
+      setCurrentMonth(startOfMonth(prev))
+    }
+  }
+
+  const handleNextDay = () => {
+    const next = addDays(selectedDate, 1)
+    setSelectedDate(next)
+    if (!isSameMonth(next, currentMonth)) {
+      setCurrentMonth(startOfMonth(next))
+    }
   }
 
   const handleChipClick = (e: React.MouseEvent, turno: Turno, dateKey: string) => {
@@ -228,7 +247,16 @@ export function Calendario() {
                     >
                       {format(day, "d")}
                     </span>
-                    <Plus className="h-3.5 w-3.5 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openNuevoTurno(day)
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 hover:bg-white/60"
+                      title="Agregar turno"
+                    >
+                      <Plus className="h-3.5 w-3.5 text-gray-500" />
+                    </button>
                   </div>
 
                   {turnos.map((turno) => (
@@ -277,6 +305,8 @@ export function Calendario() {
             setSelectedTurnoFecha(selectedDateKey)
             setEditModalOpen(true)
           }}
+          onPrevDay={handlePrevDay}
+          onNextDay={handleNextDay}
         />
       </div>
 

@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
 import { fetchTurnosPorMes } from "@/lib/helpers"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
+import { EditarTurnoModal } from "@/components/editar-turno-modal"
 
 const DAYS_OF_WEEK = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
@@ -61,6 +62,9 @@ export function Calendario() {
   const [isLoading, setIsLoading] = useState(false)
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [selectedTurno, setSelectedTurno] = useState<Turno | null>(null)
+  const [selectedTurnoFecha, setSelectedTurnoFecha] = useState("")
+  const [editModalOpen, setEditModalOpen] = useState(false)
 
   const today = new Date()
   const isCurrentMonth =
@@ -86,6 +90,13 @@ export function Calendario() {
   const handleDayClick = (day: Date) => {
     setSelectedDay(day)
     setModalOpen(true)
+  }
+
+  const handleChipClick = (e: React.MouseEvent, turno: Turno, dateKey: string) => {
+    e.stopPropagation()
+    setSelectedTurno(turno)
+    setSelectedTurnoFecha(dateKey)
+    setEditModalOpen(true)
   }
 
   const handleTurnoSaved = () => {
@@ -204,8 +215,9 @@ export function Calendario() {
                   {turnos.map((turno) => (
                     <div
                       key={turno.id}
+                      onClick={(e) => handleChipClick(e, turno, dateKey)}
                       className={[
-                        "text-xs px-1.5 py-0.5 rounded border truncate",
+                        "text-xs px-1.5 py-0.5 rounded border truncate cursor-pointer hover:opacity-75 transition-opacity",
                         ESTADO_STYLES[turno.estado],
                       ].join(" ")}
                       title={`${turno.hora} — ${turno.nombre} ${turno.apellido}${turno.notas ? `\n${turno.notas}` : ""}`}
@@ -235,12 +247,23 @@ export function Calendario() {
         <span className="text-gray-400 ml-auto">Click en un día para agregar turno</span>
       </div>
 
-      {/* Modal */}
+      {/* Nuevo turno modal */}
       {selectedDay && (
         <NuevoTurnoModal
           open={modalOpen}
           onOpenChange={setModalOpen}
           fecha={selectedDay}
+          onSaved={handleTurnoSaved}
+        />
+      )}
+
+      {/* Editar turno modal */}
+      {selectedTurno && (
+        <EditarTurnoModal
+          open={editModalOpen}
+          onOpenChange={setEditModalOpen}
+          fecha={selectedTurnoFecha}
+          turno={selectedTurno}
           onSaved={handleTurnoSaved}
         />
       )}

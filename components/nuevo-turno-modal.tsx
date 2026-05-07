@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ref, get } from "firebase/database"
+import { db } from "@/lib/firebase"
 import { saveTurno } from "@/lib/helpers"
 import { Patient } from "@/types"
 import { toast } from "sonner"
@@ -29,12 +31,23 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, onSaved }: NuevoTur
   const [showDropdown, setShowDropdown] = useState(false)
 
   useEffect(() => {
-    if (open) {
-      fetch("/api/patients?limit=500")
-        .then((r) => r.json())
-        .then((data) => setPatients(data.patients ?? []))
-        .catch(() => {})
-    }
+    if (!open) return
+    get(ref(db, "pacientes"))
+      .then((snapshot) => {
+        if (!snapshot.exists()) return
+        const data = snapshot.val() as Record<string, Record<string, unknown>>
+        const list: Patient[] = Object.entries(data).map(([id, raw]) => {
+          const sesiones = Array.isArray(raw.sesiones)
+            ? (raw.sesiones as string[])
+            : typeof raw.sesiones === "string"
+            ? (raw.sesiones as string).split(", ").filter(Boolean)
+            : []
+          return { id, ...raw, sesiones } as Patient
+        })
+        list.sort((a, b) => a.apellido.localeCompare(b.apellido))
+        setPatients(list)
+      })
+      .catch(() => {})
   }, [open])
 
   useEffect(() => {
@@ -48,10 +61,16 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, onSaved }: NuevoTur
   }, [open])
 
   const filtered = patients
-    .filter((p) =>
-      `${p.nombre} ${p.apellido}`.toLowerCase().includes(search.toLowerCase())
-    )
-    .slice(0, 8)
+    .filter((p) => {
+      const q = search.toLowerCase()
+      return (
+        p.nombre?.toLowerCase().includes(q) ||
+        p.apellido?.toLowerCase().includes(q) ||
+        `${p.nombre} ${p.apellido}`.toLowerCase().includes(q) ||
+        `${p.apellido} ${p.nombre}`.toLowerCase().includes(q)
+      )
+    })
+    .slice(0, 10)
 
   const handleSave = async () => {
     if (!selectedPatient) {

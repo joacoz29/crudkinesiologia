@@ -388,6 +388,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
         horaInicial={nuevoTurnoHora}
         onSaved={handleTurnoSaved}
         turnosPorFecha={turnosPorFecha}
+        feriados={feriados}
       />
 
       {/* Editar turno modal */}

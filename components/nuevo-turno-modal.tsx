@@ -78,8 +78,10 @@ function generarFechasSemanal(base: Date, diasJS: number[], numSemanas: number):
   return fechas.sort((a, b) => a.getTime() - b.getTime())
 }
 
-// Weekday dates until numTurnos is reached
-function generarFechasSemanalPorTurnos(base: Date, diasJS: number[], numTurnos: number): Date[] {
+// Weekday dates until numTurnos is reached, skipping holidays
+function generarFechasSemanalPorTurnos(
+  base: Date, diasJS: number[], numTurnos: number, feriadosSet: Set<string>
+): Date[] {
   if (diasJS.length === 0) return []
   const lunes = lunesDeSemanaDe(base)
   const baseNorm = new Date(base); baseNorm.setHours(0, 0, 0, 0)
@@ -90,10 +92,14 @@ function generarFechasSemanalPorTurnos(base: Date, diasJS: number[], numTurnos: 
       const offset = dia === 0 ? 6 : dia - 1
       const d = new Date(lunes)
       d.setDate(d.getDate() + s * 7 + offset)
-      if (d >= baseNorm) fechas.push(new Date(d))
+      if (d >= baseNorm && !feriadosSet.has(format(d, "yyyy-MM-dd"))) fechas.push(new Date(d))
     }
   }
   return fechas.sort((a, b) => a.getTime() - b.getTime())
+}
+
+function filtrarFeriados(fechas: Date[], feriadosSet: Set<string>): Date[] {
+  return fechas.filter((d) => !feriadosSet.has(format(d, "yyyy-MM-dd")))
 }
 
 interface NuevoTurnoModalProps {
@@ -103,6 +109,7 @@ interface NuevoTurnoModalProps {
   horaInicial?: string
   onSaved: () => void
   turnosPorFecha: Record<string, Turno[]>
+  feriados?: Record<string, string>
 }
 
 export function NuevoTurnoModal({
@@ -112,6 +119,7 @@ export function NuevoTurnoModal({
   horaInicial = "09:00",
   onSaved,
   turnosPorFecha,
+  feriados = {},
 }: NuevoTurnoModalProps) {
   const [patients, setPatients] = useState<Patient[]>([])
   const [search, setSearch] = useState("")
@@ -182,13 +190,25 @@ export function NuevoTurnoModal({
     )
   }
 
-  // Preview of dates that will be created
-  const fechasPreview = useMemo(() => {
+  const feriadosSet = useMemo(() => new Set(Object.keys(feriados)), [feriados])
+
+  // Raw candidates before holiday filter — used only for preview display (shows strikethrough on skipped days)
+  const fechasTodasCandidatas = useMemo(() => {
     if (repeticion === "ninguna") return [fecha]
     if (repeticion === "intervalo") return generarFechasIntervalo(fecha, intervalo, vecesTotal)
-    if (tipoLimite === "turnos") return generarFechasSemanalPorTurnos(fecha, diasSemana, numTurnos)
+    if (tipoLimite === "turnos") return [] // por-turnos derives its own list internally
     return generarFechasSemanal(fecha, diasSemana, numSemanas)
-  }, [repeticion, fecha, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas, numTurnos])
+  }, [repeticion, fecha, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas])
+
+  // Dates that will actually be saved (holidays excluded)
+  const fechasPreview = useMemo(() => {
+    if (repeticion === "ninguna") return [fecha]
+    if (repeticion === "intervalo")
+      return filtrarFeriados(generarFechasIntervalo(fecha, intervalo, vecesTotal), feriadosSet)
+    if (tipoLimite === "turnos")
+      return generarFechasSemanalPorTurnos(fecha, diasSemana, numTurnos, feriadosSet)
+    return filtrarFeriados(generarFechasSemanal(fecha, diasSemana, numSemanas), feriadosSet)
+  }, [repeticion, fecha, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas, numTurnos, feriadosSet])
 
   const canSave =
     !!selectedPatient &&
@@ -530,36 +550,61 @@ export function NuevoTurnoModal({
             )}
 
             {/* Preview */}
-            {repeticion !== "ninguna" && fechasPreview.length > 0 && (
-              <div className="bg-gray-50 rounded-md p-2.5 text-xs text-gray-600 space-y-1">
-                <p className="font-medium text-gray-700">
-                  Se crearán {fechasPreview.length} turno{fechasPreview.length !== 1 ? "s" : ""}:
-                </p>
-                <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
-                  {fechasPreview.map((f, i) => {
-                    const fKey = format(f, "yyyy-MM-dd")
-                    const hasConflict = (turnosPorFecha[fKey] ?? []).some(
-                      (t) => t.hora === hora && t.estado !== "cancelado"
-                    )
-                    return (
-                      <span
-                        key={i}
-                        className={[
-                          "inline-flex items-center gap-1 border rounded px-1.5 py-0.5 capitalize text-xs",
-                          hasConflict
-                            ? "bg-amber-50 border-amber-300 text-amber-800"
-                            : "bg-white border-gray-200 text-gray-700",
-                        ].join(" ")}
-                        title={hasConflict ? `Ya hay turnos a las ${hora} este día` : undefined}
-                      >
-                        {hasConflict && <AlertTriangle className="h-2.5 w-2.5 shrink-0" />}
-                        {format(f, "EEE d MMM", { locale: es })}
+            {repeticion !== "ninguna" && (() => {
+              const byTurnos = repeticion === "semanal" && tipoLimite === "turnos"
+              const displayDates = byTurnos ? fechasPreview : fechasTodasCandidatas
+              const feriadosOmitidos = byTurnos
+                ? 0
+                : displayDates.filter((d) => feriadosSet.has(format(d, "yyyy-MM-dd"))).length
+              if (displayDates.length === 0) return null
+              return (
+                <div className="bg-gray-50 rounded-md p-2.5 text-xs text-gray-600 space-y-1">
+                  <p className="font-medium text-gray-700">
+                    Se crearán {fechasPreview.length} turno{fechasPreview.length !== 1 ? "s" : ""}
+                    {feriadosOmitidos > 0 && (
+                      <span className="ml-1.5 font-normal text-amber-600">
+                        · {feriadosOmitidos} feriado{feriadosOmitidos !== 1 ? "s" : ""} omitido{feriadosOmitidos !== 1 ? "s" : ""}
                       </span>
-                    )
-                  })}
+                    )}
+                    :
+                  </p>
+                  <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                    {displayDates.map((f, i) => {
+                      const fKey = format(f, "yyyy-MM-dd")
+                      const esFeriado = feriadosSet.has(fKey)
+                      const hasConflict =
+                        !esFeriado &&
+                        (turnosPorFecha[fKey] ?? []).some(
+                          (t) => t.hora === hora && t.estado !== "cancelado"
+                        )
+                      return (
+                        <span
+                          key={i}
+                          className={[
+                            "inline-flex items-center gap-1 border rounded px-1.5 py-0.5 capitalize text-xs",
+                            esFeriado
+                              ? "bg-gray-100 border-gray-200 text-gray-400 line-through"
+                              : hasConflict
+                              ? "bg-amber-50 border-amber-300 text-amber-800"
+                              : "bg-white border-gray-200 text-gray-700",
+                          ].join(" ")}
+                          title={
+                            esFeriado
+                              ? `Feriado: ${feriados[fKey]}`
+                              : hasConflict
+                              ? `Ya hay turnos a las ${hora} este día`
+                              : undefined
+                          }
+                        >
+                          {!esFeriado && hasConflict && <AlertTriangle className="h-2.5 w-2.5 shrink-0" />}
+                          {format(f, "EEE d MMM", { locale: es })}
+                        </span>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
           </div>
 
           <Button

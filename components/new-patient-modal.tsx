@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, X } from "lucide-react"
 import { useState } from "react"
+import { toast } from "sonner"
 import { format } from "date-fns-tz"
 import { db } from "@/lib/firebase"
 import { ref, push } from "firebase/database"
@@ -27,6 +28,7 @@ function getCurrentArgentinaDateTime() {
 
 export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
   const [sesiones, setSesiones] = useState<string[]>([])
+  const [isSaving, setIsSaving] = useState(false)
   const [patient, setPatient] = useState({
     nombre: "",
     apellido: "",
@@ -50,7 +52,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
     } else {
       const lastSession = sesiones[sesiones.length - 1]
       const lastNumber = Number.parseInt(lastSession.split("-")[0])
-      const nextNumber = lastNumber >= 10 ? 1 : lastNumber + 1
+      const nextNumber = lastNumber + 1
       setSesiones([...sesiones, `${nextNumber}- ${currentDateTime}`])
     }
   }
@@ -61,44 +63,50 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const patientsRef = ref(db, "pacientes")
-    const currentUser = auth.currentUser
-    
-    await push(patientsRef, {
-      ...patient,
-      sesiones,
-      ultima_actualizacion: {
-        fecha: new Date().toISOString(),
-        usuario: currentUser ? currentUser.displayName || currentUser.email : "Unknown",
-      },
-    })
+    setIsSaving(true)
+    try {
+      const patientsRef = ref(db, "pacientes")
+      const currentUser = auth.currentUser
 
-    // Agregar al libro diario si hay sesiones
-    if (sesiones.length > 0) {
-      await addToLibroDiario({
-        nombreApellido: `${patient.nombre} ${patient.apellido}`,
-        obraSocial: patient.obraSocial,
+      await push(patientsRef, {
+        ...patient,
+        sesiones,
+        ultima_actualizacion: {
+          fecha: new Date().toISOString(),
+          usuario: currentUser ? currentUser.displayName || currentUser.email : "Unknown",
+        },
       })
-    }
 
-    onOpenChange(false)
-    // Reset form
-    setPatient({
-      nombre: "",
-      apellido: "",
-      sexo: "masculino",
-      dni: "",
-      edad: "",
-      domicilio: "",
-      obraSocial: "",
-      nroAFL: "",
-      telefono: "",
-      diagnostico: "",
-      doctor: "",
-      anotaciones: "",
-      tratamiento: "",
-    })
-    setSesiones([])
+      if (sesiones.length > 0) {
+        await addToLibroDiario({
+          nombreApellido: `${patient.nombre} ${patient.apellido}`,
+          obraSocial: patient.obraSocial,
+        })
+      }
+
+      toast.success("Paciente registrado correctamente")
+      onOpenChange(false)
+      setPatient({
+        nombre: "",
+        apellido: "",
+        sexo: "masculino",
+        dni: "",
+        edad: "",
+        domicilio: "",
+        obraSocial: "",
+        nroAFL: "",
+        telefono: "",
+        diagnostico: "",
+        doctor: "",
+        anotaciones: "",
+        tratamiento: "",
+      })
+      setSesiones([])
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Error al registrar el paciente")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -289,8 +297,8 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
             />
           </div>
 
-          <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors">
-            Registrar
+          <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors" disabled={isSaving}>
+            {isSaving ? "Registrando..." : "Registrar"}
           </Button>
         </form>
       </DialogContent>

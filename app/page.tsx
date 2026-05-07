@@ -103,7 +103,9 @@ export default function Page() {
         const patientRef = ref(db, `pacientes/${patientToDelete.id}`)
         await remove(patientRef)
         toast.success('Paciente eliminado correctamente')
-        fetchPatients(searchTerm, currentPage)
+        const newPage = patients.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage
+        if (newPage !== currentPage) setCurrentPage(newPage)
+        fetchPatients(searchTerm, newPage)
         setIsDeleteDialogOpen(false)
         setPatientToDelete(null)
       } catch (error) {

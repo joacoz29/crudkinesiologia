@@ -146,10 +146,7 @@ export function EditPatientModal({
       }
 
       onSave(updatedPatient)
-      onOpenChange(false)
       setNewSessionAdded(false)
-      setLibroDiarioUpdateTrigger((prev) => prev + 1)
-      toast.success('Paciente actualizado correctamente')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al guardar los cambios')
     } finally {

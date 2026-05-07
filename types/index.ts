@@ -1,5 +1,13 @@
 export type TurnoEstado = "pendiente" | "asistio" | "ausente" | "cancelado"
 
+export interface Tratamiento {
+  id: string
+  nroAutorizacion: string
+  sesionesAutorizadas: number
+  fechaCreacion: string
+  sesiones: string[]
+}
+
 export interface Turno {
   id: string
   patientId?: string
@@ -32,6 +40,7 @@ export interface Patient {
   sesionesAux?: string[]
   sesionesAutorizadas?: number
   nroAutorizacion?: string
+  tratamientos?: Tratamiento[]
   ultima_actualizacion?: {
     fecha: string
     usuario: string

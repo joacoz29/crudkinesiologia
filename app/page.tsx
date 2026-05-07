@@ -7,7 +7,7 @@ import { NewPatientModal } from "@/components/new-patient-modal"
 import { EditPatientModal } from "@/components/edit-patient-modal"
 import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
-import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle } from "lucide-react"
+import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus } from "lucide-react"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, remove, update } from "firebase/database"
@@ -33,6 +33,7 @@ export default function Page() {
   const [activeTab, setActiveTab] = useState("pacientes")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [totalItems, setTotalItems] = useState(0)
   const router = useRouter()
   const [libroDiarioUpdateTrigger, setLibroDiarioUpdateTrigger] = useState(0)
 
@@ -57,6 +58,7 @@ export default function Page() {
         const data = await response.json()
         setPatients(data.patients)
         setTotalPages(data.pagination.totalPages)
+        setTotalItems(data.pagination.totalItems)
         setIsLoading(false)
         return
       } catch (error) {
@@ -209,23 +211,33 @@ export default function Page() {
             <h1 className="text-2xl sm:text-3xl font-semibold text-[#001633] mb-6">Pacientes Registrados</h1>
 
             <div className="flex flex-col sm:flex-row justify-between mb-6 gap-4">
-              <div className="relative w-full sm:w-64">
-                <Input
-                  type="search"
-                  placeholder="Buscar por nombre, apellido o DNI"
-                  className="pl-3 pr-10 border-[#001633] focus:ring-[#001633] focus:border-[#001633] w-full"
-                  value={searchTerm}
-                  onChange={handleSearch}
-                  disabled={isLoading}
-                />
-                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+              <div className="flex flex-col gap-1">
+                <div className="relative w-full sm:w-80">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                  <Input
+                    type="search"
+                    placeholder="Buscar por nombre, apellido o DNI..."
+                    className="pl-9 pr-3 border-slate-200 focus:border-[#001633] focus:ring-[#001633] bg-white w-full"
+                    value={searchTerm}
+                    onChange={handleSearch}
+                    disabled={isLoading}
+                  />
+                </div>
+                {!isLoading && (
+                  <p className="text-xs text-slate-400 pl-1">
+                    {totalItems === 0
+                      ? "Sin resultados"
+                      : `${totalItems} paciente${totalItems !== 1 ? "s" : ""}${searchTerm ? " encontrados" : ""}`}
+                  </p>
+                )}
               </div>
               <Button
-                className="bg-[#001633] hover:bg-[#002966] transition-colors w-full sm:w-auto"
+                className="bg-[#001633] hover:bg-[#002966] transition-colors w-full sm:w-auto flex items-center gap-2"
                 onClick={() => setModalOpen(true)}
                 disabled={isLoading}
               >
-                + Nuevo Paciente
+                <UserPlus className="h-4 w-4" />
+                Nuevo Paciente
               </Button>
             </div>
 

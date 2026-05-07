@@ -286,11 +286,12 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
             `$${(Number(e.haber) || 0).toFixed(2)}`,
           ]
         }),
-        foot: [[{
-          content: `Saldo de caja: $${saldo.toFixed(2)}`,
-          colSpan: 7,
-          styles: { halign: "right", fontStyle: "bold" },
-        }]],
+        foot: [
+          ["", "", "", "", "", "Total Haber", `$${totalHaber.toFixed(2)}`],
+          ["", "", "", "", "", "Total Debe", `$${totalDebe.toFixed(2)}`],
+          [{ content: `Saldo de caja: $${saldo.toFixed(2)}`, colSpan: 7, styles: { halign: "right" as const, fontStyle: "bold" as const } }],
+        ],
+        footStyles: { fillColor: [248, 250, 252] as [number, number, number], textColor: [30, 30, 30] as [number, number, number] },
       })
 
       doc.save(`${toLocalDateKey(fecha)}_LibroDiario.pdf`)
@@ -360,8 +361,94 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         </div>
       )}
 
-      {/* Tabla */}
-      <div className="overflow-x-auto">
+      {/* Mobile: cards */}
+      <div className="sm:hidden space-y-2">
+        {!fields.length ? (
+          <div className="text-center py-8 text-gray-500 bg-white border border-gray-200 rounded-lg text-sm">
+            No hay entradas para este día.
+          </div>
+        ) : (
+          fields.map((field, index) => {
+            const tipo: TipoEntrada = (watchEntradas?.[index]?.tipo as TipoEntrada) ?? "Paciente"
+            const esPaciente = tipo === "Paciente"
+            const esGasto = tipo === "Gasto"
+            const esIngreso = tipo === "Ingreso"
+            const isIncomplete = (Number(watchEntradas?.[index]?.debe) || 0) === 0 && (Number(watchEntradas?.[index]?.haber) || 0) === 0
+            const obraSocialVacia = esPaciente && watchEntradas?.[index]?.cobertura === "Obra Social" && !watchEntradas?.[index]?.obraSocial?.trim()
+            const cardBg = isIncomplete
+              ? "border-amber-200 bg-amber-50/40"
+              : tipo === "Gasto" ? "border-orange-200 bg-orange-50"
+              : tipo === "Ingreso" ? "border-green-200 bg-green-50"
+              : "border-gray-200 bg-white"
+            return (
+              <div key={field.id} className={`border rounded-lg p-3 space-y-2.5 ${cardBg}`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 font-mono w-5 shrink-0">{index + 1}</span>
+                  <Select
+                    value={tipo}
+                    onValueChange={(value) => {
+                      setValue(`entradas.${index}.tipo`, value as TipoEntrada)
+                      if (value === "Gasto") { setValue(`entradas.${index}.cobertura`, "Particular"); setValue(`entradas.${index}.obraSocial`, "-"); setValue(`entradas.${index}.haber`, 0) }
+                      if (value === "Ingreso") { setValue(`entradas.${index}.cobertura`, "Particular"); setValue(`entradas.${index}.obraSocial`, "-"); setValue(`entradas.${index}.debe`, 0) }
+                    }}
+                  >
+                    <SelectTrigger className={`border-gray-300 text-xs h-8 flex-1 ${TIPO_STYLES[tipo]}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Paciente">Paciente</SelectItem>
+                      <SelectItem value="Gasto">Gasto</SelectItem>
+                      <SelectItem value="Ingreso">Ingreso</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white transition-colors shrink-0" onClick={() => setDeleteIndex(index)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <Input {...register(`entradas.${index}.nombreApellido`)} placeholder={TIPO_PLACEHOLDER[tipo]} className="border-gray-300 focus:border-[#001633] h-8 text-sm" />
+                {esPaciente && (
+                  <div className="flex gap-2">
+                    <Select
+                      value={watchEntradas?.[index]?.cobertura ?? "Particular"}
+                      onValueChange={(value) => {
+                        setValue(`entradas.${index}.cobertura`, value as "Particular" | "Obra Social")
+                        if (value === "Particular") setValue(`entradas.${index}.obraSocial`, "-")
+                      }}
+                    >
+                      <SelectTrigger className="border-gray-300 h-8 text-sm w-36 shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Particular">Particular</SelectItem>
+                        <SelectItem value="Obra Social">Obra Social</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      {...register(`entradas.${index}.obraSocial`)}
+                      disabled={watchEntradas?.[index]?.cobertura === "Particular"}
+                      placeholder="Obra social..."
+                      className={`border-gray-300 focus:border-[#001633] h-8 text-sm disabled:bg-gray-100 disabled:text-gray-400 ${obraSocialVacia ? "border-red-400 bg-red-50" : ""}`}
+                    />
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <div className="flex-1 space-y-1">
+                    <label className="text-xs text-gray-500">Debe</label>
+                    <Input {...register(`entradas.${index}.debe`, { valueAsNumber: true })} type="number" step="0.01" min={0} disabled={esIngreso} onWheel={(e) => (e.target as HTMLInputElement).blur()} className="border-gray-300 focus:border-[#001633] h-8 disabled:bg-gray-100 disabled:text-gray-400" />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <label className="text-xs text-gray-500">Haber</label>
+                    <Input {...register(`entradas.${index}.haber`, { valueAsNumber: true })} type="number" step="0.01" min={0} disabled={esGasto} onWheel={(e) => (e.target as HTMLInputElement).blur()} className="border-gray-300 focus:border-[#001633] h-8 disabled:bg-gray-100 disabled:text-gray-400" />
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Desktop: tabla */}
+      <div className="hidden sm:block overflow-x-auto">
         <div className="border border-[#001633] rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
@@ -390,8 +477,10 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                   const esGasto = tipo === "Gasto"
                   const esIngreso = tipo === "Ingreso"
 
+                  const isIncomplete = (Number(watchEntradas?.[index]?.debe) || 0) === 0 && (Number(watchEntradas?.[index]?.haber) || 0) === 0
+                  const obraSocialVacia = esPaciente && watchEntradas?.[index]?.cobertura === "Obra Social" && !watchEntradas?.[index]?.obraSocial?.trim()
                   return (
-                    <TableRow key={field.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                    <TableRow key={field.id} className={isIncomplete ? "bg-amber-50/60" : index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                       <TableCell className="text-center text-sm">{index + 1}</TableCell>
                       <TableCell>
                         <Select
@@ -455,7 +544,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                           <Input
                             {...register(`entradas.${index}.obraSocial`)}
                             disabled={watchEntradas?.[index]?.cobertura === "Particular"}
-                            className="border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400"
+                            className={`border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400 ${obraSocialVacia ? "border-red-400 bg-red-50" : ""}`}
                           />
                         ) : (
                           <span className="text-gray-400 text-sm px-2">—</span>
@@ -468,6 +557,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                           step="0.01"
                           min={0}
                           disabled={esIngreso}
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           className="border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400"
                         />
                       </TableCell>
@@ -478,6 +568,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                           step="0.01"
                           min={0}
                           disabled={esGasto}
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           className="border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400"
                         />
                       </TableCell>
@@ -542,10 +633,22 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           </Button>
         </div>
 
-        <div className="text-center">
-          <div className="text-gray-500 text-xs uppercase tracking-wide">Saldo de caja</div>
-          <div className={`font-bold text-2xl ${saldo >= 0 ? "text-green-600" : "text-red-600"}`}>
-            ${saldo.toFixed(2)}
+        <div className="flex items-stretch rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+          <div className="flex flex-col items-center justify-center px-4 py-2.5">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Haber</span>
+            <span className="font-semibold text-green-600 text-lg leading-tight">${totalHaber.toFixed(2)}</span>
+          </div>
+          <div className="border-l border-gray-200" />
+          <div className="flex flex-col items-center justify-center px-4 py-2.5">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Debe</span>
+            <span className="font-semibold text-orange-600 text-lg leading-tight">${totalDebe.toFixed(2)}</span>
+          </div>
+          <div className="border-l border-gray-200" />
+          <div className="flex flex-col items-center justify-center px-4 py-2.5 bg-white">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Saldo</span>
+            <span className={`font-bold text-xl leading-tight ${saldo >= 0 ? "text-green-700" : "text-red-600"}`}>
+              ${saldo.toFixed(2)}
+            </span>
           </div>
         </div>
       </div>

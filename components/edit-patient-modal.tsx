@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { MessageCircle, Plus, Trash2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { format as formatTZ } from "date-fns-tz"
-import { format, parseISO } from "date-fns"
+import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { ref, remove, get } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
@@ -174,7 +174,8 @@ export function EditPatientModal({
       .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora))
 
     const lineas = pendientes.map((t) => {
-      const label = format(parseISO(t.fecha), "EEEE d 'de' MMMM", { locale: es })
+      const d = parseISO(t.fecha)
+      const label = isValid(d) ? format(d, "EEEE d 'de' MMMM", { locale: es }) : t.fecha
       return `• ${label.charAt(0).toUpperCase() + label.slice(1)} a las ${t.hora}`
     })
 
@@ -364,14 +365,17 @@ export function EditPatientModal({
               <p className="text-sm text-gray-400">Sin turnos agendados</p>
             ) : (
               <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                {turnos.map((t) => (
+                {turnos.map((t) => {
+                  const fechaDate = parseISO(t.fecha)
+                  const fechaLabel = isValid(fechaDate) ? format(fechaDate, "EEE d 'de' MMM", { locale: es }) : t.fecha
+                  return (
                   <div
                     key={`${t.fecha}-${t.id}`}
                     className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-md border border-gray-100 text-sm"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="text-gray-500 text-xs capitalize shrink-0">
-                        {format(parseISO(t.fecha), "EEE d 'de' MMM", { locale: es })}
+                        {fechaLabel}
                       </span>
                       <span className="font-medium shrink-0">{t.hora}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded border shrink-0 ${ESTADO_CHIP[t.estado]}`}>
@@ -393,7 +397,8 @@ export function EditPatientModal({
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -409,7 +414,12 @@ export function EditPatientModal({
           <div className="text-sm text-slate-400 mt-2">
             Última actualización: {editedPatient.ultima_actualizacion?.usuario || "N/A"} —{" "}
             {editedPatient.ultima_actualizacion?.fecha
-              ? formatTZ(new Date(editedPatient.ultima_actualizacion.fecha), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
+              ? (() => {
+                  const d = new Date(editedPatient.ultima_actualizacion!.fecha)
+                  return isValid(d)
+                    ? formatTZ(d, "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
+                    : editedPatient.ultima_actualizacion!.fecha
+                })()
               : "N/A"}
           </div>
         </form>

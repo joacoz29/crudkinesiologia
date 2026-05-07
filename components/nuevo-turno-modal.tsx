@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -13,6 +13,52 @@ import { db } from "@/lib/firebase"
 import { Patient } from "@/types"
 import { toast } from "sonner"
 
+type Repeticion = "ninguna" | "intervalo" | "semanal"
+
+const DIAS_SEMANA = [
+  { label: "L", value: 1 },
+  { label: "M", value: 2 },
+  { label: "X", value: 3 },
+  { label: "J", value: 4 },
+  { label: "V", value: 5 },
+  { label: "S", value: 6 },
+  { label: "D", value: 0 },
+]
+
+// Generates dates spaced every `intervalo` days, `vecesTotal` times starting from base
+function generarFechasIntervalo(base: Date, intervalo: number, vecesTotal: number): Date[] {
+  return Array.from({ length: Math.max(1, vecesTotal) }, (_, i) => {
+    const d = new Date(base)
+    d.setDate(d.getDate() + i * Math.max(1, intervalo))
+    return d
+  })
+}
+
+// Generates dates on selected weekdays for numSemanas weeks, starting from base date's week
+function generarFechasSemanal(base: Date, diasJS: number[], numSemanas: number): Date[] {
+  if (diasJS.length === 0) return []
+
+  const diaSemanaBase = base.getDay() // 0=Dom, 1=Lun...
+  const diasDesdeElLunes = diaSemanaBase === 0 ? 6 : diaSemanaBase - 1
+  const lunes = new Date(base)
+  lunes.setDate(lunes.getDate() - diasDesdeElLunes)
+  lunes.setHours(0, 0, 0, 0)
+
+  const baseNorm = new Date(base)
+  baseNorm.setHours(0, 0, 0, 0)
+
+  const fechas: Date[] = []
+  for (let semana = 0; semana < Math.max(1, numSemanas); semana++) {
+    for (const dia of diasJS) {
+      const offset = dia === 0 ? 6 : dia - 1 // Mon=0 offset
+      const d = new Date(lunes)
+      d.setDate(d.getDate() + semana * 7 + offset)
+      if (d >= baseNorm) fechas.push(new Date(d))
+    }
+  }
+  return fechas.sort((a, b) => a.getTime() - b.getTime())
+}
+
 interface NuevoTurnoModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -21,7 +67,13 @@ interface NuevoTurnoModalProps {
   onSaved: () => void
 }
 
-export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:00", onSaved }: NuevoTurnoModalProps) {
+export function NuevoTurnoModal({
+  open,
+  onOpenChange,
+  fecha,
+  horaInicial = "09:00",
+  onSaved,
+}: NuevoTurnoModalProps) {
   const [patients, setPatients] = useState<Patient[]>([])
   const [search, setSearch] = useState("")
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
@@ -29,6 +81,13 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:0
   const [notas, setNotas] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
+
+  // Repetición
+  const [repeticion, setRepeticion] = useState<Repeticion>("ninguna")
+  const [intervalo, setIntervalo] = useState(7)
+  const [vecesTotal, setVecesTotal] = useState(4)
+  const [diasSemana, setDiasSemana] = useState<number[]>([])
+  const [numSemanas, setNumSemanas] = useState(4)
 
   useEffect(() => {
     if (!open) return
@@ -57,8 +116,31 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:0
       setHora(horaInicial)
       setNotas("")
       setShowDropdown(false)
+      setRepeticion("ninguna")
+      setIntervalo(7)
+      setVecesTotal(4)
+      setDiasSemana([fecha.getDay()]) // pre-select the weekday of the chosen date
+      setNumSemanas(4)
     }
-  }, [open, horaInicial])
+  }, [open, horaInicial, fecha])
+
+  const toggleDia = (dia: number) => {
+    setDiasSemana((prev) =>
+      prev.includes(dia) ? prev.filter((d) => d !== dia) : [...prev, dia]
+    )
+  }
+
+  // Preview of dates that will be created
+  const fechasPreview = useMemo(() => {
+    if (repeticion === "ninguna") return [fecha]
+    if (repeticion === "intervalo") return generarFechasIntervalo(fecha, intervalo, vecesTotal)
+    return generarFechasSemanal(fecha, diasSemana, numSemanas)
+  }, [repeticion, fecha, intervalo, vecesTotal, diasSemana, numSemanas])
+
+  const canSave =
+    !!selectedPatient &&
+    (repeticion !== "semanal" || diasSemana.length > 0) &&
+    fechasPreview.length > 0
 
   const filtered = patients
     .filter((p) => {
@@ -77,22 +159,34 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:0
       toast.error("Seleccioná un paciente")
       return
     }
+    if (repeticion === "semanal" && diasSemana.length === 0) {
+      toast.error("Seleccioná al menos un día de la semana")
+      return
+    }
+
     setIsSaving(true)
     try {
-      const dateKey = format(fecha, "yyyy-MM-dd")
-      const turnoData: Record<string, unknown> = {
+      const turnoBase: Record<string, unknown> = {
         patientId: selectedPatient.id,
         nombre: selectedPatient.nombre,
         apellido: selectedPatient.apellido,
         hora,
         estado: "pendiente",
       }
-      if (notas.trim()) turnoData.notas = notas.trim()
+      if (notas.trim()) turnoBase.notas = notas.trim()
 
-      console.log("[NuevoTurnoModal] saving to turnos/" + dateKey, turnoData)
-      console.log("[NuevoTurnoModal] db instance:", db)
-      await push(ref(db, `turnos/${dateKey}`), turnoData)
-      toast.success("Turno guardado")
+      await Promise.all(
+        fechasPreview.map((f) =>
+          push(ref(db, `turnos/${format(f, "yyyy-MM-dd")}`), turnoBase)
+        )
+      )
+
+      const plural = fechasPreview.length > 1
+      toast.success(
+        plural
+          ? `${fechasPreview.length} turnos guardados`
+          : "Turno guardado"
+      )
       onSaved()
       onOpenChange(false)
     } catch (err) {
@@ -105,7 +199,7 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="capitalize">
             Nuevo turno — {format(fecha, "EEEE d 'de' MMMM", { locale: es })}
@@ -133,10 +227,7 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:0
                   variant="ghost"
                   size="sm"
                   className="h-6 text-xs"
-                  onClick={() => {
-                    setSelectedPatient(null)
-                    setSearch("")
-                  }}
+                  onClick={() => { setSelectedPatient(null); setSearch("") }}
                 >
                   Cambiar
                 </Button>
@@ -146,10 +237,7 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:0
                 <Input
                   placeholder="Buscar por nombre o apellido..."
                   value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value)
-                    setShowDropdown(true)
-                  }}
+                  onChange={(e) => { setSearch(e.target.value); setShowDropdown(true) }}
                   onFocus={() => setShowDropdown(true)}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                   className="border-[#001633]"
@@ -163,15 +251,9 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:0
                           key={p.id}
                           type="button"
                           className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex justify-between items-center"
-                          onMouseDown={() => {
-                            setSelectedPatient(p)
-                            setSearch("")
-                            setShowDropdown(false)
-                          }}
+                          onMouseDown={() => { setSelectedPatient(p); setSearch(""); setShowDropdown(false) }}
                         >
-                          <span>
-                            {p.nombre} {p.apellido}
-                          </span>
+                          <span>{p.nombre} {p.apellido}</span>
                           <span className="text-xs text-gray-400">{p.obraSocial}</span>
                         </button>
                       ))
@@ -199,24 +281,123 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:0
           {/* Notas */}
           <div className="space-y-2">
             <Label htmlFor="notas">
-              Notas{" "}
-              <span className="text-gray-400 font-normal text-xs">(opcional)</span>
+              Notas <span className="text-gray-400 font-normal text-xs">(opcional)</span>
             </Label>
             <Textarea
               id="notas"
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
               placeholder="Observaciones del turno..."
-              className="min-h-[80px] border-[#001633]"
+              className="min-h-[72px] border-[#001633]"
             />
+          </div>
+
+          {/* Repetición */}
+          <div className="space-y-3 border-t border-gray-100 pt-3">
+            <Label>Repetición</Label>
+            <div className="flex gap-2">
+              {(["ninguna", "intervalo", "semanal"] as Repeticion[]).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setRepeticion(opt)}
+                  className={[
+                    "px-3 py-1.5 text-sm rounded-full border transition-colors",
+                    repeticion === opt
+                      ? "bg-[#001633] text-white border-[#001633]"
+                      : "border-gray-200 text-gray-600 hover:border-[#001633]",
+                  ].join(" ")}
+                >
+                  {opt === "ninguna" ? "Una vez" : opt === "intervalo" ? "Cada N días" : "Semanal"}
+                </button>
+              ))}
+            </div>
+
+            {repeticion === "intervalo" && (
+              <div className="flex items-center gap-2 text-sm text-gray-700 flex-wrap">
+                <span>Cada</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={90}
+                  value={intervalo}
+                  onChange={(e) => setIntervalo(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-16 border-[#001633] h-8 text-center"
+                />
+                <span>días,</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={52}
+                  value={vecesTotal}
+                  onChange={(e) => setVecesTotal(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-16 border-[#001633] h-8 text-center"
+                />
+                <span>veces en total</span>
+              </div>
+            )}
+
+            {repeticion === "semanal" && (
+              <div className="space-y-2">
+                <div className="flex gap-1.5">
+                  {DIAS_SEMANA.map(({ label, value }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => toggleDia(value)}
+                      className={[
+                        "w-9 h-9 rounded-full text-xs font-semibold border transition-colors",
+                        diasSemana.includes(value)
+                          ? "bg-[#001633] text-white border-[#001633]"
+                          : "border-gray-200 text-gray-600 hover:border-[#001633]",
+                      ].join(" ")}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <span>Por</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={52}
+                    value={numSemanas}
+                    onChange={(e) => setNumSemanas(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 border-[#001633] h-8 text-center"
+                  />
+                  <span>semana{numSemanas !== 1 ? "s" : ""}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Preview */}
+            {repeticion !== "ninguna" && fechasPreview.length > 0 && (
+              <div className="bg-gray-50 rounded-md p-2.5 text-xs text-gray-600 space-y-1">
+                <p className="font-medium text-gray-700">
+                  Se crearán {fechasPreview.length} turno{fechasPreview.length !== 1 ? "s" : ""}:
+                </p>
+                <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                  {fechasPreview.map((f, i) => (
+                    <span key={i} className="bg-white border border-gray-200 rounded px-1.5 py-0.5 capitalize">
+                      {format(f, "EEE d MMM", { locale: es })}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <Button
             onClick={handleSave}
-            disabled={isSaving || !selectedPatient}
+            disabled={isSaving || !canSave}
             className="w-full bg-[#001633] hover:bg-[#002966]"
           >
-            {isSaving ? "Guardando..." : "Guardar turno"}
+            {isSaving
+              ? "Guardando..."
+              : fechasPreview.length > 1
+              ? `Guardar ${fechasPreview.length} turnos`
+              : "Guardar turno"}
           </Button>
         </div>
       </DialogContent>

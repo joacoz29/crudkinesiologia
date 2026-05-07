@@ -19,6 +19,20 @@ import { Patient } from "@/types"
 import { getUserDisplayName } from "@/lib/auth-helper"
 import { toast } from "sonner"
 
+const AVATAR_COLORS = [
+  "bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-orange-500",
+  "bg-rose-500", "bg-indigo-500", "bg-teal-500", "bg-amber-600",
+]
+
+function getAvatarColor(seed: string): string {
+  const hash = [...seed].reduce((acc, c) => acc + c.charCodeAt(0), 0)
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length]
+}
+
+function getInitials(nombre: string, apellido: string): string {
+  return `${nombre.charAt(0)}${apellido.charAt(0)}`.toUpperCase()
+}
+
 export default function Page() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -249,7 +263,7 @@ export default function Page() {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-[#001633] text-white hover:bg-[#001633]">
-                          <TableHead className="font-semibold w-12 text-center hidden sm:table-cell">#</TableHead>
+                          <TableHead className="w-10" />
                           <TableHead className="font-semibold">Nombre</TableHead>
                           <TableHead className="font-semibold">Apellido</TableHead>
                           <TableHead className="font-semibold hidden sm:table-cell">Edad</TableHead>
@@ -271,11 +285,13 @@ export default function Page() {
                           </TableRow>
                         ) : (
                           patients.map((patient, index) => (
-                            <TableRow key={patient.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                              <TableCell className="text-center hidden sm:table-cell">
-                                {(currentPage - 1) * patientsPerPage + index + 1}
+                            <TableRow key={patient.id} className="bg-white hover:bg-slate-50 transition-colors">
+                              <TableCell className="pl-4 pr-0">
+                                <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-semibold ${getAvatarColor(patient.nombre + patient.apellido)}`}>
+                                  {getInitials(patient.nombre, patient.apellido)}
+                                </div>
                               </TableCell>
-                              <TableCell>{patient.nombre}</TableCell>
+                              <TableCell className="font-medium">{patient.nombre}</TableCell>
                               <TableCell>{patient.apellido}</TableCell>
                               <TableCell className="hidden sm:table-cell">{patient.edad}</TableCell>
                               <TableCell className="hidden sm:table-cell">{patient.dni}</TableCell>

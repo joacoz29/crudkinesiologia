@@ -30,9 +30,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Trash2 } from "lucide-react"
-import { ref, update, remove } from "firebase/database"
-import { db } from "@/lib/firebase"
+import { CheckCircle2, Trash2 } from "lucide-react"
+import { ref, update, remove, get } from "firebase/database"
+import { db, auth } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
 
@@ -42,6 +42,12 @@ const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "ausente", label: "Ausente", color: "text-red-700" },
   { value: "cancelado", label: "Cancelado", color: "text-gray-500" },
 ]
+
+function getNextSessionNumber(text: string): number {
+  const matches = [...text.matchAll(/(\d+)-/g)]
+  if (matches.length === 0) return 1
+  return Math.max(...matches.map((m) => parseInt(m[1], 10))) + 1
+}
 
 interface EditarTurnoModalProps {
   open: boolean
@@ -62,6 +68,7 @@ export function EditarTurnoModal({
   const [estado, setEstado] = useState<TurnoEstado>(turno.estado)
   const [notas, setNotas] = useState(turno.notas ?? "")
   const [isSaving, setIsSaving] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
 
   useEffect(() => {
@@ -77,7 +84,6 @@ export function EditarTurnoModal({
     try {
       const data: Record<string, unknown> = { hora, estado }
       if (notas.trim()) data.notas = notas.trim()
-      console.log("[EditarTurnoModal] updating turnos/" + fecha + "/" + turno.id, data)
       await update(ref(db, `turnos/${fecha}/${turno.id}`), data)
       toast.success("Turno actualizado")
       onSaved()
@@ -92,7 +98,6 @@ export function EditarTurnoModal({
 
   const handleDelete = async () => {
     try {
-      console.log("[EditarTurnoModal] deleting turnos/" + fecha + "/" + turno.id)
       await remove(ref(db, `turnos/${fecha}/${turno.id}`))
       toast.success("Turno eliminado")
       onSaved()
@@ -103,7 +108,64 @@ export function EditarTurnoModal({
     }
   }
 
+  const handleConfirmarAsistencia = async () => {
+    if (!turno.patientId) return
+    setIsConfirming(true)
+    try {
+      // 1. Fetch current patient data
+      const snap = await get(ref(db, `pacientes/${turno.patientId}`))
+      if (!snap.exists()) {
+        toast.error("No se encontró el paciente en la base de datos")
+        return
+      }
+
+      const raw = snap.val() as Record<string, unknown>
+      const rawSesiones = raw.sesiones
+      const sesionesActual =
+        Array.isArray(rawSesiones)
+          ? rawSesiones.join(" ")
+          : typeof rawSesiones === "string"
+          ? rawSesiones
+          : ""
+
+      // 2. Build new session entry using turno's date and time
+      const [year, month, day] = fecha.split("-")
+      const nextNum = getNextSessionNumber(sesionesActual)
+      const newEntry = `${nextNum}- ${day}/${month}/${year} ${hora}`
+      const updatedSesiones = sesionesActual.trim()
+        ? `${sesionesActual.trim()}\n${newEntry}`
+        : newEntry
+
+      // 3. Update patient record
+      await update(ref(db, `pacientes/${turno.patientId}`), {
+        sesiones: [updatedSesiones],
+        ultima_actualizacion: {
+          fecha: new Date().toISOString(),
+          usuario:
+            auth.currentUser?.displayName ||
+            auth.currentUser?.email ||
+            "Calendario",
+        },
+      })
+
+      // 4. Mark turno as asistió
+      await update(ref(db, `turnos/${fecha}/${turno.id}`), {
+        estado: "asistio",
+      })
+
+      toast.success(`Sesión ${nextNum} registrada para ${turno.nombre} ${turno.apellido}`)
+      onSaved()
+      onOpenChange(false)
+    } catch (err) {
+      console.error("[EditarTurnoModal] confirm error:", err)
+      toast.error("Error al confirmar asistencia")
+    } finally {
+      setIsConfirming(false)
+    }
+  }
+
   const fechaLabel = format(parseISO(fecha), "EEEE d 'de' MMMM", { locale: es })
+  const yaAsistio = turno.estado === "asistio"
 
   return (
     <>
@@ -114,13 +176,49 @@ export function EditarTurnoModal({
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Paciente (read-only) */}
+            {/* Paciente */}
             <div className="space-y-1">
               <Label className="text-xs text-gray-500 uppercase tracking-wide">Paciente</Label>
               <p className="text-base font-medium text-gray-900">
                 {turno.nombre} {turno.apellido}
               </p>
             </div>
+
+            {/* Confirmar asistencia — only when patientId is linked */}
+            {turno.patientId && (
+              <div className={[
+                "rounded-lg border px-4 py-3 flex items-center justify-between gap-3",
+                yaAsistio
+                  ? "bg-green-50 border-green-200"
+                  : "bg-gray-50 border-gray-200",
+              ].join(" ")}>
+                <div>
+                  <p className={[
+                    "text-sm font-medium",
+                    yaAsistio ? "text-green-800" : "text-gray-700",
+                  ].join(" ")}>
+                    {yaAsistio ? "Asistencia registrada" : "¿El paciente asistió?"}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {yaAsistio
+                      ? "La sesión ya fue agregada al historial del paciente"
+                      : "Registra la sesión automáticamente en el historial"}
+                  </p>
+                </div>
+                {yaAsistio ? (
+                  <CheckCircle2 className="h-6 w-6 text-green-500 shrink-0" />
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={handleConfirmarAsistencia}
+                    disabled={isConfirming}
+                    className="shrink-0 bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    {isConfirming ? "Registrando..." : "Confirmar"}
+                  </Button>
+                )}
+              </div>
+            )}
 
             {/* Hora */}
             <div className="space-y-2">

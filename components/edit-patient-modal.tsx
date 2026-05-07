@@ -186,207 +186,141 @@ export function EditPatientModal({
           <DialogTitle>Editar Paciente</DialogTitle>
         </DialogHeader>
         <form
-          className="space-y-4"
+          className="space-y-6"
           onSubmit={(e) => {
             e.preventDefault()
             handleSave()
           }}
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre</Label>
-              <Input
-                id="nombre"
-                value={editedPatient.nombre}
-                onChange={(e) => setEditedPatient({ ...editedPatient, nombre: e.target.value })}
-                className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-              />
+          {/* Datos personales */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Datos personales</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="nombre">Nombre</Label>
+                <Input id="nombre" value={editedPatient.nombre} onChange={(e) => setEditedPatient({ ...editedPatient, nombre: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="apellido">Apellido</Label>
+                <Input id="apellido" value={editedPatient.apellido} onChange={(e) => setEditedPatient({ ...editedPatient, apellido: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="apellido">Apellido</Label>
-              <Input
-                id="apellido"
-                value={editedPatient.apellido}
-                onChange={(e) => setEditedPatient({ ...editedPatient, apellido: e.target.value })}
-                className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-              />
+              <Label>Sexo</Label>
+              <RadioGroup value={editedPatient.sexo || ""} onValueChange={(value) => setEditedPatient({ ...editedPatient, sexo: value })} className="flex gap-4">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="masculino" id="masculino" />
+                  <Label htmlFor="masculino">Masculino</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="femenino" id="femenino" />
+                  <Label htmlFor="femenino">Femenino</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="dni">DNI</Label>
+                <Input id="dni" value={editedPatient.dni} onChange={(e) => setEditedPatient({ ...editedPatient, dni: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edad">Edad</Label>
+                <Input id="edad" value={editedPatient.edad} onChange={(e) => setEditedPatient({ ...editedPatient, edad: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="domicilio">Domicilio</Label>
+              <Input id="domicilio" value={editedPatient.domicilio || ""} onChange={(e) => setEditedPatient({ ...editedPatient, domicilio: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="telefono">Teléfono</Label>
+              <Input id="telefono" value={editedPatient.telefono} onChange={(e) => setEditedPatient({ ...editedPatient, telefono: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Sexo</Label>
-            <RadioGroup
-              value={editedPatient.sexo || ""}
-              onValueChange={(value) => setEditedPatient({ ...editedPatient, sexo: value })}
-              className="flex gap-4"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="masculino" id="masculino" />
-                <Label htmlFor="masculino">Masculino</Label>
+          {/* Cobertura */}
+          <div className="space-y-4 border-t border-slate-100 pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Cobertura</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="obra-social">Obra Social</Label>
+                <Input id="obra-social" value={editedPatient.obraSocial} onChange={(e) => setEditedPatient({ ...editedPatient, obraSocial: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
               </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="femenino" id="femenino" />
-                <Label htmlFor="femenino">Femenino</Label>
+              <div className="space-y-2">
+                <Label htmlFor="afl">N°AFL</Label>
+                <Input id="afl" value={editedPatient.nroAFL} onChange={(e) => setEditedPatient({ ...editedPatient, nroAFL: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
               </div>
-            </RadioGroup>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="dni">DNI</Label>
-            <Input
-              id="dni"
-              value={editedPatient.dni}
-              onChange={(e) => setEditedPatient({ ...editedPatient, dni: e.target.value })}
-              className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
+          {/* Médico */}
+          <div className="space-y-4 border-t border-slate-100 pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Médico</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="dx">Diagnóstico</Label>
+                <Input id="dx" value={editedPatient.diagnostico} onChange={(e) => setEditedPatient({ ...editedPatient, diagnostico: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="doctor">Doctor</Label>
+                <Input id="doctor" value={editedPatient.doctor} onChange={(e) => setEditedPatient({ ...editedPatient, doctor: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="edad">Edad</Label>
-            <Input
-              id="edad"
-              value={editedPatient.edad}
-              onChange={(e) => setEditedPatient({ ...editedPatient, edad: e.target.value })}
-              className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
+          {/* Notas */}
+          <div className="space-y-4 border-t border-slate-100 pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notas</h3>
+            <div className="space-y-2">
+              <Label htmlFor="anotaciones">Anotaciones</Label>
+              <Textarea id="anotaciones" value={editedPatient.anotaciones || ""} onChange={(e) => setEditedPatient({ ...editedPatient, anotaciones: e.target.value })} className="min-h-[80px] border-slate-200 focus:border-[#001633]" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tratamiento">Tratamiento</Label>
+              <Textarea id="tratamiento" value={editedPatient.tratamiento || ""} onChange={(e) => setEditedPatient({ ...editedPatient, tratamiento: e.target.value })} className="min-h-[80px] border-slate-200 focus:border-[#001633]" />
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="domicilio">Domicilio</Label>
-            <Input
-              id="domicilio"
-              value={editedPatient.domicilio || ""}
-              onChange={(e) => setEditedPatient({ ...editedPatient, domicilio: e.target.value })}
-              className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="obra-social">Obra Social</Label>
-            <Input
-              id="obra-social"
-              value={editedPatient.obraSocial}
-              onChange={(e) => setEditedPatient({ ...editedPatient, obraSocial: e.target.value })}
-              className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="afl">N°AFL</Label>
-            <Input
-              id="afl"
-              value={editedPatient.nroAFL}
-              onChange={(e) => setEditedPatient({ ...editedPatient, nroAFL: e.target.value })}
-              className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="telefono">Teléfono</Label>
-            <Input
-              id="telefono"
-              value={editedPatient.telefono}
-              onChange={(e) => setEditedPatient({ ...editedPatient, telefono: e.target.value })}
-              className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="dx">DX</Label>
-            <Input
-              id="dx"
-              value={editedPatient.diagnostico}
-              onChange={(e) => setEditedPatient({ ...editedPatient, diagnostico: e.target.value })}
-              className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="doctor">Doctor</Label>
-            <Input
-              id="doctor"
-              value={editedPatient.doctor}
-              onChange={(e) => setEditedPatient({ ...editedPatient, doctor: e.target.value })}
-              className="border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="anotaciones">Anotaciones</Label>
-            <Textarea
-              id="anotaciones"
-              value={editedPatient.anotaciones || ""}
-              onChange={(e) => setEditedPatient({ ...editedPatient, anotaciones: e.target.value })}
-              className="min-h-[100px] border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="tratamiento">Tratamiento</Label>
-            <Textarea
-              id="tratamiento"
-              value={editedPatient.tratamiento || ""}
-              onChange={(e) => setEditedPatient({ ...editedPatient, tratamiento: e.target.value })}
-              className="min-h-[100px] border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-            />
-          </div>
-
-          <div className="space-y-2">
+          {/* Sesiones */}
+          <div className="space-y-4 border-t border-slate-100 pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sesiones</h3>
             <div className="flex items-center gap-3">
-              <Label htmlFor="sesiones-auth" className="whitespace-nowrap">Sesiones autorizadas</Label>
+              <Label htmlFor="sesiones-auth" className="whitespace-nowrap">Autorizadas</Label>
               <Input
                 id="sesiones-auth"
                 type="number"
                 min={0}
                 value={editedPatient.sesionesAutorizadas ?? ""}
-                onChange={(e) => setEditedPatient({
-                  ...editedPatient,
-                  sesionesAutorizadas: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                })}
+                onChange={(e) => setEditedPatient({ ...editedPatient, sesionesAutorizadas: e.target.value ? parseInt(e.target.value, 10) : undefined })}
                 placeholder="—"
-                className="w-24 border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
+                className="w-24 border-slate-200 focus:border-[#001633]"
               />
             </div>
             <div className="flex justify-between items-center">
               <Label htmlFor="sesiones">
-                Sesiones{countSessions(sesionesText) > 0 && (
+                Historial{countSessions(sesionesText) > 0 && (
                   <span className={`ml-2 text-xs font-normal ${sessionCountColor(countSessions(sesionesText), editedPatient.sesionesAutorizadas)}`}>
                     {editedPatient.sesionesAutorizadas
                       ? `${countSessions(sesionesText)} / ${editedPatient.sesionesAutorizadas} turnos`
-                      : `${countSessions(sesionesText)} turnos`
-                    }
+                      : `${countSessions(sesionesText)} turnos`}
                   </span>
                 )}
               </Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-1 text-xs border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
-                onClick={addSession}
-              >
+              <Button type="button" variant="outline" size="sm" className="flex items-center gap-1 text-xs border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors" onClick={addSession}>
                 <Plus className="h-3 w-3" />
                 Nueva sesión
               </Button>
             </div>
-            <Textarea
-              id="sesiones"
-              value={sesionesText}
-              onChange={(e) => setSesionesText(e.target.value)}
-              className="min-h-[100px] border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-              placeholder="Ej: Autorizació 1-28/3/23 2-30/3/23 3-3/4/23"
-            />
+            <Textarea id="sesiones" value={sesionesText} onChange={(e) => setSesionesText(e.target.value)} className="min-h-[100px] border-slate-200 focus:border-[#001633]" placeholder="Ej: 1-28/3/23 2-30/3/23 3-3/4/23" />
           </div>
 
           {/* Turnos agendados */}
-          <div className="space-y-2 border-t border-gray-100 pt-4">
+          <div className="space-y-4 border-t border-slate-100 pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Turnos agendados</h3>
             <div className="flex items-center justify-between">
-              <Label>
-                Turnos agendados
-                {turnos.length > 0 && (
-                  <span className="ml-2 text-xs font-normal text-gray-400">{turnos.length}</span>
-                )}
-              </Label>
+              <span className="text-sm text-slate-500">
+                {turnos.length > 0 ? `${turnos.length} turno${turnos.length !== 1 ? "s" : ""}` : ""}
+              </span>
               <div className="flex items-center gap-2">
                 {editedPatient.telefono && (
                   <Button

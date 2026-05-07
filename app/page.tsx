@@ -7,7 +7,7 @@ import { NewPatientModal } from "@/components/new-patient-modal"
 import { EditPatientModal } from "@/components/edit-patient-modal"
 import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
-import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus } from "lucide-react"
+import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users } from "lucide-react"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, remove, update } from "firebase/database"
@@ -164,6 +164,12 @@ export default function Page() {
     fetchPatients(searchTerm, page)
   }
 
+  const clearSearch = () => {
+    setSearchTerm("")
+    setCurrentPage(1)
+    fetchPatients("", 1)
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-[#001633] text-white p-4 shadow-md">
@@ -252,7 +258,56 @@ export default function Page() {
               </Button>
             </div>
 
-            <div className="overflow-x-auto rounded-xl shadow-sm">
+            {/* Mobile cards */}
+            <div className="flex flex-col gap-3 sm:hidden">
+              {isLoading
+                ? Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3 animate-pulse">
+                      <div className="h-10 w-10 rounded-full bg-slate-200 shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 w-32 bg-slate-200 rounded" />
+                        <div className="h-3 w-24 bg-slate-200 rounded" />
+                      </div>
+                    </div>
+                  ))
+                : patients.length === 0
+                ? (
+                    <div className="flex flex-col items-center gap-2 py-16 text-slate-400 bg-white rounded-xl border border-slate-200">
+                      <Users className="h-10 w-10 text-slate-300" />
+                      {searchTerm ? (
+                        <>
+                          <p className="font-medium text-slate-500 text-sm">Sin resultados para &quot;{searchTerm}&quot;</p>
+                          <button onClick={clearSearch} className="text-sm text-[#001633] hover:underline">Limpiar búsqueda</button>
+                        </>
+                      ) : (
+                        <p className="font-medium text-slate-500 text-sm">No hay pacientes registrados</p>
+                      )}
+                    </div>
+                  )
+                : patients.map((patient) => (
+                    <div key={patient.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0 ${getAvatarColor(patient.nombre + patient.apellido)}`}>
+                        {getInitials(patient.nombre, patient.apellido)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-slate-800 truncate">{patient.nombre} {patient.apellido}</p>
+                        <p className="text-xs text-slate-500 truncate">{patient.obraSocial}{patient.telefono ? ` · ${patient.telefono}` : ""}</p>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-[#001633] transition-colors rounded-lg" onClick={() => handleEdit(patient)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 transition-colors rounded-lg" onClick={() => handleDelete(patient)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+              }
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto rounded-xl shadow-sm">
               <div className="border border-slate-200 rounded-xl overflow-hidden min-w-full bg-white">
                 <Table>
                   <TableHeader>
@@ -291,8 +346,23 @@ export default function Page() {
                       ))
                     ) : patients.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center py-8 text-gray-600">
-                          No hay pacientes registrados
+                        <TableCell colSpan={11}>
+                          <div className="flex flex-col items-center gap-2 py-16 text-slate-400">
+                            <Users className="h-10 w-10 text-slate-300" />
+                            {searchTerm ? (
+                              <>
+                                <p className="font-medium text-slate-500">Sin resultados para &quot;{searchTerm}&quot;</p>
+                                <button onClick={clearSearch} className="text-sm text-[#001633] hover:underline mt-1">
+                                  Limpiar búsqueda
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <p className="font-medium text-slate-500">No hay pacientes registrados</p>
+                                <p className="text-sm">Usá &quot;Nuevo Paciente&quot; para agregar uno</p>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ) : (

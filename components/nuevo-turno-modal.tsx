@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ref, get } from "firebase/database"
+import { ref, get, push } from "firebase/database"
 import { db } from "@/lib/firebase"
-import { saveTurno } from "@/lib/helpers"
 import { Patient } from "@/types"
 import { toast } from "sonner"
 
@@ -81,19 +80,24 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:0
     setIsSaving(true)
     try {
       const dateKey = format(fecha, "yyyy-MM-dd")
-      await saveTurno(dateKey, {
+      const turnoData: Record<string, unknown> = {
         patientId: selectedPatient.id,
         nombre: selectedPatient.nombre,
         apellido: selectedPatient.apellido,
         hora,
-        notas: notas.trim() || undefined,
         estado: "pendiente",
-      })
+      }
+      if (notas.trim()) turnoData.notas = notas.trim()
+
+      console.log("[NuevoTurnoModal] saving to turnos/" + dateKey, turnoData)
+      console.log("[NuevoTurnoModal] db instance:", db)
+      await push(ref(db, `turnos/${dateKey}`), turnoData)
       toast.success("Turno guardado")
       onSaved()
       onOpenChange(false)
-    } catch {
-      toast.error("Error al guardar el turno")
+    } catch (err) {
+      console.error("[NuevoTurnoModal] save error:", err)
+      toast.error(err instanceof Error ? err.message : "Error al guardar el turno")
     } finally {
       setIsSaving(false)
     }

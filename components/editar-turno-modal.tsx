@@ -31,7 +31,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Trash2 } from "lucide-react"
-import { updateTurno, deleteTurno } from "@/lib/helpers"
+import { ref, update, remove } from "firebase/database"
+import { db } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
 
@@ -74,16 +75,16 @@ export function EditarTurnoModal({
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      await updateTurno(fecha, turno.id, {
-        hora,
-        estado,
-        notas: notas.trim() || undefined,
-      })
+      const data: Record<string, unknown> = { hora, estado }
+      if (notas.trim()) data.notas = notas.trim()
+      console.log("[EditarTurnoModal] updating turnos/" + fecha + "/" + turno.id, data)
+      await update(ref(db, `turnos/${fecha}/${turno.id}`), data)
       toast.success("Turno actualizado")
       onSaved()
       onOpenChange(false)
-    } catch {
-      toast.error("Error al actualizar el turno")
+    } catch (err) {
+      console.error("[EditarTurnoModal] update error:", err)
+      toast.error(err instanceof Error ? err.message : "Error al actualizar el turno")
     } finally {
       setIsSaving(false)
     }
@@ -91,12 +92,14 @@ export function EditarTurnoModal({
 
   const handleDelete = async () => {
     try {
-      await deleteTurno(fecha, turno.id)
+      console.log("[EditarTurnoModal] deleting turnos/" + fecha + "/" + turno.id)
+      await remove(ref(db, `turnos/${fecha}/${turno.id}`))
       toast.success("Turno eliminado")
       onSaved()
       onOpenChange(false)
-    } catch {
-      toast.error("Error al eliminar el turno")
+    } catch (err) {
+      console.error("[EditarTurnoModal] delete error:", err)
+      toast.error(err instanceof Error ? err.message : "Error al eliminar el turno")
     }
   }
 

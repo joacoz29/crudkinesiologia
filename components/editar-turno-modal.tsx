@@ -161,7 +161,7 @@ export function EditarTurnoModal({
       // 5. Add to libro diario for that day
       await addToLibroDiario({
         nombreApellido: `${turno.nombre} ${turno.apellido}`,
-        obraSocial: (raw.obra_social as string) || "-",
+        obraSocial: (raw.obraSocial as string) || "-",
         fecha,
       })
 

@@ -11,7 +11,7 @@ import { useState, useEffect } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
-import { ref, remove } from "firebase/database"
+import { ref, remove, get } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
 import { addToLibroDiario, fetchTurnosPorPaciente } from "@/lib/helpers"
 import { Patient, TurnoConFecha, TurnoEstado } from "@/types"
@@ -86,17 +86,27 @@ export function EditPatientModal({
   const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false)
 
   useEffect(() => {
-    if (patient) {
-      setEditedPatient(patient)
-      setSesionesText(
-        Array.isArray(patient.sesiones) ? formatSesiones(patient.sesiones.join(" ")) : ""
-      )
-      setIsLoadingTurnos(true)
-      fetchTurnosPorPaciente(patient.id)
-        .then(setTurnos)
-        .catch(() => setTurnos([]))
-        .finally(() => setIsLoadingTurnos(false))
-    }
+    if (!patient) return
+    setEditedPatient(patient)
+    setSesionesText(
+      Array.isArray(patient.sesiones) ? formatSesiones(patient.sesiones.join(" ")) : ""
+    )
+    setIsLoadingTurnos(true)
+    Promise.all([
+      get(ref(db, `pacientes/${patient.id}/sesiones`)),
+      fetchTurnosPorPaciente(patient.id),
+    ])
+      .then(([sesionesSnap, fetchedTurnos]) => {
+        if (sesionesSnap.exists()) {
+          const fresh = sesionesSnap.val()
+          const arr = Array.isArray(fresh) ? fresh : typeof fresh === "string" ? [fresh] : []
+          setSesionesText(formatSesiones(arr.join(" ")))
+          setEditedPatient(prev => prev ? { ...prev, sesiones: arr } : null)
+        }
+        setTurnos(fetchedTurnos)
+      })
+      .catch(() => setTurnos([]))
+      .finally(() => setIsLoadingTurnos(false))
   }, [patient])
 
   const handleDeleteTurno = async (turno: TurnoConFecha) => {

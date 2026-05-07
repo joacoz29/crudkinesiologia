@@ -456,6 +456,21 @@ export function EditPatientModal({
                         {/* Contenido expandido */}
                         {isExpanded && (
                           <div className="px-4 py-3 space-y-2 border-t border-gray-100">
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs text-gray-500 whitespace-nowrap">N° autorización</Label>
+                              <Input
+                                value={trat.nroAutorizacion}
+                                onChange={(e) =>
+                                  setTratamientos((prev) =>
+                                    prev.map((t) =>
+                                      t.id === trat.id ? { ...t, nroAutorizacion: e.target.value } : t
+                                    )
+                                  )
+                                }
+                                placeholder="—"
+                                className="h-7 text-sm w-44 border-slate-200 focus:border-[#001633]"
+                              />
+                            </div>
                             <p className="text-xs text-gray-400">
                               {trat.sesionesAutorizadas} sesiones autorizadas
                             </p>

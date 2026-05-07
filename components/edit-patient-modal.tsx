@@ -32,7 +32,6 @@ interface EditPatientModalProps {
   onOpenChange: (open: boolean) => void
   patient: Patient | null
   onSave: (updatedPatient: Patient) => void
-  onAddToDiario: (nombreApellido: string) => void
   setLibroDiarioUpdateTrigger: (value: (prev: number) => number) => void
 }
 
@@ -76,7 +75,6 @@ export function EditPatientModal({
   onOpenChange,
   patient,
   onSave,
-  onAddToDiario,
   setLibroDiarioUpdateTrigger,
 }: EditPatientModalProps) {
   const [editedPatient, setEditedPatient] = useState<Patient | null>(null)

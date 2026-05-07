@@ -31,7 +31,6 @@ export default function Page() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
   const [activeTab, setActiveTab] = useState("pacientes")
-  const [newDiarioEntry, setNewDiarioEntry] = useState<{ nombreApellido: string; id: string } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -145,10 +144,6 @@ export default function Page() {
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
     fetchPatients(searchTerm, page)
-  }
-
-  const handleAddToDiario = (nombreApellido: string) => {
-    setNewDiarioEntry({ nombreApellido, id: Date.now().toString() })
   }
 
   return (
@@ -351,7 +346,6 @@ export default function Page() {
               onOpenChange={setEditModalOpen}
               patient={selectedPatient}
               onSave={handleSaveEdit}
-              onAddToDiario={handleAddToDiario}
               setLibroDiarioUpdateTrigger={setLibroDiarioUpdateTrigger}
             />
             <DeletePatientDialog
@@ -363,8 +357,6 @@ export default function Page() {
           </>
         ) : activeTab === "libroDiario" ? (
           <LibroDiario
-            newEntry={newDiarioEntry}
-            key={newDiarioEntry?.id || "default"}
             updateTrigger={libroDiarioUpdateTrigger}
           />
         ) : (

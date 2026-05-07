@@ -38,7 +38,6 @@ interface EntradaLibroDiario {
 }
 
 interface LibroDiarioProps {
-  newEntry?: { nombreApellido: string } | null
   updateTrigger: number
 }
 
@@ -66,17 +65,17 @@ const TIPO_PLACEHOLDER: Record<TipoEntrada, string> = {
   Ingreso: "Motivo del ingreso",
 }
 
-export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
+export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const [fecha, setFecha] = useState<Date>(new Date())
   const [totalDebe, setTotalDebe] = useState(0)
   const [totalHaber, setTotalHaber] = useState(0)
-  const [entryAdded, setEntryAdded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isCopying, setIsCopying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastSavedData, setLastSavedData] = useState("")
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
+  const [confirmCopyOpen, setConfirmCopyOpen] = useState(false)
   const skipNextSave = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -154,29 +153,6 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     }
   }, [watchEntradas, lastSavedData, saveEntries])
 
-  // Agregar entrada desde modal de paciente
-  useEffect(() => {
-    if (newEntry?.nombreApellido && !entryAdded) {
-      const exists = fields.some(f => f.nombreApellido === newEntry.nombreApellido)
-      if (!exists) {
-        append({
-          id: (fields.length + 1).toString(),
-          tipo: "Paciente",
-          nombreApellido: newEntry.nombreApellido,
-          cobertura: "Particular",
-          obraSocial: "-",
-          debe: 0,
-          haber: 0,
-        })
-        setEntryAdded(true)
-      }
-    }
-  }, [newEntry, append, fields, entryAdded])
-
-  useEffect(() => {
-    return () => { setEntryAdded(false) }
-  }, [])
-
   const fetchEntriesForDate = useCallback(
     async (date: Date) => {
       setIsLoading(true)
@@ -224,7 +200,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
 
   const agregarFila = (tipo: TipoEntrada = "Paciente") => {
     append({
-      id: (fields.length + 1).toString(),
+      id: crypto.randomUUID(),
       tipo,
       nombreApellido: "",
       cobertura: "Particular",
@@ -242,7 +218,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
     }
   }
 
-  const copyPrevDay = async () => {
+  const doCopyPrevDay = async () => {
     setIsCopying(true)
     try {
       const prevDate = addDays(fecha, -1)
@@ -256,6 +232,7 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
       const prevEntradas: EntradaLibroDiario[] = (snapshot.val().entradas || []).map(
         (e: EntradaLibroDiario) => ({
           ...e,
+          id: crypto.randomUUID(),
           tipo: e.tipo ?? "Paciente",
           debe: 0,
           haber: 0,
@@ -264,10 +241,18 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
 
       prevEntradas.forEach(e => append(e))
       toast.success(`${prevEntradas.length} entrada${prevEntradas.length !== 1 ? 's' : ''} copiada${prevEntradas.length !== 1 ? 's' : ''} del día anterior`)
-    } catch (error) {
+    } catch {
       toast.error('Error al copiar el día anterior')
     } finally {
       setIsCopying(false)
+    }
+  }
+
+  const copyPrevDay = () => {
+    if (fields.length > 0) {
+      setConfirmCopyOpen(true)
+    } else {
+      doCopyPrevDay()
     }
   }
 
@@ -575,6 +560,24 @@ export function LibroDiario({ newEntry, updateTrigger }: LibroDiarioProps) {
           Exportar PDF
         </Button>
       </div>
+
+      {/* Confirmación copiar día anterior con entradas existentes */}
+      <AlertDialog open={confirmCopyOpen} onOpenChange={setConfirmCopyOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Agregar entradas del día anterior?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Este día ya tiene {fields.length} entrada{fields.length !== 1 ? "s" : ""}. Las entradas del día anterior se van a agregar al final de la lista actual.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setConfirmCopyOpen(false); doCopyPrevDay() }}>
+              Agregar igual
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Confirmación de eliminación */}
       <AlertDialog open={deleteIndex !== null} onOpenChange={(open) => !open && setDeleteIndex(null)}>

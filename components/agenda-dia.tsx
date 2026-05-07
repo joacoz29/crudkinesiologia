@@ -14,6 +14,12 @@ const ESTADO_STYLES: Record<TurnoEstado, string> = {
   cancelado: "bg-gray-100 text-gray-500 border-gray-200 line-through",
 }
 
+function chipStyle(turno: Turno): string {
+  if (turno.estado === "ausente" && turno.justificado === true)
+    return "bg-orange-100 text-orange-800 border-orange-200"
+  return ESTADO_STYLES[turno.estado]
+}
+
 const ESTADO_LABELS: Record<TurnoEstado, string> = {
   pendiente: "Pendiente",
   asistio: "Asistió",
@@ -99,7 +105,7 @@ export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno }: Agenda
                       className={[
                         "text-left text-sm px-3 py-1.5 rounded border w-full max-w-sm",
                         "hover:opacity-75 transition-opacity",
-                        ESTADO_STYLES[turno.estado],
+                        chipStyle(turno),
                       ].join(" ")}
                     >
                       <div className="flex items-center justify-between gap-4">

@@ -6,13 +6,26 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus } from "lucide-react"
+import { Plus, Trash2 } from "lucide-react"
 import { useState, useEffect } from "react"
-import { format } from "date-fns-tz"
-import { auth } from "@/lib/firebase"
-import { addToLibroDiario } from "@/lib/helpers"
-import { Patient } from "@/types"
+import { format as formatTZ } from "date-fns-tz"
+import { format, parseISO } from "date-fns"
+import { es } from "date-fns/locale"
+import { ref, remove } from "firebase/database"
+import { auth, db } from "@/lib/firebase"
+import { addToLibroDiario, fetchTurnosPorPaciente } from "@/lib/helpers"
+import { Patient, TurnoConFecha, TurnoEstado } from "@/types"
 import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface EditPatientModalProps {
   open: boolean
@@ -30,8 +43,15 @@ function getNextSessionNumber(text: string): number {
   return Math.max(...numbers) + 1
 }
 
+const ESTADO_CHIP: Record<TurnoEstado, string> = {
+  pendiente: "bg-blue-50 text-blue-700 border-blue-200",
+  asistio: "bg-green-50 text-green-700 border-green-200",
+  ausente: "bg-red-50 text-red-700 border-red-200",
+  cancelado: "bg-gray-50 text-gray-500 border-gray-200",
+}
+
 function getCurrentArgentinaDateTime() {
-  return format(new Date(), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
+  return formatTZ(new Date(), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
 }
 
 // Inserta salto de línea antes de cada entrada de sesión (N-)
@@ -63,6 +83,9 @@ export function EditPatientModal({
   const [sesionesText, setSesionesText] = useState("")
   const [newSessionAdded, setNewSessionAdded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [turnos, setTurnos] = useState<TurnoConFecha[]>([])
+  const [isLoadingTurnos, setIsLoadingTurnos] = useState(false)
+  const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false)
 
   useEffect(() => {
     if (patient) {
@@ -70,8 +93,33 @@ export function EditPatientModal({
       setSesionesText(
         Array.isArray(patient.sesiones) ? formatSesiones(patient.sesiones.join(" ")) : ""
       )
+      setIsLoadingTurnos(true)
+      fetchTurnosPorPaciente(patient.id)
+        .then(setTurnos)
+        .catch(() => setTurnos([]))
+        .finally(() => setIsLoadingTurnos(false))
     }
   }, [patient])
+
+  const handleDeleteTurno = async (turno: TurnoConFecha) => {
+    try {
+      await remove(ref(db, `turnos/${turno.fecha}/${turno.id}`))
+      setTurnos((prev) => prev.filter((t) => t.id !== turno.id))
+      toast.success("Turno eliminado")
+    } catch {
+      toast.error("Error al eliminar el turno")
+    }
+  }
+
+  const handleDeleteAllTurnos = async () => {
+    try {
+      await Promise.all(turnos.map((t) => remove(ref(db, `turnos/${t.fecha}/${t.id}`))))
+      setTurnos([])
+      toast.success(`${turnos.length} turno${turnos.length !== 1 ? "s" : ""} eliminados`)
+    } catch {
+      toast.error("Error al eliminar los turnos")
+    }
+  }
 
   const addSession = () => {
     const newEntry = `${getNextSessionNumber(sesionesText)}- ${getCurrentArgentinaDateTime()}`
@@ -114,6 +162,7 @@ export function EditPatientModal({
   if (!editedPatient) return null
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -312,6 +361,68 @@ export function EditPatientModal({
             />
           </div>
 
+          {/* Turnos agendados */}
+          <div className="space-y-2 border-t border-gray-100 pt-4">
+            <div className="flex items-center justify-between">
+              <Label>
+                Turnos agendados
+                {turnos.length > 0 && (
+                  <span className="ml-2 text-xs font-normal text-gray-400">{turnos.length}</span>
+                )}
+              </Label>
+              {turnos.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-red-500 hover:text-red-700 h-7"
+                  onClick={() => setConfirmDeleteAllOpen(true)}
+                >
+                  Eliminar todos
+                </Button>
+              )}
+            </div>
+
+            {isLoadingTurnos ? (
+              <p className="text-sm text-gray-400">Cargando...</p>
+            ) : turnos.length === 0 ? (
+              <p className="text-sm text-gray-400">Sin turnos agendados</p>
+            ) : (
+              <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                {turnos.map((t) => (
+                  <div
+                    key={`${t.fecha}-${t.id}`}
+                    className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-md border border-gray-100 text-sm"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-gray-500 text-xs capitalize shrink-0">
+                        {format(parseISO(t.fecha), "EEE d 'de' MMM", { locale: es })}
+                      </span>
+                      <span className="font-medium shrink-0">{t.hora}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded border shrink-0 ${ESTADO_CHIP[t.estado]}`}>
+                        {t.estado === "asistio" ? "asistió" : t.estado}
+                        {t.estado === "ausente" && t.justificado != null && (
+                          <span className="ml-1 opacity-70">
+                            {t.justificado ? "· just." : "· no just."}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                      onClick={() => handleDeleteTurno(t)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <Button
             type="submit"
             className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors"
@@ -329,5 +440,28 @@ export function EditPatientModal({
         </form>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={confirmDeleteAllOpen} onOpenChange={setConfirmDeleteAllOpen}>
+
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>¿Eliminar todos los turnos?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Se eliminarán los {turnos.length} turno{turnos.length !== 1 ? "s" : ""} agendados
+            para {editedPatient?.nombre} {editedPatient?.apellido}. Esta acción no se puede deshacer.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDeleteAllTurnos}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            Eliminar todos
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }

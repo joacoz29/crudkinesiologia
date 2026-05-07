@@ -1,6 +1,6 @@
 import { ref, set, get, push, remove, update, query, orderByKey, startAt, endAt } from "firebase/database"
 import { db } from "@/lib/firebase"
-import { Turno } from "@/types"
+import { Turno, TurnoConFecha } from "@/types"
 
 interface LibroDiarioEntry {
   nombreApellido: string
@@ -105,6 +105,28 @@ export async function updateTurno(
     console.error("[helpers.updateTurno] Firebase error:", err)
     throw err
   }
+}
+
+export async function fetchTurnosPorPaciente(patientId: string): Promise<TurnoConFecha[]> {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const from = new Date(); from.setDate(from.getDate() - 30)
+  const to = new Date(); to.setDate(to.getDate() + 180)
+  const start = `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`
+  const end = `${to.getFullYear()}-${pad(to.getMonth() + 1)}-${pad(to.getDate())}`
+
+  const turnosQuery = query(ref(db, "turnos"), orderByKey(), startAt(start), endAt(end))
+  const snapshot = await get(turnosQuery)
+  if (!snapshot.exists()) return []
+
+  const result: TurnoConFecha[] = []
+  snapshot.forEach((dateSnap) => {
+    const fecha = dateSnap.key!
+    dateSnap.forEach((turnoSnap) => {
+      const t = { id: turnoSnap.key!, ...turnoSnap.val() } as Turno
+      if (t.patientId === patientId) result.push({ ...t, fecha })
+    })
+  })
+  return result.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora))
 }
 
 export async function deleteTurno(fecha: string, id: string): Promise<void> {

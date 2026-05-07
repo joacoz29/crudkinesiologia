@@ -31,6 +31,12 @@ const ESTADO_STYLES: Record<TurnoEstado, string> = {
   cancelado: "bg-gray-100 text-gray-500 border-gray-200 line-through",
 }
 
+function chipStyle(turno: Turno): string {
+  if (turno.estado === "ausente" && turno.justificado === true)
+    return "bg-orange-100 text-orange-800 border-orange-200"
+  return ESTADO_STYLES[turno.estado]
+}
+
 function getCalendarDays(month: Date): Date[] {
   const start = startOfMonth(month)
   const end = endOfMonth(month)
@@ -231,7 +237,7 @@ export function Calendario() {
                       onClick={(e) => handleChipClick(e, turno, dateKey)}
                       className={[
                         "text-xs px-1.5 py-0.5 rounded border truncate cursor-pointer hover:opacity-75 transition-opacity",
-                        ESTADO_STYLES[turno.estado],
+                        chipStyle(turno),
                       ].join(" ")}
                       title={`${turno.hora} — ${turno.nombre} ${turno.apellido}${turno.notas ? `\n${turno.notas}` : ""}`}
                     >
@@ -250,13 +256,13 @@ export function Calendario() {
       <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
         <span className="font-medium">Estados:</span>
         {(Object.entries(ESTADO_STYLES) as [TurnoEstado, string][]).map(([estado, cls]) => (
-          <span
-            key={estado}
-            className={`px-2 py-0.5 rounded border ${cls.replace("line-through", "")}`}
-          >
+          <span key={estado} className={`px-2 py-0.5 rounded border ${cls.replace("line-through", "")}`}>
             {estado === "asistio" ? "asistió" : estado}
           </span>
         ))}
+        <span className="px-2 py-0.5 rounded border bg-orange-100 text-orange-800 border-orange-200">
+          ausente justificado
+        </span>
         <span className="text-gray-400 ml-auto">Click en un día para agregar turno</span>
       </div>
 

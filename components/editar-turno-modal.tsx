@@ -67,6 +67,7 @@ export function EditarTurnoModal({
   const [hora, setHora] = useState(turno.hora)
   const [estado, setEstado] = useState<TurnoEstado>(turno.estado)
   const [notas, setNotas] = useState(turno.notas ?? "")
+  const [justificado, setJustificado] = useState<boolean | undefined>(turno.justificado)
   const [isSaving, setIsSaving] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
@@ -76,6 +77,7 @@ export function EditarTurnoModal({
       setHora(turno.hora)
       setEstado(turno.estado)
       setNotas(turno.notas ?? "")
+      setJustificado(turno.justificado)
     }
   }, [open, turno])
 
@@ -84,6 +86,8 @@ export function EditarTurnoModal({
     try {
       const data: Record<string, unknown> = { hora, estado }
       if (notas.trim()) data.notas = notas.trim()
+      if (estado === "ausente") data.justificado = justificado ?? false
+      else data.justificado = null  // clear when not ausente
       await update(ref(db, `turnos/${fecha}/${turno.id}`), data)
       toast.success("Turno actualizado")
       onSaved()
@@ -248,6 +252,32 @@ export function EditarTurnoModal({
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Justificado — only when ausente */}
+            {estado === "ausente" && (
+              <div className="space-y-2">
+                <Label>¿Justificó la falta?</Label>
+                <div className="flex gap-2">
+                  {[{ label: "Sí, justificó", value: true }, { label: "No justificó", value: false }].map((opt) => (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      onClick={() => setJustificado(opt.value)}
+                      className={[
+                        "px-3 py-1.5 text-sm rounded-full border transition-colors",
+                        justificado === opt.value
+                          ? opt.value
+                            ? "bg-orange-500 text-white border-orange-500"
+                            : "bg-red-600 text-white border-red-600"
+                          : "border-gray-200 text-gray-600 hover:border-gray-400",
+                      ].join(" ")}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Notas */}
             <div className="space-y-2">

@@ -8,7 +8,10 @@ export interface Turno {
   hora: string
   notas?: string
   estado: TurnoEstado
+  justificado?: boolean
 }
+
+export type TurnoConFecha = Turno & { fecha: string }
 
 export interface Patient {
   id: string

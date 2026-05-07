@@ -252,39 +252,51 @@ export default function Page() {
               </Button>
             </div>
 
-            {isLoading && (
-              <div className="text-center py-8 text-gray-600">Cargando pacientes...</div>
-            )}
-
-            {!isLoading && (
-              <>
-                <div className="overflow-x-auto rounded-xl shadow-sm">
-                  <div className="border border-slate-200 rounded-xl overflow-hidden min-w-full bg-white">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-[#001633] text-white hover:bg-[#001633]">
-                          <TableHead className="w-10" />
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80">Nombre</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80">Apellido</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Edad</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">DNI</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Obra Social</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">N°AFL</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Teléfono</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Diagnóstico</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Doctor</TableHead>
-                          <TableHead className="w-20" />
+            <div className="overflow-x-auto rounded-xl shadow-sm">
+              <div className="border border-slate-200 rounded-xl overflow-hidden min-w-full bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-[#001633] text-white hover:bg-[#001633]">
+                      <TableHead className="w-10" />
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80">Nombre</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80">Apellido</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Edad</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">DNI</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Obra Social</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">N°AFL</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Teléfono</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Diagnóstico</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Doctor</TableHead>
+                      <TableHead className="w-20" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      Array.from({ length: 7 }).map((_, i) => (
+                        <TableRow key={i} className="border-b border-slate-100 last:border-0">
+                          <TableCell className="pl-4 pr-0 py-3">
+                            <div className="h-8 w-8 rounded-full bg-slate-200 animate-pulse" />
+                          </TableCell>
+                          <TableCell className="py-3"><div className="h-4 w-28 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3"><div className="h-4 w-28 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-8 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-24 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-16 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-24 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3"><div className="h-8 w-16 bg-slate-200 rounded animate-pulse" /></TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {patients.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={11} className="text-center py-8 text-gray-600">
-                              No hay pacientes registrados
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          patients.map((patient, index) => (
+                      ))
+                    ) : patients.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={11} className="text-center py-8 text-gray-600">
+                          No hay pacientes registrados
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      patients.map((patient) => (
                             <TableRow key={patient.id} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
                               <TableCell className="pl-4 pr-0 py-3">
                                 <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0 ${getAvatarColor(patient.nombre + patient.apellido)}`}>
@@ -321,37 +333,35 @@ export default function Page() {
                                 </div>
                               </TableCell>
                             </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
 
-                {totalPages > 1 && (
-                  <div className="flex justify-center items-center mt-4 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm">
-                      Página {currentPage} de {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </>
+            {!isLoading && totalPages > 1 && (
+              <div className="flex justify-center items-center mt-4 gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm">
+                  Página {currentPage} de {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             )}
 
             <NewPatientModal

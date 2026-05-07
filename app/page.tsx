@@ -11,6 +11,7 @@ import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, Alert
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, remove, update } from "firebase/database"
+import { fetchTurnosPorPaciente } from "@/lib/helpers"
 import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
@@ -137,6 +138,8 @@ export default function Page() {
   const confirmDelete = async () => {
     if (patientToDelete) {
       try {
+        const turnos = await fetchTurnosPorPaciente(patientToDelete.id)
+        await Promise.all(turnos.map(t => remove(ref(db, `turnos/${t.fecha}/${t.id}`))))
         const patientRef = ref(db, `pacientes/${patientToDelete.id}`)
         await remove(patientRef)
         toast.success('Paciente eliminado correctamente')

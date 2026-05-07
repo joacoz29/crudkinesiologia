@@ -10,9 +10,8 @@ import { Plus } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { format } from "date-fns-tz"
-import { db } from "@/lib/firebase"
+import { db, auth } from "@/lib/firebase"
 import { ref, push } from "firebase/database"
-import { auth } from "@/lib/firebase"
 import { addToLibroDiario } from "@/lib/helpers"
 
 interface NewPatientModalProps {

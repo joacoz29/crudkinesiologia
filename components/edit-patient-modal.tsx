@@ -183,7 +183,7 @@ export function EditPatientModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar Paciente</DialogTitle>
+          <DialogTitle>Editar — {editedPatient.nombre} {editedPatient.apellido}</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-6"
@@ -322,7 +322,7 @@ export function EditPatientModal({
                 {turnos.length > 0 ? `${turnos.length} turno${turnos.length !== 1 ? "s" : ""}` : ""}
               </span>
               <div className="flex items-center gap-2">
-                {editedPatient.telefono && (
+                {editedPatient.telefono && !isLoadingTurnos && (
                   <Button
                     type="button"
                     variant="outline"

@@ -31,6 +31,12 @@ export async function addToLibroDiario(entry: {
     haber: 0,
   }
   
+  // Skip if this patient already has an entry for this date
+  const alreadyExists = (existingData.entradas || []).some(
+    (e: LibroDiarioEntry) => e.nombreApellido === entry.nombreApellido
+  )
+  if (alreadyExists) return
+
   // Agregar nueva entrada al array existente
   const updatedEntradas = [...(existingData.entradas || []), newEntry]
   

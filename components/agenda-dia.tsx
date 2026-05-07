@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { format, isToday } from "date-fns"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Plus, Search, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Search, X, Flag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
 
@@ -50,13 +50,14 @@ function filterChipStyle(value: TurnoEstado | null, active: boolean): string {
 interface AgendaDiaProps {
   fecha: Date
   turnos: Turno[]
+  feriado?: string
   onNuevoTurno: (hora: string) => void
   onEditarTurno: (turno: Turno) => void
   onPrevDay: () => void
   onNextDay: () => void
 }
 
-export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno, onPrevDay, onNextDay }: AgendaDiaProps) {
+export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno, onPrevDay, onNextDay }: AgendaDiaProps) {
   const [filterEstado, setFilterEstado] = useState<TurnoEstado | null>(null)
   const [searchName, setSearchName] = useState("")
 
@@ -148,6 +149,14 @@ export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno, onPrevDa
           </div>
         </div>
       </div>
+
+      {/* Holiday banner */}
+      {feriado && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <Flag className="h-4 w-4 shrink-0 text-amber-500" />
+          <span>Feriado nacional — <strong>{feriado}</strong></span>
+        </div>
+      )}
 
       {/* Filters */}
       {turnos.length > 0 && (

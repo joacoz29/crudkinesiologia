@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import {
   format,
   startOfMonth,
@@ -71,6 +71,8 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()))
   const [turnosPorFecha, setTurnosPorFecha] = useState<Record<string, Turno[]>>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [feriados, setFeriados] = useState<Record<string, string>>({}) // { "2026-01-01": "Año Nuevo" }
+  const feriadosCacheRef = useRef<Record<number, boolean>>({})
 
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
   const [nuevoTurnoHora, setNuevoTurnoHora] = useState("09:00")
@@ -84,6 +86,21 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
   const isCurrentMonth =
     currentMonth.getFullYear() === today.getFullYear() &&
     currentMonth.getMonth() === today.getMonth()
+
+  const loadFeriados = useCallback(async (year: number) => {
+    if (feriadosCacheRef.current[year]) return
+    feriadosCacheRef.current[year] = true
+    try {
+      const res = await fetch(`/api/feriados?year=${year}`)
+      if (!res.ok) return
+      const data: { fecha: string; nombre: string }[] = await res.json()
+      const map: Record<string, string> = {}
+      for (const f of data) map[f.fecha] = f.nombre
+      setFeriados((prev) => ({ ...prev, ...map }))
+    } catch {
+      // non-critical, fail silently
+    }
+  }, [])
 
   const loadTurnos = useCallback(async (month: Date) => {
     setIsLoading(true)
@@ -100,6 +117,12 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
   useEffect(() => {
     loadTurnos(currentMonth)
   }, [currentMonth, loadTurnos, refreshTrigger])
+
+  useEffect(() => {
+    const year = currentMonth.getFullYear()
+    loadFeriados(year)
+    loadFeriados(year + 1) // preload siguiente año (visible en diciembre)
+  }, [currentMonth, loadFeriados])
 
   const openNuevoTurno = (day: Date, hora = "09:00") => {
     setSelectedDate(day)
@@ -253,13 +276,14 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
                 const dateKey = format(day, "yyyy-MM-dd")
                 const turnos = turnosPorFecha[dateKey] ?? []
                 const turnosActivos = turnos.filter((t) => t.estado !== "cancelado")
+                const esFeriado = feriados[dateKey]
 
                 return (
                   <div
                     key={di}
                     onClick={() => handleDayClick(day)}
                     className={[
-                      "h-12 flex flex-col items-center justify-center gap-0.5 border-b border-gray-100",
+                      "relative h-12 flex flex-col items-center justify-center gap-0.5 border-b border-gray-100",
                       "cursor-pointer transition-colors",
                       !inMonth
                         ? isWeekend ? "bg-gray-100 hover:bg-gray-200" : "bg-gray-50 hover:bg-gray-100"
@@ -295,6 +319,12 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
                         {turnosActivos.length}
                       </span>
                     )}
+                    {esFeriado && (
+                      <span
+                        className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-amber-400"
+                        title={esFeriado}
+                      />
+                    )}
                   </div>
                 )
               })}
@@ -325,6 +355,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
         <AgendaDia
           fecha={selectedDate}
           turnos={selectedDateTurnos}
+          feriado={feriados[selectedDateKey]}
           onNuevoTurno={(hora) => openNuevoTurno(selectedDate, hora)}
           onEditarTurno={(turno) => {
             setSelectedTurno(turno)

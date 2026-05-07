@@ -152,7 +152,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
     <div className="flex flex-col lg:flex-row lg:items-start">
 
       {/* LEFT: compact month navigator */}
-      <div className="lg:w-72 xl:w-80 lg:shrink-0 space-y-3 lg:pr-6">
+      <div className="lg:w-72 xl:w-80 lg:shrink-0 space-y-3 lg:pr-6 lg:sticky lg:top-4 lg:self-start">
 
         {/* Month header */}
         <div className="flex items-center justify-between">
@@ -189,7 +189,10 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
                 variant="outline"
                 size="sm"
                 className="h-7 px-2 text-xs border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white"
-                onClick={() => setCurrentMonth(startOfMonth(new Date()))}
+                onClick={() => {
+                  setCurrentMonth(startOfMonth(new Date()))
+                  setSelectedDate(new Date())
+                }}
               >
                 Hoy
               </Button>
@@ -198,7 +201,10 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
               variant="outline"
               size="icon"
               className="h-7 w-7 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white"
-              onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
+              onClick={() => {
+                setCurrentMonth((m) => subMonths(m, 1))
+                setSelectedDate((d) => subMonths(d, 1))
+              }}
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </Button>
@@ -206,7 +212,10 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
               variant="outline"
               size="icon"
               className="h-7 w-7 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white"
-              onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
+              onClick={() => {
+                setCurrentMonth((m) => addMonths(m, 1))
+                setSelectedDate((d) => addMonths(d, 1))
+              }}
             >
               <ChevronRight className="h-3.5 w-3.5" />
             </Button>
@@ -235,6 +244,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
                 const isWeekend = getDay(day) === 0 || getDay(day) === 6
                 const dateKey = format(day, "yyyy-MM-dd")
                 const turnos = turnosPorFecha[dateKey] ?? []
+                const turnosActivos = turnos.filter((t) => t.estado !== "cancelado")
 
                 return (
                   <div
@@ -266,11 +276,11 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
                     >
                       {format(day, "d")}
                     </span>
-                    {turnos.length > 0 && (
+                    {turnosActivos.length > 0 && (
                       <span
-                        className={`text-[9px] leading-none font-semibold px-1 py-0.5 rounded-full ${countBadgeStyle(turnos.length)}`}
+                        className={`text-[9px] leading-none font-semibold px-1 py-0.5 rounded-full ${countBadgeStyle(turnosActivos.length)}`}
                       >
-                        {turnos.length}
+                        {turnosActivos.length}
                       </span>
                     )}
                   </div>

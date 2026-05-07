@@ -47,7 +47,6 @@ export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno, onPrevDa
   }, {})
 
   const totalAgendados = turnos.length
-  const horasLibres = HOURS.filter((h) => turnosPorHora[h].length === 0).length
 
   return (
     <div className="space-y-3">
@@ -63,7 +62,9 @@ export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno, onPrevDa
             )}
           </h3>
           <p className="text-xs text-gray-400 mt-0.5">
-            {totalAgendados} turno{totalAgendados !== 1 ? "s" : ""} agendado{totalAgendados !== 1 ? "s" : ""} · {horasLibres} hora{horasLibres !== 1 ? "s" : ""} libre{horasLibres !== 1 ? "s" : ""}
+            {totalAgendados > 0
+              ? `${totalAgendados} turno${totalAgendados !== 1 ? "s" : ""} agendado${totalAgendados !== 1 ? "s" : ""}`
+              : "Sin turnos agendados"}
           </p>
         </div>
         <div className="flex items-center gap-1">

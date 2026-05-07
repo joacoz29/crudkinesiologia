@@ -67,6 +67,7 @@ export default function Page() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
   const [activeTab, setActiveTab] = useState("pacientes")
+  const [calendarioRefreshTrigger, setCalendarioRefreshTrigger] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [totalItems, setTotalItems] = useState(0)
@@ -230,7 +231,12 @@ export default function Page() {
               return (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => {
+                    if (tab === "calendario" && activeTab !== "calendario") {
+                      setCalendarioRefreshTrigger((t) => t + 1)
+                    }
+                    setActiveTab(tab)
+                  }}
                   className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                     activeTab === tab
                       ? "text-white border-white"
@@ -515,7 +521,7 @@ export default function Page() {
             updateTrigger={libroDiarioUpdateTrigger}
           />
         ) : (
-          <Calendario />
+          <Calendario refreshTrigger={calendarioRefreshTrigger} />
         )}
       </main>
     </div>

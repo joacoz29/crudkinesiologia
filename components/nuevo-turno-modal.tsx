@@ -4,13 +4,23 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ref, push } from "firebase/database"
+import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
-import { Patient } from "@/types"
+import { Patient, Turno } from "@/types"
 import { toast } from "sonner"
 
 type Repeticion = "ninguna" | "intervalo" | "semanal"
@@ -109,6 +119,8 @@ export function NuevoTurnoModal({
   const [isSaving, setIsSaving] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const searchAbortRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [conflictDates, setConflictDates] = useState<string[]>([])
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
 
   // Repetición
   const [repeticion, setRepeticion] = useState<Repeticion>("ninguna")
@@ -180,6 +192,39 @@ export function NuevoTurnoModal({
 
   const filtered = patients
 
+  const doSave = async () => {
+    const turnoBase: Record<string, unknown> = {
+      patientId: selectedPatient!.id,
+      nombre: selectedPatient!.nombre,
+      apellido: selectedPatient!.apellido,
+      hora,
+      estado: "pendiente",
+    }
+    if (notas.trim()) turnoBase.notas = notas.trim()
+
+    const results = await Promise.allSettled(
+      fechasPreview.map((f) =>
+        push(ref(db, `turnos/${format(f, "yyyy-MM-dd")}`), turnoBase)
+      )
+    )
+
+    const saved = results.filter((r) => r.status === "fulfilled").length
+    const failed = results.filter((r) => r.status === "rejected").length
+
+    if (failed === 0) {
+      toast.success(saved > 1 ? `${saved} turnos guardados` : "Turno guardado")
+    } else if (saved === 0) {
+      toast.error("No se pudo guardar ningún turno")
+    } else {
+      toast.warning(`${saved} turno${saved !== 1 ? "s" : ""} guardado${saved !== 1 ? "s" : ""}, ${failed} fallaron`)
+    }
+
+    if (saved > 0) {
+      onSaved()
+      onOpenChange(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!selectedPatient) {
       toast.error("Seleccioná un paciente")
@@ -192,36 +237,39 @@ export function NuevoTurnoModal({
 
     setIsSaving(true)
     try {
-      const turnoBase: Record<string, unknown> = {
-        patientId: selectedPatient.id,
-        nombre: selectedPatient.nombre,
-        apellido: selectedPatient.apellido,
-        hora,
-        estado: "pendiente",
-      }
-      if (notas.trim()) turnoBase.notas = notas.trim()
+      // Check for double bookings on each preview date
+      const dateKeys = [...new Set(fechasPreview.map((f) => format(f, "yyyy-MM-dd")))]
+      const snapshots = await Promise.all(dateKeys.map((d) => get(ref(db, `turnos/${d}`))))
+      const conflicts: string[] = []
+      dateKeys.forEach((dateKey, i) => {
+        const snap = snapshots[i]
+        if (snap.exists()) {
+          const dayTurnos = Object.values(snap.val() as Record<string, unknown>) as Turno[]
+          if (dayTurnos.some((t) => t.patientId === selectedPatient.id)) {
+            conflicts.push(dateKey)
+          }
+        }
+      })
 
-      const results = await Promise.allSettled(
-        fechasPreview.map((f) =>
-          push(ref(db, `turnos/${format(f, "yyyy-MM-dd")}`), turnoBase)
-        )
-      )
-
-      const saved = results.filter((r) => r.status === "fulfilled").length
-      const failed = results.filter((r) => r.status === "rejected").length
-
-      if (failed === 0) {
-        toast.success(saved > 1 ? `${saved} turnos guardados` : "Turno guardado")
-      } else if (saved === 0) {
-        toast.error("No se pudo guardar ningún turno")
-      } else {
-        toast.warning(`${saved} turno${saved !== 1 ? "s" : ""} guardado${saved !== 1 ? "s" : ""}, ${failed} fallaron`)
+      if (conflicts.length > 0) {
+        setConflictDates(conflicts)
+        setConflictDialogOpen(true)
+        return
       }
 
-      if (saved > 0) {
-        onSaved()
-        onOpenChange(false)
-      }
+      await doSave()
+    } catch {
+      toast.error("Error inesperado al guardar los turnos")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleConfirmSave = async () => {
+    setConflictDialogOpen(false)
+    setIsSaving(true)
+    try {
+      await doSave()
     } catch {
       toast.error("Error inesperado al guardar los turnos")
     } finally {
@@ -230,6 +278,7 @@ export function NuevoTurnoModal({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -484,5 +533,38 @@ export function NuevoTurnoModal({
         </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={conflictDialogOpen} onOpenChange={setConflictDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Turno duplicado</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div>
+              <p className="mb-2">
+                {selectedPatient?.nombre} {selectedPatient?.apellido} ya tiene un turno en:
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 text-sm font-medium text-gray-800">
+                {conflictDates.map((d) => {
+                  const [y, m, day] = d.split("-")
+                  return (
+                    <li key={d} className="capitalize">
+                      {format(new Date(Number(y), Number(m) - 1, Number(day)), "EEEE d 'de' MMMM", { locale: es })}
+                    </li>
+                  )
+                })}
+              </ul>
+              <p className="mt-2">¿Guardar de todos modos?</p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction onClick={handleConfirmSave} className="bg-[#001633] hover:bg-[#002966]">
+            Guardar de todos modos
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }

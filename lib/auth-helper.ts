@@ -2,7 +2,9 @@ import { User } from 'firebase/auth'
 
 const userNameMap: Record<string, string> = {
   'kinesiologiaintegral@gmail.com': 'Ana la Jefa',
-  'eugenia@kinesiologia.com': 'Eugenia Funk Martinez',
+  'karina@kinesiologia.com.ar': 'Karina',
+  'sofia@kinesiologia.com.ar': 'Sofia',
+  'eugenia@kinesiologia.com': 'Eugenia',
   'joaco@gmail.com': 'Joaco',
 }
 

@@ -23,6 +23,7 @@ import { fetchTurnosPorMes } from "@/lib/helpers"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { AgendaDia } from "@/components/agenda-dia"
+import { toast } from "sonner"
 
 const DAYS_OF_WEEK = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
@@ -91,7 +92,7 @@ export function Calendario() {
       const data = await fetchTurnosPorMes(month.getFullYear(), month.getMonth() + 1)
       setTurnosPorFecha(data)
     } catch {
-      // empty grid is fine
+      toast.error("No se pudieron cargar los turnos")
     } finally {
       setIsLoading(false)
     }

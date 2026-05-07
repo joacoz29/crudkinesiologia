@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ref, get, push } from "firebase/database"
+import { ref, push } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { Patient } from "@/types"
 import { toast } from "sonner"
@@ -102,11 +102,13 @@ export function NuevoTurnoModal({
 }: NuevoTurnoModalProps) {
   const [patients, setPatients] = useState<Patient[]>([])
   const [search, setSearch] = useState("")
+  const [isSearching, setIsSearching] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [hora, setHora] = useState(horaInicial)
   const [notas, setNotas] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
+  const searchAbortRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Repetición
   const [repeticion, setRepeticion] = useState<Repeticion>("ninguna")
@@ -118,28 +120,29 @@ export function NuevoTurnoModal({
   const [numTurnos, setNumTurnos] = useState(10)
 
   useEffect(() => {
-    if (!open) return
-    get(ref(db, "pacientes"))
-      .then((snapshot) => {
-        if (!snapshot.exists()) return
-        const data = snapshot.val() as Record<string, Record<string, unknown>>
-        const list: Patient[] = Object.entries(data).map(([id, raw]) => {
-          const sesiones = Array.isArray(raw.sesiones)
-            ? (raw.sesiones as string[])
-            : typeof raw.sesiones === "string"
-            ? (raw.sesiones as string).split(", ").filter(Boolean)
-            : []
-          return { id, ...raw, sesiones } as Patient
-        })
-        list.sort((a, b) => a.apellido.localeCompare(b.apellido))
-        setPatients(list)
-      })
-      .catch(() => {})
-  }, [open])
+    if (!search.trim()) {
+      setPatients([])
+      setIsSearching(false)
+      return
+    }
+    if (searchAbortRef.current) clearTimeout(searchAbortRef.current)
+    setIsSearching(true)
+    searchAbortRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/patients?search=${encodeURIComponent(search.trim())}&limit=10`)
+        if (!res.ok) return
+        const data = await res.json()
+        setPatients(data.patients ?? [])
+      } catch {}
+      finally { setIsSearching(false) }
+    }, 250)
+    return () => { if (searchAbortRef.current) clearTimeout(searchAbortRef.current) }
+  }, [search])
 
   useEffect(() => {
     if (open) {
       setSearch("")
+      setPatients([])
       setSelectedPatient(null)
       setHora(horaInicial)
       setNotas("")
@@ -176,16 +179,6 @@ export function NuevoTurnoModal({
     fechasPreview.length > 0
 
   const filtered = patients
-    .filter((p) => {
-      const q = search.toLowerCase()
-      return (
-        p.nombre?.toLowerCase().includes(q) ||
-        p.apellido?.toLowerCase().includes(q) ||
-        `${p.nombre} ${p.apellido}`.toLowerCase().includes(q) ||
-        `${p.apellido} ${p.nombre}`.toLowerCase().includes(q)
-      )
-    })
-    .slice(0, 10)
 
   const handleSave = async () => {
     if (!selectedPatient) {
@@ -284,7 +277,9 @@ export function NuevoTurnoModal({
                 />
                 {showDropdown && search && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-52 overflow-y-auto">
-                    {filtered.length > 0 ? (
+                    {isSearching ? (
+                      <p className="px-3 py-2 text-sm text-gray-400">Buscando...</p>
+                    ) : filtered.length > 0 ? (
                       filtered.map((p) => (
                         <button
                           key={p.id}

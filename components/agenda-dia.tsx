@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 8) // 8 → 19
+const BASE_HOURS = Array.from({ length: 12 }, (_, i) => i + 8) // 8 → 19
 
 const ESTADO_STYLES: Record<TurnoEstado, string> = {
   pendiente: "bg-blue-100 text-blue-800 border-blue-200",
@@ -38,6 +38,9 @@ interface AgendaDiaProps {
 }
 
 export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno, onPrevDay, onNextDay }: AgendaDiaProps) {
+  const extraHours = turnos.map(t => parseInt(t.hora.split(":")[0], 10)).filter(h => h < 8 || h > 19)
+  const HOURS = [...new Set([...BASE_HOURS, ...extraHours])].sort((a, b) => a - b)
+
   const turnosPorHora = HOURS.reduce<Record<number, Turno[]>>((acc, h) => {
     acc[h] = turnos.filter((t) => parseInt(t.hora.split(":")[0], 10) === h)
     return acc

@@ -247,8 +247,8 @@ export function EditarTurnoModal({
             {/* Estado */}
             <div className="space-y-2">
               <Label>Estado</Label>
-              <Select value={estado} onValueChange={(v) => setEstado(v as TurnoEstado)}>
-                <SelectTrigger className="border-[#001633] w-44">
+              <Select value={estado} onValueChange={(v) => setEstado(v as TurnoEstado)} disabled={yaAsistio}>
+                <SelectTrigger className="border-[#001633] w-44 disabled:opacity-60 disabled:cursor-not-allowed">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -259,6 +259,9 @@ export function EditarTurnoModal({
                   ))}
                 </SelectContent>
               </Select>
+              {yaAsistio && (
+                <p className="text-xs text-gray-400">La asistencia ya fue confirmada y registrada en el historial del paciente.</p>
+              )}
             </div>
 
             {/* Justificado — only when ausente */}

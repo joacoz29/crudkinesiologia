@@ -22,6 +22,7 @@ import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { Patient, Turno } from "@/types"
 import { toast } from "sonner"
+import { AlertTriangle } from "lucide-react"
 
 type Repeticion = "ninguna" | "intervalo" | "semanal"
 
@@ -101,6 +102,7 @@ interface NuevoTurnoModalProps {
   fecha: Date
   horaInicial?: string
   onSaved: () => void
+  turnosPorFecha: Record<string, Turno[]>
 }
 
 export function NuevoTurnoModal({
@@ -109,6 +111,7 @@ export function NuevoTurnoModal({
   fecha,
   horaInicial = "09:00",
   onSaved,
+  turnosPorFecha,
 }: NuevoTurnoModalProps) {
   const [patients, setPatients] = useState<Patient[]>([])
   const [search, setSearch] = useState("")
@@ -193,6 +196,11 @@ export function NuevoTurnoModal({
     fechasPreview.length > 0
 
   const filtered = patients
+
+  const dateKey = format(fecha, "yyyy-MM-dd")
+  const horaConflicts = (turnosPorFecha[dateKey] ?? []).filter(
+    (t) => t.hora === hora && t.estado !== "cancelado"
+  )
 
   const doSave = async () => {
     const turnoBase: Record<string, unknown> = {
@@ -361,6 +369,23 @@ export function NuevoTurnoModal({
               onChange={(e) => setHora(e.target.value)}
               className="border-[#001633] w-36"
             />
+            {horaConflicts.length > 0 && (
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-800">
+                  <p className="font-medium">
+                    {horaConflicts.length === 1
+                      ? "Ya hay 1 turno a esta hora:"
+                      : `Ya hay ${horaConflicts.length} turnos a esta hora:`}
+                  </p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {horaConflicts.map((t) => (
+                      <li key={t.id}>· {t.nombre} {t.apellido}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Notas */}
@@ -510,12 +535,28 @@ export function NuevoTurnoModal({
                 <p className="font-medium text-gray-700">
                   Se crearán {fechasPreview.length} turno{fechasPreview.length !== 1 ? "s" : ""}:
                 </p>
-                <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
-                  {fechasPreview.map((f, i) => (
-                    <span key={i} className="bg-white border border-gray-200 rounded px-1.5 py-0.5 capitalize">
-                      {format(f, "EEE d MMM", { locale: es })}
-                    </span>
-                  ))}
+                <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                  {fechasPreview.map((f, i) => {
+                    const fKey = format(f, "yyyy-MM-dd")
+                    const hasConflict = (turnosPorFecha[fKey] ?? []).some(
+                      (t) => t.hora === hora && t.estado !== "cancelado"
+                    )
+                    return (
+                      <span
+                        key={i}
+                        className={[
+                          "inline-flex items-center gap-1 border rounded px-1.5 py-0.5 capitalize text-xs",
+                          hasConflict
+                            ? "bg-amber-50 border-amber-300 text-amber-800"
+                            : "bg-white border-gray-200 text-gray-700",
+                        ].join(" ")}
+                        title={hasConflict ? `Ya hay turnos a las ${hora} este día` : undefined}
+                      >
+                        {hasConflict && <AlertTriangle className="h-2.5 w-2.5 shrink-0" />}
+                        {format(f, "EEE d MMM", { locale: es })}
+                      </span>
+                    )
+                  })}
                 </div>
               </div>
             )}

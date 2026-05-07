@@ -364,6 +364,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
         fecha={selectedDate}
         horaInicial={nuevoTurnoHora}
         onSaved={handleTurnoSaved}
+        turnosPorFecha={turnosPorFecha}
       />
 
       {/* Editar turno modal */}

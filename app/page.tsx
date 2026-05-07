@@ -220,21 +220,18 @@ export default function Page() {
                     className="pl-9 pr-3 border-slate-200 focus:border-[#001633] focus:ring-[#001633] bg-white w-full"
                     value={searchTerm}
                     onChange={handleSearch}
-                    disabled={isLoading}
                   />
                 </div>
-                {!isLoading && (
-                  <p className="text-xs text-slate-400 pl-1">
-                    {totalItems === 0
-                      ? "Sin resultados"
-                      : `${totalItems} paciente${totalItems !== 1 ? "s" : ""}${searchTerm ? " encontrados" : ""}`}
-                  </p>
-                )}
+                <p className="text-xs text-slate-400 pl-1 h-4">
+                  {!isLoading && (totalItems === 0
+                    ? "Sin resultados"
+                    : `${totalItems} paciente${totalItems !== 1 ? "s" : ""}${searchTerm ? " encontrados" : ""}`
+                  )}
+                </p>
               </div>
               <Button
                 className="bg-[#001633] hover:bg-[#002966] transition-colors w-full sm:w-auto flex items-center gap-2"
                 onClick={() => setModalOpen(true)}
-                disabled={isLoading}
               >
                 <UserPlus className="h-4 w-4" />
                 Nuevo Paciente

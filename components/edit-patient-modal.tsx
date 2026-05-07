@@ -396,10 +396,10 @@ export function EditPatientModal({
             {isSaving ? 'Guardando...' : 'Guardar Cambios'}
           </Button>
 
-          <div className="text-sm text-gray-500 mt-4">
+          <div className="text-sm text-slate-400 mt-2">
             Última actualización: {editedPatient.ultima_actualizacion?.usuario || "N/A"} —{" "}
             {editedPatient.ultima_actualizacion?.fecha
-              ? new Date(editedPatient.ultima_actualizacion.fecha).toLocaleString()
+              ? formatTZ(new Date(editedPatient.ultima_actualizacion.fecha), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
               : "N/A"}
           </div>
         </form>

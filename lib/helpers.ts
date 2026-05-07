@@ -116,7 +116,7 @@ export async function updateTurno(
 
 export async function fetchTurnosPorPaciente(patientId: string): Promise<TurnoConFecha[]> {
   const pad = (n: number) => String(n).padStart(2, "0")
-  const from = new Date(); from.setDate(from.getDate() - 30)
+  const from = new Date(); from.setFullYear(from.getFullYear() - 2)
   const to = new Date(); to.setDate(to.getDate() + 180)
   const start = `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`
   const end = `${to.getFullYear()}-${pad(to.getMonth() + 1)}-${pad(to.getDate())}`

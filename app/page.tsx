@@ -33,6 +33,27 @@ function getInitials(nombre: string, apellido: string): string {
   return `${nombre.charAt(0)}${apellido.charAt(0)}`.toUpperCase()
 }
 
+function countPatientSessions(sesiones: string[]): number {
+  return [...sesiones.join(" ").matchAll(/\d+-/g)].length
+}
+
+function sessionBadgeClass(used: number, authorized: number): string {
+  const ratio = used / authorized
+  if (ratio >= 1) return "bg-red-50 text-red-600 border-red-200"
+  if (ratio >= 0.8) return "bg-orange-50 text-orange-600 border-orange-200"
+  return "bg-green-50 text-green-600 border-green-200"
+}
+
+function getPaginationPages(current: number, total: number): (number | "...")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | "...")[] = [1]
+  if (current > 3) pages.push("...")
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i)
+  if (current < total - 2) pages.push("...")
+  pages.push(total)
+  return pages
+}
+
 export default function Page() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -175,7 +196,10 @@ export default function Page() {
       <header className="bg-[#001633] text-white p-4 shadow-md">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row items-center justify-between mb-4">
-            <h1 className="text-xl font-semibold mb-4 sm:mb-0">Gestión de Consultorio</h1>
+            <div className="mb-4 sm:mb-0 text-center sm:text-left">
+              <h1 className="text-xl font-semibold tracking-tight">Kinesiología Integral</h1>
+              <p className="text-xs text-white/50 mt-0.5">Lic. Ana Patricia Tullio</p>
+            </div>
             <div className="flex items-center gap-4">
               <div className="bg-white text-[#001633] py-2 px-4 rounded-full flex items-center">
                 <span className="mr-2">
@@ -322,6 +346,7 @@ export default function Page() {
                       <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Teléfono</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Diagnóstico</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Doctor</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Ses.</TableHead>
                       <TableHead className="w-20" />
                     </TableRow>
                   </TableHeader>
@@ -341,12 +366,13 @@ export default function Page() {
                           <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
                           <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-24 bg-slate-200 rounded animate-pulse" /></TableCell>
                           <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
+                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-6 w-12 bg-slate-200 rounded-full animate-pulse" /></TableCell>
                           <TableCell className="py-3"><div className="h-8 w-16 bg-slate-200 rounded animate-pulse" /></TableCell>
                         </TableRow>
                       ))
                     ) : patients.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11}>
+                        <TableCell colSpan={12}>
                           <div className="flex flex-col items-center gap-2 py-16 text-slate-400">
                             <Users className="h-10 w-10 text-slate-300" />
                             {searchTerm ? (
@@ -382,6 +408,16 @@ export default function Page() {
                               <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.telefono}</TableCell>
                               <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.diagnostico}</TableCell>
                               <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.doctor}</TableCell>
+                              <TableCell className="py-3 hidden sm:table-cell">
+                                {patient.sesionesAutorizadas ? (() => {
+                                  const used = countPatientSessions(patient.sesiones)
+                                  return (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${sessionBadgeClass(used, patient.sesionesAutorizadas)}`}>
+                                      {used}/{patient.sesionesAutorizadas}
+                                    </span>
+                                  )
+                                })() : null}
+                              </TableCell>
                               <TableCell className="py-3">
                                 <div className="flex gap-1">
                                   <Button
@@ -411,23 +447,37 @@ export default function Page() {
             </div>
 
             {!isLoading && totalPages > 1 && (
-              <div className="flex justify-center items-center mt-4 gap-2">
+              <div className="flex justify-center items-center mt-4 gap-1">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
+                  className="h-8 w-8 p-0"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span className="text-sm">
-                  Página {currentPage} de {totalPages}
-                </span>
+                {getPaginationPages(currentPage, totalPages).map((page, i) =>
+                  page === "..." ? (
+                    <span key={`e-${i}`} className="h-8 w-8 flex items-center justify-center text-slate-400 text-sm select-none">…</span>
+                  ) : (
+                    <Button
+                      key={page}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(page as number)}
+                      className={`h-8 w-8 p-0 text-sm ${page === currentPage ? "bg-[#001633] text-white border-[#001633] hover:bg-[#002966] hover:text-white" : ""}`}
+                    >
+                      {page}
+                    </Button>
+                  )
+                )}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
+                  className="h-8 w-8 p-0"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, X } from "lucide-react"
+import { Plus } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { format } from "date-fns-tz"
@@ -21,13 +21,17 @@ interface NewPatientModalProps {
 }
 
 function getCurrentArgentinaDateTime() {
-  const now = new Date()
-  const argentinaTime = format(now, "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
-  return argentinaTime
+  return format(new Date(), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
+}
+
+function getNextSessionNumber(text: string): number {
+  const matches = [...text.matchAll(/(\d+)-/g)]
+  if (matches.length === 0) return 1
+  return Math.max(...matches.map(m => parseInt(m[1], 10))) + 1
 }
 
 export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
-  const [sesiones, setSesiones] = useState<string[]>([])
+  const [sesionesText, setSesionesText] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [patient, setPatient] = useState({
     nombre: "",
@@ -46,19 +50,8 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
   })
 
   const addSession = () => {
-    const currentDateTime = getCurrentArgentinaDateTime()
-    if (sesiones.length === 0) {
-      setSesiones([`1- ${currentDateTime}`])
-    } else {
-      const lastSession = sesiones[sesiones.length - 1]
-      const lastNumber = Number.parseInt(lastSession.split("-")[0])
-      const nextNumber = lastNumber + 1
-      setSesiones([...sesiones, `${nextNumber}- ${currentDateTime}`])
-    }
-  }
-
-  const removeSession = (index: number) => {
-    setSesiones(sesiones.filter((_, i) => i !== index))
+    const newEntry = `${getNextSessionNumber(sesionesText)}- ${getCurrentArgentinaDateTime()}`
+    setSesionesText(prev => prev.trimEnd() ? `${prev.trimEnd()}\n${newEntry}` : newEntry)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,14 +63,14 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
 
       await push(patientsRef, {
         ...patient,
-        sesiones,
+        sesiones: sesionesText ? [sesionesText] : [],
         ultima_actualizacion: {
           fecha: new Date().toISOString(),
           usuario: currentUser ? currentUser.displayName || currentUser.email : "Unknown",
         },
       })
 
-      if (sesiones.length > 0) {
+      if (sesionesText) {
         await addToLibroDiario({
           nombreApellido: `${patient.nombre} ${patient.apellido}`,
           obraSocial: patient.obraSocial,
@@ -101,7 +94,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
         anotaciones: "",
         tratamiento: "",
       })
-      setSesiones([])
+      setSesionesText("")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error al registrar el paciente")
     } finally {
@@ -245,36 +238,25 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
 
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <Label>Sesiones Kinesiologia</Label>
-              <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={addSession}>
-                <Plus className="h-4 w-4" />
+              <Label htmlFor="sesiones">Sesiones</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-1 text-xs border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
+                onClick={addSession}
+              >
+                <Plus className="h-3 w-3" />
+                Nueva sesión
               </Button>
             </div>
-            <div className="border rounded-md p-4 space-y-2">
-              {sesiones.map((sesion, index) => (
-                <div key={index} className="flex items-center space-x-2">
-                  <Input
-                    value={sesion}
-                    onChange={(e) => {
-                      const newSesiones = [...sesiones]
-                      newSesiones[index] = e.target.value
-                      setSesiones(newSesiones)
-                    }}
-                    className="flex-grow border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => removeSession(index)}
-                    aria-label={`Remove session ${index + 1}`}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <Textarea
+              id="sesiones"
+              value={sesionesText}
+              onChange={(e) => setSesionesText(e.target.value)}
+              className="min-h-[100px] border-[#001633] focus:ring-[#001633] focus:border-[#001633]"
+              placeholder="Ej: 1- 28/03/2025 10:00"
+            />
           </div>
 
           <div className="space-y-2">

@@ -15,44 +15,69 @@ import { toast } from "sonner"
 
 type Repeticion = "ninguna" | "intervalo" | "semanal"
 
+// Only weekdays L-V
 const DIAS_SEMANA = [
   { label: "L", value: 1 },
   { label: "M", value: 2 },
   { label: "X", value: 3 },
   { label: "J", value: 4 },
   { label: "V", value: 5 },
-  { label: "S", value: 6 },
-  { label: "D", value: 0 },
 ]
 
-// Generates dates spaced every `intervalo` days, `vecesTotal` times starting from base
+function snapToWeekday(d: Date): Date {
+  const day = d.getDay()
+  if (day === 6) d.setDate(d.getDate() + 2) // Sat → Mon
+  if (day === 0) d.setDate(d.getDate() + 1) // Sun → Mon
+  return d
+}
+
+// Every N calendar days; if result is weekend, moves to Monday
 function generarFechasIntervalo(base: Date, intervalo: number, vecesTotal: number): Date[] {
   return Array.from({ length: Math.max(1, vecesTotal) }, (_, i) => {
     const d = new Date(base)
     d.setDate(d.getDate() + i * Math.max(1, intervalo))
-    return d
+    return snapToWeekday(d)
   })
 }
 
-// Generates dates on selected weekdays for numSemanas weeks, starting from base date's week
+function lunesDeSemanaDe(base: Date): Date {
+  const day = base.getDay()
+  const offset = day === 0 ? 6 : day - 1
+  const lunes = new Date(base)
+  lunes.setDate(lunes.getDate() - offset)
+  lunes.setHours(0, 0, 0, 0)
+  return lunes
+}
+
+// Weekday dates for numSemanas weeks starting from base's week
 function generarFechasSemanal(base: Date, diasJS: number[], numSemanas: number): Date[] {
   if (diasJS.length === 0) return []
-
-  const diaSemanaBase = base.getDay() // 0=Dom, 1=Lun...
-  const diasDesdeElLunes = diaSemanaBase === 0 ? 6 : diaSemanaBase - 1
-  const lunes = new Date(base)
-  lunes.setDate(lunes.getDate() - diasDesdeElLunes)
-  lunes.setHours(0, 0, 0, 0)
-
-  const baseNorm = new Date(base)
-  baseNorm.setHours(0, 0, 0, 0)
-
+  const lunes = lunesDeSemanaDe(base)
+  const baseNorm = new Date(base); baseNorm.setHours(0, 0, 0, 0)
   const fechas: Date[] = []
-  for (let semana = 0; semana < Math.max(1, numSemanas); semana++) {
+  for (let s = 0; s < Math.max(1, numSemanas); s++) {
     for (const dia of diasJS) {
-      const offset = dia === 0 ? 6 : dia - 1 // Mon=0 offset
+      const offset = dia === 0 ? 6 : dia - 1
       const d = new Date(lunes)
-      d.setDate(d.getDate() + semana * 7 + offset)
+      d.setDate(d.getDate() + s * 7 + offset)
+      if (d >= baseNorm) fechas.push(new Date(d))
+    }
+  }
+  return fechas.sort((a, b) => a.getTime() - b.getTime())
+}
+
+// Weekday dates until numTurnos is reached
+function generarFechasSemanalPorTurnos(base: Date, diasJS: number[], numTurnos: number): Date[] {
+  if (diasJS.length === 0) return []
+  const lunes = lunesDeSemanaDe(base)
+  const baseNorm = new Date(base); baseNorm.setHours(0, 0, 0, 0)
+  const fechas: Date[] = []
+  for (let s = 0; fechas.length < Math.max(1, numTurnos) && s < 200; s++) {
+    for (const dia of diasJS) {
+      if (fechas.length >= numTurnos) break
+      const offset = dia === 0 ? 6 : dia - 1
+      const d = new Date(lunes)
+      d.setDate(d.getDate() + s * 7 + offset)
       if (d >= baseNorm) fechas.push(new Date(d))
     }
   }
@@ -87,7 +112,9 @@ export function NuevoTurnoModal({
   const [intervalo, setIntervalo] = useState(7)
   const [vecesTotal, setVecesTotal] = useState(4)
   const [diasSemana, setDiasSemana] = useState<number[]>([])
+  const [tipoLimite, setTipoLimite] = useState<"semanas" | "turnos">("semanas")
   const [numSemanas, setNumSemanas] = useState(4)
+  const [numTurnos, setNumTurnos] = useState(10)
 
   useEffect(() => {
     if (!open) return
@@ -119,8 +146,12 @@ export function NuevoTurnoModal({
       setRepeticion("ninguna")
       setIntervalo(7)
       setVecesTotal(4)
-      setDiasSemana([fecha.getDay()]) // pre-select the weekday of the chosen date
+      // Pre-select weekday of chosen date (only if it's Mon-Fri)
+      const wd = fecha.getDay()
+      setDiasSemana(wd >= 1 && wd <= 5 ? [wd] : [])
+      setTipoLimite("semanas")
       setNumSemanas(4)
+      setNumTurnos(10)
     }
   }, [open, horaInicial, fecha])
 
@@ -134,8 +165,9 @@ export function NuevoTurnoModal({
   const fechasPreview = useMemo(() => {
     if (repeticion === "ninguna") return [fecha]
     if (repeticion === "intervalo") return generarFechasIntervalo(fecha, intervalo, vecesTotal)
+    if (tipoLimite === "turnos") return generarFechasSemanalPorTurnos(fecha, diasSemana, numTurnos)
     return generarFechasSemanal(fecha, diasSemana, numSemanas)
-  }, [repeticion, fecha, intervalo, vecesTotal, diasSemana, numSemanas])
+  }, [repeticion, fecha, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas, numTurnos])
 
   const canSave =
     !!selectedPatient &&
@@ -338,7 +370,8 @@ export function NuevoTurnoModal({
             )}
 
             {repeticion === "semanal" && (
-              <div className="space-y-2">
+              <div className="space-y-3">
+                {/* Weekday picker — Mon to Fri only */}
                 <div className="flex gap-1.5">
                   {DIAS_SEMANA.map(({ label, value }) => (
                     <button
@@ -356,18 +389,51 @@ export function NuevoTurnoModal({
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-gray-700">
-                  <span>Por</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={52}
-                    value={numSemanas}
-                    onChange={(e) => setNumSemanas(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-16 border-[#001633] h-8 text-center"
-                  />
-                  <span>semana{numSemanas !== 1 ? "s" : ""}</span>
+
+                {/* Limit mode toggle */}
+                <div className="flex gap-2">
+                  {(["semanas", "turnos"] as const).map((modo) => (
+                    <button
+                      key={modo}
+                      type="button"
+                      onClick={() => setTipoLimite(modo)}
+                      className={[
+                        "px-3 py-1 text-xs rounded-full border transition-colors",
+                        tipoLimite === modo
+                          ? "bg-[#001633] text-white border-[#001633]"
+                          : "border-gray-200 text-gray-600 hover:border-[#001633]",
+                      ].join(" ")}
+                    >
+                      Por {modo}
+                    </button>
+                  ))}
                 </div>
+
+                {tipoLimite === "semanas" ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={52}
+                      value={numSemanas}
+                      onChange={(e) => setNumSemanas(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-16 border-[#001633] h-8 text-center"
+                    />
+                    <span>semana{numSemanas !== 1 ? "s" : ""}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={numTurnos}
+                      onChange={(e) => setNumTurnos(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-16 border-[#001633] h-8 text-center"
+                    />
+                    <span>turno{numTurnos !== 1 ? "s" : ""} en total</span>
+                  </div>
+                )}
               </div>
             )}
 

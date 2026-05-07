@@ -160,6 +160,7 @@ export function EditPatientModal({
   }
 
   const handleWhatsApp = () => {
+    if (!editedPatient) return
     const raw = editedPatient.telefono.replace(/\D/g, "")
     const phone = raw.startsWith("54") ? raw : raw.startsWith("0") ? `54${raw.slice(1)}` : `54${raw}`
 

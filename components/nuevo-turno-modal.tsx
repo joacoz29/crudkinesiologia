@@ -168,6 +168,8 @@ export function NuevoTurnoModal({
       setTipoLimite("semanas")
       setNumSemanas(4)
       setNumTurnos(10)
+      setConflictDates([])
+      setConflictDialogOpen(false)
     }
   }, [open, horaInicial, fecha])
 

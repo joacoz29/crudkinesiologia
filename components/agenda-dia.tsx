@@ -47,6 +47,10 @@ export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno, onPrevDa
   }, {})
 
   const totalAgendados = turnos.length
+  const firstFreeHour = HOURS.find((h) => turnosPorHora[h].length === 0)
+  const defaultNuevoHora = firstFreeHour !== undefined
+    ? `${String(firstFreeHour).padStart(2, "0")}:00`
+    : "09:00"
 
   return (
     <div className="space-y-3">
@@ -67,23 +71,34 @@ export function AgendaDia({ fecha, turnos, onNuevoTurno, onEditarTurno, onPrevDa
               : "Sin turnos agendados"}
           </p>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            size="icon"
-            className="h-8 w-8 border-gray-200 text-gray-500 hover:bg-gray-50"
-            onClick={onPrevDay}
+            size="sm"
+            className="h-8 gap-1.5 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors text-xs"
+            onClick={() => onNuevoTurno(defaultNuevoHora)}
           >
-            <ChevronLeft className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo turno
           </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8 border-gray-200 text-gray-500 hover:bg-gray-50"
-            onClick={onNextDay}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 border-gray-200 text-gray-500 hover:bg-gray-50"
+              onClick={onPrevDay}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 border-gray-200 text-gray-500 hover:bg-gray-50"
+              onClick={onNextDay}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 

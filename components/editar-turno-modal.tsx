@@ -185,16 +185,12 @@ export function EditarTurnoModal({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="capitalize">{fechaLabel}</DialogTitle>
+            <p className="text-sm text-gray-500">
+              {turno.hora} — {turno.nombre} {turno.apellido}
+            </p>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Paciente */}
-            <div className="space-y-1">
-              <Label className="text-xs text-gray-500 uppercase tracking-wide">Paciente</Label>
-              <p className="text-base font-medium text-gray-900">
-                {turno.nombre} {turno.apellido}
-              </p>
-            </div>
 
             {/* Confirmar asistencia — only when patientId is linked */}
             {turno.patientId && (

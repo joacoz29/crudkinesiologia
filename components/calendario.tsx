@@ -160,7 +160,11 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
     weeks.push(days.slice(i, i + 7))
   }
 
-  const totalTurnos = Object.values(turnosPorFecha).flat().length
+  const allTurnos = Object.values(turnosPorFecha).flat()
+  const totalTurnos = allTurnos.filter((t) => t.estado !== "cancelado").length
+  const pendientes = allTurnos.filter((t) => t.estado === "pendiente").length
+  const asistieron = allTurnos.filter((t) => t.estado === "asistio").length
+  const ausentes = allTurnos.filter((t) => t.estado === "ausente").length
   const selectedDateKey = format(selectedDate, "yyyy-MM-dd")
   const selectedDateTurnos = turnosPorFecha[selectedDateKey] ?? []
 
@@ -172,12 +176,26 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
           <h2 className="text-2xl font-semibold text-[#001633] capitalize">
             {format(currentMonth, "MMMM yyyy", { locale: es })}
           </h2>
-          {!isLoading && totalTurnos > 0 && (
-            <span className="text-sm text-gray-500">
-              {totalTurnos} turno{totalTurnos !== 1 ? "s" : ""}
-            </span>
-          )}
           {isLoading && <span className="text-sm text-gray-400">Cargando...</span>}
+          {!isLoading && totalTurnos > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {pendientes > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  {pendientes} pend.
+                </span>
+              )}
+              {asistieron > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
+                  {asistieron} asist.
+                </span>
+              )}
+              {ausentes > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
+                  {ausentes} aus.
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!isCurrentMonth && (

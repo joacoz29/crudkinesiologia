@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Trash2 } from "lucide-react"
+import { MessageCircle, Plus, Trash2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO } from "date-fns"
@@ -157,6 +157,27 @@ export function EditPatientModal({
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleWhatsApp = () => {
+    const raw = editedPatient.telefono.replace(/\D/g, "")
+    const phone = raw.startsWith("54") ? raw : raw.startsWith("0") ? `54${raw.slice(1)}` : `54${raw}`
+
+    const pendientes = turnos
+      .filter((t) => t.estado === "pendiente")
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora))
+
+    const lineas = pendientes.map((t) => {
+      const label = format(parseISO(t.fecha), "EEEE d 'de' MMMM", { locale: es })
+      return `• ${label.charAt(0).toUpperCase() + label.slice(1)} a las ${t.hora}`
+    })
+
+    const mensaje =
+      `Hola ${editedPatient.nombre}, te recordamos tus turnos agendados:\n\n` +
+      (lineas.length > 0 ? lineas.join("\n") : "No tenés turnos pendientes por el momento.") +
+      "\n\n*Kinesiología Integral*\nLic. Ana Patricia Tullio\n📞 02320-659087"
+
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`, "_blank")
   }
 
   if (!editedPatient) return null
@@ -370,17 +391,31 @@ export function EditPatientModal({
                   <span className="ml-2 text-xs font-normal text-gray-400">{turnos.length}</span>
                 )}
               </Label>
-              {turnos.length > 0 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-red-500 hover:text-red-700 h-7"
-                  onClick={() => setConfirmDeleteAllOpen(true)}
-                >
-                  Eliminar todos
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {editedPatient.telefono && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7 gap-1.5 border-green-300 text-green-700 hover:bg-green-50"
+                    onClick={handleWhatsApp}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    WhatsApp
+                  </Button>
+                )}
+                {turnos.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-red-500 hover:text-red-700 h-7"
+                    onClick={() => setConfirmDeleteAllOpen(true)}
+                  >
+                    Eliminar todos
+                  </Button>
+                )}
+              </div>
             </div>
 
             {isLoadingTurnos ? (

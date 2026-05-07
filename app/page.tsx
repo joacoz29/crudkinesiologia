@@ -175,28 +175,23 @@ export default function Page() {
               </Button>
             </div>
           </div>
-          <nav className="flex space-x-4">
-            <Button
-              variant={activeTab === "pacientes" ? "secondary" : "ghost"}
-              onClick={() => setActiveTab("pacientes")}
-              className="text-white hover:text-white hover:bg-[#002966]"
-            >
-              Pacientes
-            </Button>
-            <Button
-              variant={activeTab === "libroDiario" ? "secondary" : "ghost"}
-              onClick={() => setActiveTab("libroDiario")}
-              className="text-white hover:text-white hover:bg-[#002966]"
-            >
-              Libro Diario
-            </Button>
-            <Button
-              variant={activeTab === "calendario" ? "secondary" : "ghost"}
-              onClick={() => setActiveTab("calendario")}
-              className="text-white hover:text-white hover:bg-[#002966]"
-            >
-              Calendario
-            </Button>
+          <nav className="flex gap-1 border-b border-white/20">
+            {(["pacientes", "libroDiario", "calendario"] as const).map((tab) => {
+              const labels = { pacientes: "Pacientes", libroDiario: "Libro Diario", calendario: "Calendario" }
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    activeTab === tab
+                      ? "text-white border-white"
+                      : "text-white/60 border-transparent hover:text-white/90 hover:border-white/40"
+                  }`}
+                >
+                  {labels[tab]}
+                </button>
+              )
+            })}
           </nav>
         </div>
       </header>

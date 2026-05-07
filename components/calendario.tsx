@@ -246,6 +246,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
               const inMonth = isSameMonth(day, currentMonth)
               const today_ = isToday(day)
               const isSelected = isSameDay(day, selectedDate)
+              const isWeekend = getDay(day) === 0 || getDay(day) === 6
               const dateKey = format(day, "yyyy-MM-dd")
               const turnos = turnosPorFecha[dateKey] ?? []
 
@@ -256,7 +257,9 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
                   className={[
                     "min-h-[60px] sm:min-h-[100px] p-1 sm:p-1.5 flex flex-col gap-1 border-b border-gray-200",
                     "cursor-pointer group transition-colors",
-                    !inMonth ? "bg-gray-50 hover:bg-gray-100" : "hover:bg-slate-50",
+                    !inMonth
+                      ? isWeekend ? "bg-gray-100 hover:bg-gray-200" : "bg-gray-50 hover:bg-gray-100"
+                      : isWeekend && !today_ ? "bg-gray-50/80 hover:bg-gray-100" : "hover:bg-slate-50",
                     today_ && "bg-blue-50 hover:bg-blue-100",
                     isSelected && !today_ && "ring-2 ring-inset ring-[#001633]",
                   ]
@@ -305,21 +308,28 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
                     </div>
                   )}
 
-                  {/* Desktop: full text chips */}
-                  {turnos.map((turno) => (
-                    <div
-                      key={turno.id}
-                      onClick={(e) => handleChipClick(e, turno, dateKey)}
-                      className={[
-                        "hidden sm:block text-xs px-1.5 py-0.5 rounded border truncate cursor-pointer hover:opacity-75 transition-opacity",
-                        chipStyle(turno),
-                      ].join(" ")}
-                      title={`${turno.hora} — ${turno.nombre} ${turno.apellido}${turno.notas ? `\n${turno.notas}` : ""}`}
-                    >
-                      <span className="font-medium">{turno.hora}</span>{" "}
-                      {turno.nombre} {turno.apellido}
-                    </div>
-                  ))}
+                  {/* Desktop: capped chips, compact label when cell is full */}
+                  <div className="hidden sm:flex flex-col gap-1">
+                    {turnos.slice(0, 3).map((turno) => (
+                      <div
+                        key={turno.id}
+                        onClick={(e) => handleChipClick(e, turno, dateKey)}
+                        className={[
+                          "text-xs px-1.5 py-0.5 rounded border truncate cursor-pointer hover:opacity-75 transition-opacity",
+                          chipStyle(turno),
+                        ].join(" ")}
+                        title={`${turno.hora} — ${turno.nombre} ${turno.apellido}${turno.notas ? `\n${turno.notas}` : ""}`}
+                      >
+                        <span className="font-medium">{turno.hora}</span>{" "}
+                        {turnos.length >= 3 ? turno.apellido : `${turno.nombre} ${turno.apellido}`}
+                      </div>
+                    ))}
+                    {turnos.length > 3 && (
+                      <span className="text-[10px] text-gray-400 pl-0.5 leading-tight cursor-default">
+                        +{turnos.length - 3} más
+                      </span>
+                    )}
+                  </div>
                 </div>
               )
             })}

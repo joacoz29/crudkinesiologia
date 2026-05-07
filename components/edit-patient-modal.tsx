@@ -295,7 +295,7 @@ export function EditPatientModal({
           {/* Sesiones */}
           <div className="space-y-4 border-t border-slate-100 pt-5">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sesiones</h3>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Label htmlFor="sesiones-auth" className="whitespace-nowrap">Autorizadas</Label>
               <Input
                 id="sesiones-auth"
@@ -306,6 +306,18 @@ export function EditPatientModal({
                 placeholder="—"
                 className="w-24 border-slate-200 focus:border-[#001633]"
               />
+              {editedPatient.sesionesAutorizadas != null && (
+                <>
+                  <Label htmlFor="nro-autorizacion" className="whitespace-nowrap">N° autorización</Label>
+                  <Input
+                    id="nro-autorizacion"
+                    value={editedPatient.nroAutorizacion ?? ""}
+                    onChange={(e) => setEditedPatient({ ...editedPatient, nroAutorizacion: e.target.value || undefined })}
+                    placeholder="Código / número"
+                    className="flex-1 min-w-[140px] border-slate-200 focus:border-[#001633]"
+                  />
+                </>
+              )}
             </div>
             <div className="flex justify-between items-center">
               <Label htmlFor="sesiones">

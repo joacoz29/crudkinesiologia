@@ -13,8 +13,9 @@ interface LibroDiarioEntry {
 export async function addToLibroDiario(entry: {
   nombreApellido: string
   obraSocial: string
+  fecha?: string
 }) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = entry.fecha ?? new Date().toISOString().split('T')[0]
   const libroDiarioRef = ref(db, `libroDiario/${today}`)
   
   // Obtener entradas existentes

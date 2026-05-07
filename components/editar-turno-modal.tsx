@@ -35,6 +35,7 @@ import { ref, update, remove, get } from "firebase/database"
 import { db, auth } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
+import { addToLibroDiario } from "@/lib/helpers"
 
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },
@@ -155,6 +156,13 @@ export function EditarTurnoModal({
       // 4. Mark turno as asistió
       await update(ref(db, `turnos/${fecha}/${turno.id}`), {
         estado: "asistio",
+      })
+
+      // 5. Add to libro diario for that day
+      await addToLibroDiario({
+        nombreApellido: `${turno.nombre} ${turno.apellido}`,
+        obraSocial: (raw.obra_social as string) || "-",
+        fecha,
       })
 
       toast.success(`Sesión ${nextNum} registrada para ${turno.nombre} ${turno.apellido}`)

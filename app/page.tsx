@@ -149,7 +149,7 @@ export default function Page() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-slate-50">
       <header className="bg-[#001633] text-white p-4 shadow-md">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row items-center justify-between mb-4">
@@ -206,7 +206,7 @@ export default function Page() {
         
         {activeTab === "pacientes" ? (
           <>
-            <h1 className="text-2xl sm:text-3xl font-semibold text-[#001633] mb-8">Pacientes Registrados</h1>
+            <h1 className="text-2xl sm:text-3xl font-semibold text-[#001633] mb-6">Pacientes Registrados</h1>
 
             <div className="flex flex-col sm:flex-row justify-between mb-6 gap-4">
               <div className="relative w-full sm:w-64">
@@ -235,11 +235,11 @@ export default function Page() {
 
             {!isLoading && (
               <>
-                <div className="overflow-x-auto">
-                  <div className="border border-[#001633] rounded-lg overflow-hidden min-w-full">
+                <div className="overflow-x-auto rounded-xl shadow-sm">
+                  <div className="border border-slate-200 rounded-xl overflow-hidden min-w-full bg-white">
                     <Table>
                       <TableHeader>
-                        <TableRow className="bg-[#001633] text-white">
+                        <TableRow className="bg-[#001633] text-white hover:bg-[#001633]">
                           <TableHead className="font-semibold w-12 text-center hidden sm:table-cell">#</TableHead>
                           <TableHead className="font-semibold">Nombre</TableHead>
                           <TableHead className="font-semibold">Apellido</TableHead>

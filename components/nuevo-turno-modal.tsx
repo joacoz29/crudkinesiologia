@@ -371,8 +371,8 @@ export function NuevoTurnoModal({
 
             {repeticion === "semanal" && (
               <div className="space-y-3">
-                {/* Weekday picker — Mon to Fri only */}
-                <div className="flex gap-1.5">
+                {/* Weekday picker — Mon to Fri + optional Sat */}
+                <div className="flex gap-1.5 items-center">
                   {DIAS_SEMANA.map(({ label, value }) => (
                     <button
                       key={value}
@@ -388,6 +388,20 @@ export function NuevoTurnoModal({
                       {label}
                     </button>
                   ))}
+                  <span className="text-gray-300 select-none">|</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleDia(6)}
+                    title="Sábado — ocasión especial"
+                    className={[
+                      "w-9 h-9 rounded-full text-xs font-semibold border transition-colors",
+                      diasSemana.includes(6)
+                        ? "bg-amber-500 text-white border-amber-500"
+                        : "border-dashed border-amber-400 text-amber-600 hover:bg-amber-50",
+                    ].join(" ")}
+                  >
+                    S
+                  </button>
                 </div>
 
                 {/* Limit mode toggle */}

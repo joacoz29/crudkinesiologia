@@ -18,14 +18,15 @@ interface NuevoTurnoModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   fecha: Date
+  horaInicial?: string
   onSaved: () => void
 }
 
-export function NuevoTurnoModal({ open, onOpenChange, fecha, onSaved }: NuevoTurnoModalProps) {
+export function NuevoTurnoModal({ open, onOpenChange, fecha, horaInicial = "09:00", onSaved }: NuevoTurnoModalProps) {
   const [patients, setPatients] = useState<Patient[]>([])
   const [search, setSearch] = useState("")
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
-  const [hora, setHora] = useState("09:00")
+  const [hora, setHora] = useState(horaInicial)
   const [notas, setNotas] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
@@ -54,11 +55,11 @@ export function NuevoTurnoModal({ open, onOpenChange, fecha, onSaved }: NuevoTur
     if (open) {
       setSearch("")
       setSelectedPatient(null)
-      setHora("09:00")
+      setHora(horaInicial)
       setNotas("")
       setShowDropdown(false)
     }
-  }, [open])
+  }, [open, horaInicial])
 
   const filtered = patients
     .filter((p) => {

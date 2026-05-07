@@ -11,6 +11,7 @@ import {
   subMonths,
   isSameMonth,
   isToday,
+  isSameDay,
 } from "date-fns"
 import { es } from "date-fns/locale"
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
@@ -19,6 +20,7 @@ import { Turno, TurnoEstado } from "@/types"
 import { fetchTurnosPorMes } from "@/lib/helpers"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
+import { AgendaDia } from "@/components/agenda-dia"
 
 const DAYS_OF_WEEK = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
@@ -60,8 +62,12 @@ export function Calendario() {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()))
   const [turnosPorFecha, setTurnosPorFecha] = useState<Record<string, Turno[]>>({})
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+
+  // Selected day for the agenda view (default: today)
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
+  const [nuevoTurnoHora, setNuevoTurnoHora] = useState("09:00")
   const [modalOpen, setModalOpen] = useState(false)
+
   const [selectedTurno, setSelectedTurno] = useState<Turno | null>(null)
   const [selectedTurnoFecha, setSelectedTurnoFecha] = useState("")
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -87,8 +93,15 @@ export function Calendario() {
     loadTurnos(currentMonth)
   }, [currentMonth, loadTurnos])
 
+  const openNuevoTurno = (day: Date, hora = "09:00") => {
+    setSelectedDate(day)
+    setNuevoTurnoHora(hora)
+    setModalOpen(true)
+  }
+
   const handleDayClick = (day: Date) => {
-    setSelectedDay(day)
+    setSelectedDate(day)
+    setNuevoTurnoHora("09:00")
     setModalOpen(true)
   }
 
@@ -110,9 +123,11 @@ export function Calendario() {
   }
 
   const totalTurnos = Object.values(turnosPorFecha).flat().length
+  const selectedDateKey = format(selectedDate, "yyyy-MM-dd")
+  const selectedDateTurnos = turnosPorFecha[selectedDateKey] ?? []
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -156,9 +171,8 @@ export function Calendario() {
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Calendar grid */}
       <div className="border border-gray-200 rounded-lg overflow-hidden">
-        {/* Day headers */}
         <div className="grid grid-cols-7 bg-[#001633]">
           {DAYS_OF_WEEK.map((d) => (
             <div
@@ -170,12 +184,12 @@ export function Calendario() {
           ))}
         </div>
 
-        {/* Weeks */}
         {weeks.map((week, wi) => (
           <div key={wi} className="grid grid-cols-7 divide-x divide-gray-200">
             {week.map((day, di) => {
               const inMonth = isSameMonth(day, currentMonth)
               const today_ = isToday(day)
+              const isSelected = isSameDay(day, selectedDate)
               const dateKey = format(day, "yyyy-MM-dd")
               const turnos = turnosPorFecha[dateKey] ?? []
 
@@ -188,11 +202,11 @@ export function Calendario() {
                     "cursor-pointer group transition-colors",
                     !inMonth ? "bg-gray-50 hover:bg-gray-100" : "hover:bg-slate-50",
                     today_ && "bg-blue-50 hover:bg-blue-100",
+                    isSelected && !today_ && "ring-2 ring-inset ring-[#001633]",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  {/* Day number + add button on hover */}
                   <div className="flex items-center justify-between">
                     <span
                       className={[
@@ -211,7 +225,6 @@ export function Calendario() {
                     <Plus className="h-3.5 w-3.5 text-gray-300 group-hover:text-gray-500 transition-colors" />
                   </div>
 
-                  {/* Turno chips */}
                   {turnos.map((turno) => (
                     <div
                       key={turno.id}
@@ -247,15 +260,28 @@ export function Calendario() {
         <span className="text-gray-400 ml-auto">Click en un día para agregar turno</span>
       </div>
 
-      {/* Nuevo turno modal */}
-      {selectedDay && (
-        <NuevoTurnoModal
-          open={modalOpen}
-          onOpenChange={setModalOpen}
-          fecha={selectedDay}
-          onSaved={handleTurnoSaved}
+      {/* Agenda diaria */}
+      <div className="border-t border-gray-200 pt-6">
+        <AgendaDia
+          fecha={selectedDate}
+          turnos={selectedDateTurnos}
+          onNuevoTurno={(hora) => openNuevoTurno(selectedDate, hora)}
+          onEditarTurno={(turno) => {
+            setSelectedTurno(turno)
+            setSelectedTurnoFecha(selectedDateKey)
+            setEditModalOpen(true)
+          }}
         />
-      )}
+      </div>
+
+      {/* Nuevo turno modal */}
+      <NuevoTurnoModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        fecha={selectedDate}
+        horaInicial={nuevoTurnoHora}
+        onSaved={handleTurnoSaved}
+      />
 
       {/* Editar turno modal */}
       {selectedTurno && (

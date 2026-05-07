@@ -78,8 +78,17 @@ export async function saveTurno(
   fecha: string,
   turno: Omit<Turno, "id">
 ): Promise<string> {
-  const newRef = await push(ref(db, `turnos/${fecha}`), turno)
-  return newRef.key!
+  // Strip undefined fields — Firebase rejects them
+  const clean = Object.fromEntries(
+    Object.entries(turno).filter(([, v]) => v !== undefined)
+  )
+  try {
+    const newRef = await push(ref(db, `turnos/${fecha}`), clean)
+    return newRef.key!
+  } catch (err) {
+    console.error("[helpers.saveTurno] Firebase error:", err)
+    throw err
+  }
 }
 
 export async function updateTurno(
@@ -87,9 +96,22 @@ export async function updateTurno(
   id: string,
   data: Partial<Omit<Turno, "id">>
 ): Promise<void> {
-  await update(ref(db, `turnos/${fecha}/${id}`), data)
+  const clean = Object.fromEntries(
+    Object.entries(data).filter(([, v]) => v !== undefined)
+  )
+  try {
+    await update(ref(db, `turnos/${fecha}/${id}`), clean)
+  } catch (err) {
+    console.error("[helpers.updateTurno] Firebase error:", err)
+    throw err
+  }
 }
 
 export async function deleteTurno(fecha: string, id: string): Promise<void> {
-  await remove(ref(db, `turnos/${fecha}/${id}`))
+  try {
+    await remove(ref(db, `turnos/${fecha}/${id}`))
+  } catch (err) {
+    console.error("[helpers.deleteTurno] Firebase error:", err)
+    throw err
+  }
 }

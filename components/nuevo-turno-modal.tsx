@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
+import { writeLog } from "@/lib/helpers"
 import { Patient, Turno } from "@/types"
 import { toast } from "sonner"
 import { AlertTriangle } from "lucide-react"
@@ -250,6 +251,7 @@ export function NuevoTurnoModal({
     }
 
     if (saved > 0) {
+      await writeLog({ accion: "crear_turno", detalle: `Creó ${saved} turno${saved !== 1 ? "s" : ""} para ${selectedPatient!.nombre} ${selectedPatient!.apellido} a las ${hora}`, entidadId: selectedPatient!.id })
       onSaved()
       onOpenChange(false)
     }

@@ -12,7 +12,7 @@ import { toast } from "sonner"
 import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
 import { ref, push } from "firebase/database"
-import { addToLibroDiario } from "@/lib/helpers"
+import { addToLibroDiario, writeLog } from "@/lib/helpers"
 import { Tratamiento } from "@/types"
 
 interface NewPatientModalProps {
@@ -161,6 +161,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
       }
 
       toast.success("Paciente registrado correctamente")
+      await writeLog({ accion: "crear_paciente", detalle: `Creó paciente ${patient.nombre} ${patient.apellido}` })
       onOpenChange(false)
       resetForm()
     } catch (error) {

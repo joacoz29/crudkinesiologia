@@ -35,7 +35,7 @@ import { ref, update, remove, get } from "firebase/database"
 import { db, auth } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
-import { addToLibroDiario, parseTratamientosRaw } from "@/lib/helpers"
+import { addToLibroDiario, parseTratamientosRaw, writeLog } from "@/lib/helpers"
 
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },
@@ -91,6 +91,7 @@ export function EditarTurnoModal({
       else data.justificado = null  // clear when not ausente
       await update(ref(db, `turnos/${fecha}/${turno.id}`), data)
       toast.success("Turno actualizado")
+      await writeLog({ accion: "editar_turno", detalle: `Editó turno de ${turno.nombre} ${turno.apellido} (${fecha} ${hora}) → ${estado}`, entidadId: turno.id })
       onSaved()
       onOpenChange(false)
     } catch (err) {
@@ -105,6 +106,7 @@ export function EditarTurnoModal({
     try {
       await remove(ref(db, `turnos/${fecha}/${turno.id}`))
       toast.success("Turno eliminado")
+      await writeLog({ accion: "eliminar_turno", detalle: `Eliminó turno de ${turno.nombre} ${turno.apellido} (${fecha} ${hora})`, entidadId: turno.id })
       onSaved()
       onOpenChange(false)
     } catch (err) {
@@ -181,6 +183,7 @@ export function EditarTurnoModal({
       })
 
       toast.success(`Sesión ${nextNum} registrada para ${turno.nombre} ${turno.apellido}`)
+      await writeLog({ accion: "confirmar_asistencia", detalle: `Confirmó asistencia de ${turno.nombre} ${turno.apellido} (${fecha} ${hora})`, entidadId: turno.patientId })
       onSaved()
       onOpenChange(false)
     } catch (err) {

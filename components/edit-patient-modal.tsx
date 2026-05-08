@@ -13,7 +13,7 @@ import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { ref, remove } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
-import { addToLibroDiario, fetchTurnosPorPaciente, parseTratamientosRaw } from "@/lib/helpers"
+import { addToLibroDiario, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog } from "@/lib/helpers"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
 import { toast } from "sonner"
 import {
@@ -170,6 +170,7 @@ export function EditPatientModal({
       await remove(ref(db, `turnos/${turno.fecha}/${turno.id}`))
       setTurnos((prev) => prev.filter((t) => t.id !== turno.id))
       toast.success("Turno eliminado")
+      await writeLog({ accion: "eliminar_turno", detalle: `Eliminó turno de ${turno.nombre} ${turno.apellido} (${turno.fecha} ${turno.hora})`, entidadId: turno.id })
     } catch {
       toast.error("Error al eliminar el turno")
     }
@@ -178,8 +179,10 @@ export function EditPatientModal({
   const handleDeleteAllTurnos = async () => {
     try {
       await Promise.all(turnos.map((t) => remove(ref(db, `turnos/${t.fecha}/${t.id}`))))
+      const count = turnos.length
       setTurnos([])
-      toast.success(`${turnos.length} turno${turnos.length !== 1 ? "s" : ""} eliminados`)
+      toast.success(`${count} turno${count !== 1 ? "s" : ""} eliminados`)
+      await writeLog({ accion: "eliminar_todos_turnos", detalle: `Eliminó ${count} turno${count !== 1 ? "s" : ""} de ${editedPatient?.nombre} ${editedPatient?.apellido}` })
     } catch {
       toast.error("Error al eliminar los turnos")
     }
@@ -211,6 +214,7 @@ export function EditPatientModal({
         })
       }
 
+      await writeLog({ accion: "editar_paciente", detalle: `Editó paciente ${updatedPatient.nombre} ${updatedPatient.apellido}`, entidadId: updatedPatient.id })
       onSave(updatedPatient)
       setNewSessionAdded(false)
     } catch (error) {

@@ -44,7 +44,6 @@ const EMPTY_PATIENT = {
   diagnostico: "",
   doctor: "",
   anotaciones: "",
-  tratamiento: "",
 }
 
 export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
@@ -243,10 +242,6 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
               <Label htmlFor="anotaciones">Anotaciones</Label>
               <Textarea id="anotaciones" value={patient.anotaciones} onChange={(e) => setPatient({ ...patient, anotaciones: e.target.value })} className="min-h-[80px] border-slate-200 focus:border-[#001633]" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="tratamiento-notas">Tratamiento</Label>
-              <Textarea id="tratamiento-notas" value={patient.tratamiento} onChange={(e) => setPatient({ ...patient, tratamiento: e.target.value })} className="min-h-[80px] border-slate-200 focus:border-[#001633]" />
-            </div>
           </div>
 
           {/* Tratamientos */}
@@ -351,20 +346,36 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
                       {/* Contenido expandido */}
                       {isExpanded && (
                         <div className="px-4 py-3 space-y-2 border-t border-gray-100">
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs text-gray-500 whitespace-nowrap">N° autorización</Label>
-                            <Input
-                              value={trat.nroAutorizacion}
-                              onChange={(e) =>
-                                setTratamientos((prev) =>
-                                  prev.map((t) =>
-                                    t.id === trat.id ? { ...t, nroAutorizacion: e.target.value } : t
+                          <div className="flex gap-4 flex-wrap items-start">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-gray-500 whitespace-nowrap">N° autorización</Label>
+                              <Input
+                                value={trat.nroAutorizacion}
+                                onChange={(e) =>
+                                  setTratamientos((prev) =>
+                                    prev.map((t) =>
+                                      t.id === trat.id ? { ...t, nroAutorizacion: e.target.value } : t
+                                    )
                                   )
-                                )
-                              }
-                              placeholder="—"
-                              className="h-7 text-sm w-44 border-slate-200 focus:border-[#001633]"
-                            />
+                                }
+                                placeholder="—"
+                                className="h-7 text-sm w-44 border-slate-200 focus:border-[#001633]"
+                              />
+                            </div>
+                            <div className="space-y-1 flex-1 min-w-[160px]">
+                              <Label className="text-xs text-gray-500">Tratamiento</Label>
+                              <Textarea
+                                value={trat.tratamiento ?? ""}
+                                onChange={(e) =>
+                                  setTratamientos((prev) =>
+                                    prev.map((t) =>
+                                      t.id === trat.id ? { ...t, tratamiento: e.target.value } : t
+                                    )
+                                  )
+                                }
+                                className="min-h-[60px] text-sm border-slate-200 focus:border-[#001633]"
+                              />
+                            </div>
                           </div>
                           <p className="text-xs text-gray-400">
                             {trat.sesionesAutorizadas} sesiones autorizadas

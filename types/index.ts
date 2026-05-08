@@ -6,6 +6,7 @@ export interface Tratamiento {
   sesionesAutorizadas: number
   fechaCreacion: string
   sesiones: string[]
+  tratamiento?: string
 }
 
 export interface Turno {

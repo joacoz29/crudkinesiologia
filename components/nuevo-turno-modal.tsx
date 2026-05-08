@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
-import { writeLog } from "@/lib/helpers"
+import { writeLog, parseTratamientosRaw } from "@/lib/helpers"
 import { Patient, Turno } from "@/types"
 import { toast } from "sonner"
 import { AlertTriangle } from "lucide-react"
@@ -193,6 +193,22 @@ export function NuevoTurnoModal({
 
   const feriadosSet = useMemo(() => new Set(Object.keys(feriados)), [feriados])
 
+  const sessionStats = useMemo((): { used: number; authorized: number } | null => {
+    if (!selectedPatient) return null
+    const trats = parseTratamientosRaw(selectedPatient.tratamientos)
+    if (trats.length > 0) {
+      const authorized = trats.reduce((sum, t) => sum + (t.sesionesAutorizadas ?? 0), 0)
+      if (!authorized) return null
+      const used = trats.reduce((sum, t) => sum + t.sesiones.length, 0)
+      return { used, authorized }
+    }
+    const authorized = selectedPatient.sesionesAutorizadas
+    if (!authorized) return null
+    const sesionesText = (selectedPatient.sesiones ?? []).join(" ")
+    const used = [...sesionesText.matchAll(/\d+-/g)].length
+    return { used, authorized }
+  }, [selectedPatient])
+
   // Raw candidates before holiday filter — used only for preview display (shows strikethrough on skipped days)
   const fechasTodasCandidatas = useMemo(() => {
     if (repeticion === "ninguna") return [fecha]
@@ -334,6 +350,27 @@ export function NuevoTurnoModal({
                       {selectedPatient.obraSocial}
                     </span>
                   )}
+                  {sessionStats && (() => {
+                    const { used, authorized } = sessionStats
+                    const exhausted = used >= authorized
+                    const nearLimit = used >= Math.ceil(authorized * 0.8)
+                    return (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {(exhausted || nearLimit) && (
+                          <AlertTriangle className={`h-3 w-3 shrink-0 ${exhausted ? "text-red-500" : "text-amber-500"}`} />
+                        )}
+                        <span className={`text-xs ${
+                          exhausted ? "text-red-600 font-medium"
+                          : nearLimit ? "text-amber-600"
+                          : "text-gray-400"
+                        }`}>
+                          {exhausted
+                            ? `Autorización agotada (${used}/${authorized} ses.)`
+                            : `${used}/${authorized} sesiones`}
+                        </span>
+                      </div>
+                    )
+                  })()}
                 </div>
                 <Button
                   type="button"

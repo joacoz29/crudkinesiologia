@@ -187,6 +187,24 @@ export function EditarTurnoModal({
       })
 
       toast.success(`Sesión ${nextNum} registrada para ${turno.nombre} ${turno.apellido}`)
+
+      if (tratamientos.length > 0) {
+        const latest = tratamientos[tratamientos.length - 1]
+        const newCount = latest.sesiones.length + 1
+        const remaining = latest.sesionesAutorizadas - newCount
+        if (remaining <= 0) {
+          toast.warning(
+            `Autorización agotada para ${turno.nombre} ${turno.apellido} — recordá gestionar una nueva`,
+            { duration: 8000 }
+          )
+        } else if (remaining <= 2) {
+          toast.warning(
+            `Queda${remaining === 1 ? "" : "n"} ${remaining} sesión${remaining === 1 ? "" : "es"} disponible${remaining === 1 ? "" : "s"} para ${turno.nombre} ${turno.apellido}`,
+            { duration: 6000 }
+          )
+        }
+      }
+
       await writeLog({ accion: "confirmar_asistencia", detalle: `Confirmó asistencia de ${turno.nombre} ${turno.apellido} (${fecha} ${hora})`, entidadId: turno.patientId })
       onSaved()
       onOpenChange(false)

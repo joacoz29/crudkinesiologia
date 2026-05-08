@@ -17,7 +17,8 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import debounce from "lodash/debounce"
 import { Patient } from "@/types"
-import { getUserDisplayName } from "@/lib/auth-helper"
+import { getUserDisplayName, isAdmin } from "@/lib/auth-helper"
+import { AdminPanel } from "@/components/admin-panel"
 import { toast } from "sonner"
 
 const AVATAR_COLORS = [
@@ -64,6 +65,7 @@ export default function Page() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [currentUser, setCurrentUser] = useState<string | null>(null)
+  const [isAdminUser, setIsAdminUser] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
   const [activeTab, setActiveTab] = useState("pacientes")
@@ -117,6 +119,7 @@ export default function Page() {
       if (user) {
         const displayName = getUserDisplayName(user)
         setCurrentUser(displayName)
+        setIsAdminUser(isAdmin(user))
         fetchPatients("", 1)
       } else {
         router.push("/login")
@@ -227,8 +230,13 @@ export default function Page() {
             </div>
           </div>
           <nav className="flex gap-1 border-b border-white/20">
-            {(["pacientes", "libroDiario", "calendario"] as const).map((tab) => {
-              const labels = { pacientes: "Pacientes", libroDiario: "Libro Diario", calendario: "Calendario" }
+            {([
+              "pacientes",
+              "libroDiario",
+              "calendario",
+              ...(isAdminUser ? ["admin"] : []),
+            ] as const).map((tab) => {
+              const labels: Record<string, string> = { pacientes: "Pacientes", libroDiario: "Libro Diario", calendario: "Calendario", admin: "Admin" }
               return (
                 <button
                   key={tab}
@@ -525,11 +533,11 @@ export default function Page() {
             />
           </>
         ) : activeTab === "libroDiario" ? (
-          <LibroDiario
-            updateTrigger={libroDiarioUpdateTrigger}
-          />
-        ) : (
+          <LibroDiario updateTrigger={libroDiarioUpdateTrigger} />
+        ) : activeTab === "calendario" ? (
           <Calendario refreshTrigger={calendarioRefreshTrigger} />
+        ) : (
+          <AdminPanel />
         )}
       </main>
     </div>

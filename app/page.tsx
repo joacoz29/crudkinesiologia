@@ -341,7 +341,7 @@ export default function Page() {
 
             {/* Desktop table */}
             <div className="hidden sm:block overflow-x-auto rounded-xl shadow-sm">
-              <div className="border border-slate-200 rounded-xl overflow-hidden min-w-full bg-white">
+              <div className="rounded-xl overflow-hidden min-w-full bg-white shadow-sm">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-[#001633] text-white hover:bg-[#001633]">
@@ -398,8 +398,8 @@ export default function Page() {
                       </TableRow>
                     ) : (
                       patients.map((patient) => (
-                            <TableRow key={patient.id} className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
-                              <TableCell className="pl-4 pr-0 py-3">
+                            <TableRow key={patient.id} className="group bg-white hover:bg-slate-50/70 transition-colors border-b border-slate-100 last:border-0">
+                              <TableCell className="pl-3 pr-0 py-3 border-l-[3px] border-l-transparent group-hover:border-l-[#001633] transition-colors">
                                 <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0 ${getAvatarColor(patient.nombre + patient.apellido)}`}>
                                   {getInitials(patient.nombre, patient.apellido)}
                                 </div>

@@ -346,14 +346,14 @@ export default function Page() {
                   <TableHeader>
                     <TableRow className="bg-[#001633] text-white hover:bg-[#001633]">
                       <TableHead className="w-10" />
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80">Nombre</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80">Apellido</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Edad</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">DNI</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Obra Social</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">N°AFL</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Teléfono</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Ses.</TableHead>
+                      <TableHead className="text-[11px] font-medium tracking-wider text-white/50">Nombre</TableHead>
+                      <TableHead className="text-[11px] font-medium tracking-wider text-white/50">Apellido</TableHead>
+                      <TableHead className="text-[11px] font-medium tracking-wider text-white/50 hidden sm:table-cell">Edad</TableHead>
+                      <TableHead className="text-[11px] font-medium tracking-wider text-white/50 hidden sm:table-cell">DNI</TableHead>
+                      <TableHead className="text-[11px] font-medium tracking-wider text-white/50 hidden sm:table-cell">Obra Social</TableHead>
+                      <TableHead className="text-[11px] font-medium tracking-wider text-white/50 hidden sm:table-cell">N°AFL</TableHead>
+                      <TableHead className="text-[11px] font-medium tracking-wider text-white/50 hidden sm:table-cell">Teléfono</TableHead>
+                      <TableHead className="text-[11px] font-medium tracking-wider text-white/50 hidden sm:table-cell">Ses.</TableHead>
                       <TableHead className="w-20" />
                     </TableRow>
                   </TableHeader>
@@ -404,13 +404,13 @@ export default function Page() {
                                   {getInitials(patient.nombre, patient.apellido)}
                                 </div>
                               </TableCell>
-                              <TableCell className="py-3 font-medium text-slate-800">{patient.nombre}</TableCell>
-                              <TableCell className="py-3 font-medium text-slate-800">{patient.apellido}</TableCell>
-                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.edad}</TableCell>
-                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.dni}</TableCell>
-                              <TableCell className="py-3 text-slate-700 hidden sm:table-cell">{patient.obraSocial}</TableCell>
-                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.nroAFL}</TableCell>
-                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.telefono}</TableCell>
+                              <TableCell className="py-3 font-semibold text-slate-900">{patient.nombre}</TableCell>
+                              <TableCell className="py-3 font-semibold text-slate-900">{patient.apellido}</TableCell>
+                              <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{patient.edad}</TableCell>
+                              <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{patient.dni}</TableCell>
+                              <TableCell className="py-3 text-sm text-slate-600 font-medium hidden sm:table-cell">{patient.obraSocial}</TableCell>
+                              <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{patient.nroAFL}</TableCell>
+                              <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{patient.telefono}</TableCell>
                               <TableCell className="py-3 hidden sm:table-cell">
                                 {(() => {
                                   const tratsList = Array.isArray(patient.tratamientos) ? patient.tratamientos : []

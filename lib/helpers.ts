@@ -170,6 +170,12 @@ export async function deleteTurno(fecha: string, id: string): Promise<void> {
   }
 }
 
+export function getNextSessionNumber(text: string): number {
+  const matches = [...text.matchAll(/(\d+)-/g)]
+  if (matches.length === 0) return 1
+  return Math.max(...matches.map((m) => parseInt(m[1], 10))) + 1
+}
+
 export type LogAccion =
   | "crear_paciente"
   | "editar_paciente"

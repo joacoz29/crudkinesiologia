@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import {
   format,
   startOfMonth,
@@ -21,19 +21,13 @@ import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
 import { ref, update, get } from "firebase/database"
 import { db, auth } from "@/lib/firebase"
-import { fetchTurnosPorMes, addToLibroDiario, parseTratamientosRaw, writeLog } from "@/lib/helpers"
+import { fetchTurnosPorMes, addToLibroDiario, parseTratamientosRaw, writeLog, getNextSessionNumber } from "@/lib/helpers"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { AgendaDia } from "@/components/agenda-dia"
 import { toast } from "sonner"
 
 const DAYS_OF_WEEK = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-
-function getNextSessionNumber(text: string): number {
-  const matches = [...text.matchAll(/(\d+)-/g)]
-  if (matches.length === 0) return 1
-  return Math.max(...matches.map((m) => parseInt(m[1], 10))) + 1
-}
 
 const ESTADO_STYLES: Record<TurnoEstado, string> = {
   pendiente: "bg-blue-100 text-blue-800 border-blue-200",
@@ -230,13 +224,16 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
   }
 
   const todayKey = format(new Date(), "yyyy-MM-dd")
-  const pendientesPasadosList = Object.entries(turnosPorFecha)
-    .filter(([fecha]) => fecha < todayKey)
-    .flatMap(([, turnos]) => turnos.filter((t) => t.estado === "pendiente"))
 
-  const fechaMasAntigua = Object.keys(turnosPorFecha)
-    .filter((f) => f < todayKey && turnosPorFecha[f].some((t) => t.estado === "pendiente"))
-    .sort()[0]
+  const { pendientesPasadosList, fechaMasAntigua } = useMemo(() => {
+    const list = Object.entries(turnosPorFecha)
+      .filter(([fecha]) => fecha < todayKey)
+      .flatMap(([, turnos]) => turnos.filter((t) => t.estado === "pendiente"))
+    const oldest = Object.keys(turnosPorFecha)
+      .filter((f) => f < todayKey && turnosPorFecha[f].some((t) => t.estado === "pendiente"))
+      .sort()[0]
+    return { pendientesPasadosList: list, fechaMasAntigua: oldest }
+  }, [turnosPorFecha, todayKey])
 
   const days = getCalendarDays(currentMonth)
   const weeks: Date[][] = []

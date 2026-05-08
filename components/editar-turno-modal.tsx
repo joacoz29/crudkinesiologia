@@ -35,7 +35,7 @@ import { ref, update, remove, get } from "firebase/database"
 import { db, auth } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
-import { addToLibroDiario, parseTratamientosRaw, writeLog, LogCambio } from "@/lib/helpers"
+import { addToLibroDiario, parseTratamientosRaw, writeLog, LogCambio, getNextSessionNumber } from "@/lib/helpers"
 
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },
@@ -43,12 +43,6 @@ const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "ausente", label: "Ausente", color: "text-red-700" },
   { value: "cancelado", label: "Cancelado", color: "text-gray-500" },
 ]
-
-function getNextSessionNumber(text: string): number {
-  const matches = [...text.matchAll(/(\d+)-/g)]
-  if (matches.length === 0) return 1
-  return Math.max(...matches.map((m) => parseInt(m[1], 10))) + 1
-}
 
 interface EditarTurnoModalProps {
   open: boolean

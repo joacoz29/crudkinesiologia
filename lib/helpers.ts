@@ -1,6 +1,7 @@
 import { ref, set, get, push, remove, update, query, orderByKey, startAt, endAt } from "firebase/database"
-import { db } from "@/lib/firebase"
+import { db, auth } from "@/lib/firebase"
 import { Tratamiento, Turno, TurnoConFecha } from "@/types"
+import { getUserDisplayName } from "@/lib/auth-helper"
 
 export function parseTratamientosRaw(val: unknown): Tratamiento[] {
   if (!val) return []
@@ -166,5 +167,37 @@ export async function deleteTurno(fecha: string, id: string): Promise<void> {
   } catch (err) {
     console.error("[helpers.deleteTurno] Firebase error:", err)
     throw err
+  }
+}
+
+export type LogAccion =
+  | "crear_paciente"
+  | "editar_paciente"
+  | "eliminar_paciente"
+  | "confirmar_asistencia"
+  | "crear_turno"
+  | "editar_turno"
+  | "eliminar_turno"
+  | "eliminar_todos_turnos"
+
+export async function writeLog(entry: {
+  accion: LogAccion
+  detalle: string
+  entidadId?: string
+}): Promise<void> {
+  const user = auth.currentUser
+  if (!user) return
+  const mes = new Date().toISOString().slice(0, 7) // "2026-05"
+  try {
+    await push(ref(db, `logs/${mes}`), {
+      timestamp: new Date().toISOString(),
+      email: user.email ?? "desconocido",
+      displayName: getUserDisplayName(user),
+      accion: entry.accion,
+      detalle: entry.detalle,
+      ...(entry.entidadId && { entidadId: entry.entidadId }),
+    })
+  } catch {
+    // logs nunca deben romper el flujo principal
   }
 }

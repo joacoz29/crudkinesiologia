@@ -536,9 +536,24 @@ export function EditPatientModal({
                                 />
                               </div>
                             </div>
-                            <p className="text-xs text-gray-400">
-                              {trat.sesionesAutorizadas} sesiones autorizadas
-                            </p>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-gray-500">Sesiones autorizadas</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={trat.sesionesAutorizadas}
+                                onChange={(e) =>
+                                  setTratamientos((prev) =>
+                                    prev.map((t) =>
+                                      t.id === trat.id
+                                        ? { ...t, sesionesAutorizadas: parseInt(e.target.value, 10) || 0 }
+                                        : t
+                                    )
+                                  )
+                                }
+                                className="h-7 text-sm w-24 border-slate-200 focus:border-[#001633]"
+                              />
+                            </div>
                             {trat.sesiones.length === 0 ? (
                               <p className="text-sm text-gray-400">Sin sesiones registradas</p>
                             ) : (

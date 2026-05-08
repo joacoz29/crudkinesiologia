@@ -353,8 +353,6 @@ export default function Page() {
                       <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Obra Social</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">N°AFL</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Teléfono</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Diagnóstico</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Doctor</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wide text-white/80 hidden sm:table-cell">Ses.</TableHead>
                       <TableHead className="w-20" />
                     </TableRow>
@@ -373,15 +371,13 @@ export default function Page() {
                           <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-24 bg-slate-200 rounded animate-pulse" /></TableCell>
                           <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-16 bg-slate-200 rounded animate-pulse" /></TableCell>
                           <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
-                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-24 bg-slate-200 rounded animate-pulse" /></TableCell>
-                          <TableCell className="py-3 hidden sm:table-cell"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
                           <TableCell className="py-3 hidden sm:table-cell"><div className="h-6 w-12 bg-slate-200 rounded-full animate-pulse" /></TableCell>
                           <TableCell className="py-3"><div className="h-8 w-16 bg-slate-200 rounded animate-pulse" /></TableCell>
                         </TableRow>
                       ))
                     ) : patients.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={12}>
+                        <TableCell colSpan={10}>
                           <div className="flex flex-col items-center gap-2 py-16 text-slate-400">
                             <Users className="h-10 w-10 text-slate-300" />
                             {searchTerm ? (
@@ -415,8 +411,6 @@ export default function Page() {
                               <TableCell className="py-3 text-slate-700 hidden sm:table-cell">{patient.obraSocial}</TableCell>
                               <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.nroAFL}</TableCell>
                               <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.telefono}</TableCell>
-                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.diagnostico}</TableCell>
-                              <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.doctor}</TableCell>
                               <TableCell className="py-3 hidden sm:table-cell">
                                 {(() => {
                                   const tratsList = Array.isArray(patient.tratamientos) ? patient.tratamientos : []

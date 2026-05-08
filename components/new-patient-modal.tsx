@@ -107,6 +107,17 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
     )
   }
 
+  const updateSessionInTratamiento = (tratamientoId: string, sessionIndex: number, value: string) => {
+    setTratamientos((prev) =>
+      prev.map((t) => {
+        if (t.id !== tratamientoId) return t
+        const newSesiones = [...t.sesiones]
+        newSesiones[sessionIndex] = value
+        return { ...t, sesiones: newSesiones }
+      })
+    )
+  }
+
   const resetForm = () => {
     setPatient(EMPTY_PATIENT)
     setSesionesText("")
@@ -434,7 +445,12 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
                                   key={si}
                                   className="flex items-center justify-between px-3 py-1.5 rounded bg-white border border-gray-100 text-sm text-gray-700"
                                 >
-                                  <span>{s}</span>
+                                  <input
+                                    type="text"
+                                    value={s}
+                                    onChange={(e) => updateSessionInTratamiento(trat.id, si, e.target.value)}
+                                    className="flex-1 bg-transparent text-sm text-gray-700 outline-none border-b border-transparent focus:border-slate-300 transition-colors min-w-0"
+                                  />
                                   <button
                                     type="button"
                                     onClick={() => removeSessionFromTratamiento(trat.id, si)}

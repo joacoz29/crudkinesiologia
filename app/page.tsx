@@ -414,12 +414,19 @@ export default function Page() {
                               <TableCell className="py-3 hidden sm:table-cell">
                                 {(() => {
                                   const tratsList = Array.isArray(patient.tratamientos) ? patient.tratamientos : []
-                                  const latestTrat = tratsList.length > 0 ? tratsList[tratsList.length - 1] : null
-                                  const authorized = latestTrat?.sesionesAutorizadas ?? patient.sesionesAutorizadas
+                                  if (tratsList.length > 0) {
+                                    const authorized = tratsList.reduce((sum, t) => sum + (t.sesionesAutorizadas ?? 0), 0)
+                                    if (!authorized) return null
+                                    const used = tratsList.reduce((sum, t) => sum + (Array.isArray(t.sesiones) ? t.sesiones.length : 0), 0)
+                                    return (
+                                      <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${sessionBadgeClass(used, authorized)}`}>
+                                        {used}/{authorized}
+                                      </span>
+                                    )
+                                  }
+                                  const authorized = patient.sesionesAutorizadas
                                   if (!authorized) return null
-                                  const used = latestTrat
-                                    ? (Array.isArray(latestTrat.sesiones) ? latestTrat.sesiones.length : 0)
-                                    : countPatientSessions(patient.sesiones)
+                                  const used = countPatientSessions(patient.sesiones)
                                   return (
                                     <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${sessionBadgeClass(used, authorized)}`}>
                                       {used}/{authorized}

@@ -78,6 +78,8 @@ export function EditPatientModal({
   const [showNewTreatmentForm, setShowNewTreatmentForm] = useState(false)
   const [newTreatmentNroAuth, setNewTreatmentNroAuth] = useState("")
   const [newTreatmentSesionesAuth, setNewTreatmentSesionesAuth] = useState("")
+  const [newTreatmentDiagnostico, setNewTreatmentDiagnostico] = useState("")
+  const [newTreatmentDoctor, setNewTreatmentDoctor] = useState("")
 
   useEffect(() => {
     if (!patient) return
@@ -87,6 +89,8 @@ export function EditPatientModal({
     setShowNewTreatmentForm(false)
     setNewTreatmentNroAuth("")
     setNewTreatmentSesionesAuth("")
+    setNewTreatmentDiagnostico("")
+    setNewTreatmentDoctor("")
 
     const loaded = parseTratamientosRaw(patient.tratamientos)
     setTratamientos(loaded)
@@ -117,11 +121,15 @@ export function EditPatientModal({
       sesionesAutorizadas: parseInt(newTreatmentSesionesAuth, 10),
       fechaCreacion: new Date().toISOString(),
       sesiones: [],
+      ...(newTreatmentDiagnostico.trim() && { diagnostico: newTreatmentDiagnostico.trim() }),
+      ...(newTreatmentDoctor.trim() && { doctor: newTreatmentDoctor.trim() }),
     }
     setTratamientos((prev) => [...prev, nuevo])
     setExpandedIds((prev) => new Set([...prev, id]))
     setNewTreatmentNroAuth("")
     setNewTreatmentSesionesAuth("")
+    setNewTreatmentDiagnostico("")
+    setNewTreatmentDoctor("")
     setShowNewTreatmentForm(false)
   }
 
@@ -177,6 +185,8 @@ export function EditPatientModal({
         sesiones: sesionesText ? [sesionesText] : [],
         sesionesAutorizadas: latestTrat?.sesionesAutorizadas ?? editedPatient.sesionesAutorizadas,
         nroAutorizacion: latestTrat?.nroAutorizacion || editedPatient.nroAutorizacion,
+        diagnostico: latestTrat?.diagnostico || editedPatient.diagnostico,
+        doctor: latestTrat?.doctor || editedPatient.doctor,
         ultima_actualizacion: {
           fecha: new Date().toISOString(),
           usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Unknown",
@@ -300,21 +310,6 @@ export function EditPatientModal({
               </div>
             </div>
 
-            {/* Médico */}
-            <div className="space-y-4 border-t border-slate-100 pt-5">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Médico</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="dx">Diagnóstico</Label>
-                  <Input id="dx" value={editedPatient.diagnostico} onChange={(e) => setEditedPatient({ ...editedPatient, diagnostico: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="doctor">Doctor</Label>
-                  <Input id="doctor" value={editedPatient.doctor} onChange={(e) => setEditedPatient({ ...editedPatient, doctor: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
-                </div>
-              </div>
-            </div>
-
             {/* Notas */}
             <div className="space-y-4 border-t border-slate-100 pt-5">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notas</h3>
@@ -363,6 +358,26 @@ export function EditPatientModal({
                         onChange={(e) => setNewTreatmentSesionesAuth(e.target.value)}
                         placeholder="10"
                         className="w-28 h-8 text-sm border-slate-200 focus:border-[#001633]"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">Diagnóstico</Label>
+                      <Input
+                        value={newTreatmentDiagnostico}
+                        onChange={(e) => setNewTreatmentDiagnostico(e.target.value)}
+                        placeholder="Ej: Lumbalgia"
+                        className="h-8 text-sm border-slate-200 focus:border-[#001633]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">Doctor</Label>
+                      <Input
+                        value={newTreatmentDoctor}
+                        onChange={(e) => setNewTreatmentDoctor(e.target.value)}
+                        placeholder="Nombre del médico"
+                        className="h-8 text-sm border-slate-200 focus:border-[#001633]"
                       />
                     </div>
                   </div>
@@ -460,6 +475,38 @@ export function EditPatientModal({
                                     )
                                   }
                                   className="min-h-[60px] text-sm border-slate-200 focus:border-[#001633]"
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs text-gray-500">Diagnóstico</Label>
+                                <Input
+                                  value={trat.diagnostico ?? ""}
+                                  onChange={(e) =>
+                                    setTratamientos((prev) =>
+                                      prev.map((t) =>
+                                        t.id === trat.id ? { ...t, diagnostico: e.target.value } : t
+                                      )
+                                    )
+                                  }
+                                  placeholder="—"
+                                  className="h-7 text-sm border-slate-200 focus:border-[#001633]"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-gray-500">Doctor</Label>
+                                <Input
+                                  value={trat.doctor ?? ""}
+                                  onChange={(e) =>
+                                    setTratamientos((prev) =>
+                                      prev.map((t) =>
+                                        t.id === trat.id ? { ...t, doctor: e.target.value } : t
+                                      )
+                                    )
+                                  }
+                                  placeholder="—"
+                                  className="h-7 text-sm border-slate-200 focus:border-[#001633]"
                                 />
                               </div>
                             </div>

@@ -7,6 +7,8 @@ export interface Tratamiento {
   fechaCreacion: string
   sesiones: string[]
   tratamiento?: string
+  diagnostico?: string
+  doctor?: string
 }
 
 export interface Turno {
@@ -31,8 +33,8 @@ export interface Patient {
   obraSocial: string
   nroAFL: string
   telefono: string
-  diagnostico: string
-  doctor: string
+  diagnostico?: string
+  doctor?: string
   sexo?: string
   domicilio?: string
   anotaciones?: string

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { format, isToday } from "date-fns"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Plus, Search, X, Flag } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Search, X, Flag, CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
 
@@ -55,15 +55,18 @@ interface AgendaDiaProps {
   onEditarTurno: (turno: Turno) => void
   onPrevDay: () => void
   onNextDay: () => void
+  onConfirmarAsistencia?: (turno: Turno, fecha: string) => Promise<void>
 }
 
-export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno, onPrevDay, onNextDay }: AgendaDiaProps) {
+export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno, onPrevDay, onNextDay, onConfirmarAsistencia }: AgendaDiaProps) {
   const [filterEstado, setFilterEstado] = useState<TurnoEstado | null>(null)
   const [searchName, setSearchName] = useState("")
+  const [confirmingIds, setConfirmingIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     setFilterEstado(null)
     setSearchName("")
+    setConfirmingIds(new Set())
   }, [fecha])
 
   const hasFilter = filterEstado !== null || searchName.trim() !== ""
@@ -261,32 +264,67 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
                     Agregar turno
                   </span>
                 ) : (
-                  horasTurnos.map((turno) => (
-                    <button
-                      key={turno.id}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onEditarTurno(turno)
-                      }}
-                      className={[
-                        "text-left text-sm px-3 py-1.5 rounded border w-full max-w-sm",
-                        "hover:opacity-75 transition-opacity",
-                        chipStyle(turno),
-                      ].join(" ")}
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="font-medium">
-                          {turno.hora} — {turno.nombre} {turno.apellido}
-                        </span>
-                        <span className="text-xs opacity-70 shrink-0">
-                          {ESTADO_LABELS[turno.estado]}
-                        </span>
+                  horasTurnos.map((turno) => {
+                    const isConfirming = confirmingIds.has(turno.id)
+                    const canQuickConfirm = turno.estado === "pendiente" && !!turno.patientId && !!onConfirmarAsistencia
+                    return (
+                      <div key={turno.id} className="flex items-stretch gap-1.5 w-full max-w-sm">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onEditarTurno(turno)
+                          }}
+                          className={[
+                            "text-left text-sm px-3 py-1.5 rounded border flex-1",
+                            "hover:opacity-75 transition-opacity",
+                            chipStyle(turno),
+                          ].join(" ")}
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="font-medium">
+                              {turno.hora} — {turno.nombre} {turno.apellido}
+                            </span>
+                            <span className="text-xs opacity-70 shrink-0">
+                              {ESTADO_LABELS[turno.estado]}
+                            </span>
+                          </div>
+                          {turno.notas && (
+                            <p className="text-xs opacity-60 mt-0.5 truncate">{turno.notas}</p>
+                          )}
+                        </button>
+
+                        {canQuickConfirm && (
+                          <button
+                            type="button"
+                            title="Confirmar asistencia"
+                            disabled={isConfirming}
+                            onClick={async (e) => {
+                              e.stopPropagation()
+                              setConfirmingIds((prev) => new Set([...prev, turno.id]))
+                              try {
+                                await onConfirmarAsistencia!(turno, format(fecha, "yyyy-MM-dd"))
+                              } catch {
+                                // error handled by parent
+                              } finally {
+                                setConfirmingIds((prev) => {
+                                  const s = new Set(prev)
+                                  s.delete(turno.id)
+                                  return s
+                                })
+                              }
+                            }}
+                            className="shrink-0 flex items-center gap-1 px-2.5 rounded border text-xs font-medium bg-green-50 border-green-300 text-green-700 hover:bg-green-100 disabled:opacity-50 transition-colors"
+                          >
+                            {isConfirming
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <CheckCircle2 className="h-3.5 w-3.5" />
+                            }
+                            <span className="hidden sm:inline ml-0.5">Confirmar</span>
+                          </button>
+                        )}
                       </div>
-                      {turno.notas && (
-                        <p className="text-xs opacity-60 mt-0.5 truncate">{turno.notas}</p>
-                      )}
-                    </button>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </div>

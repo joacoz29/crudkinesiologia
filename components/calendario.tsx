@@ -16,16 +16,24 @@ import {
   isSameDay,
 } from "date-fns"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
-import { fetchTurnosPorMes } from "@/lib/helpers"
+import { ref, update, get } from "firebase/database"
+import { db, auth } from "@/lib/firebase"
+import { fetchTurnosPorMes, addToLibroDiario, parseTratamientosRaw, writeLog } from "@/lib/helpers"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { AgendaDia } from "@/components/agenda-dia"
 import { toast } from "sonner"
 
 const DAYS_OF_WEEK = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
+function getNextSessionNumber(text: string): number {
+  const matches = [...text.matchAll(/(\d+)-/g)]
+  if (matches.length === 0) return 1
+  return Math.max(...matches.map((m) => parseInt(m[1], 10))) + 1
+}
 
 const ESTADO_STYLES: Record<TurnoEstado, string> = {
   pendiente: "bg-blue-100 text-blue-800 border-blue-200",
@@ -156,6 +164,79 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
   const handleTurnoSaved = () => {
     loadTurnos(currentMonth)
   }
+
+  const handleConfirmarAsistencia = async (turno: Turno, fecha: string): Promise<void> => {
+    if (!turno.patientId) return
+    try {
+      const snap = await get(ref(db, `pacientes/${turno.patientId}`))
+      if (!snap.exists()) { toast.error("No se encontró el paciente"); return }
+      const raw = snap.val() as Record<string, unknown>
+
+      const rawSesiones = raw.sesiones
+      const sesionesActual =
+        Array.isArray(rawSesiones) ? (rawSesiones as string[]).join(" ")
+        : rawSesiones && typeof rawSesiones === "object"
+        ? Object.values(rawSesiones as Record<string, string>).join(" ")
+        : typeof rawSesiones === "string" ? rawSesiones : ""
+
+      const [year, month, day] = fecha.split("-")
+      const nextNum = getNextSessionNumber(sesionesActual)
+      const newEntry = `${nextNum}- ${day}/${month}/${year} ${turno.hora}`
+      const updatedSesiones = sesionesActual.trim() ? `${sesionesActual.trim()}\n${newEntry}` : newEntry
+
+      const tratamientos = parseTratamientosRaw(raw.tratamientos)
+      const updatePayload: Record<string, unknown> = {
+        sesiones: [updatedSesiones],
+        ultima_actualizacion: {
+          fecha: new Date().toISOString(),
+          usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Calendario",
+        },
+      }
+      if (tratamientos.length > 0) {
+        const latest = tratamientos[tratamientos.length - 1]
+        const sessionEntry = `Sesión ${latest.sesiones.length + 1} — ${day}/${month}/${year} ${turno.hora}`
+        updatePayload.tratamientos = tratamientos.map((t, i) =>
+          i === tratamientos.length - 1 ? { ...t, sesiones: [...t.sesiones, sessionEntry] } : t
+        )
+      }
+
+      await update(ref(db, `pacientes/${turno.patientId}`), updatePayload)
+      await update(ref(db, `turnos/${fecha}/${turno.id}`), { estado: "asistio" })
+      await addToLibroDiario({
+        nombreApellido: `${turno.nombre} ${turno.apellido}`,
+        obraSocial: (raw.obraSocial as string) || "-",
+        fecha,
+      })
+
+      toast.success(`Sesión ${nextNum} registrada para ${turno.nombre} ${turno.apellido}`)
+
+      if (tratamientos.length > 0) {
+        const latest = tratamientos[tratamientos.length - 1]
+        const remaining = latest.sesionesAutorizadas - (latest.sesiones.length + 1)
+        if (remaining <= 0) {
+          toast.warning(`Autorización agotada para ${turno.nombre} ${turno.apellido} — recordá gestionar una nueva`, { duration: 8000 })
+        } else if (remaining <= 2) {
+          toast.warning(`Queda${remaining === 1 ? "" : "n"} ${remaining} sesión${remaining === 1 ? "" : "es"} para ${turno.nombre} ${turno.apellido}`, { duration: 6000 })
+        }
+      }
+
+      await writeLog({ accion: "confirmar_asistencia", detalle: `Confirmó asistencia de ${turno.nombre} ${turno.apellido} (${fecha} ${turno.hora})`, entidadId: turno.patientId })
+      loadTurnos(currentMonth)
+    } catch (err) {
+      console.error("[Calendario] confirm error:", err)
+      toast.error("Error al confirmar asistencia")
+      throw err
+    }
+  }
+
+  const todayKey = format(new Date(), "yyyy-MM-dd")
+  const pendientesPasadosList = Object.entries(turnosPorFecha)
+    .filter(([fecha]) => fecha < todayKey)
+    .flatMap(([, turnos]) => turnos.filter((t) => t.estado === "pendiente"))
+
+  const fechaMasAntigua = Object.keys(turnosPorFecha)
+    .filter((f) => f < todayKey && turnosPorFecha[f].some((t) => t.estado === "pendiente"))
+    .sort()[0]
 
   const days = getCalendarDays(currentMonth)
   const weeks: Date[][] = []
@@ -352,6 +433,26 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
 
       {/* RIGHT: day agenda */}
       <div className="flex-1 min-w-0 border-t lg:border-t-0 lg:border-l border-gray-200 pt-5 lg:pt-0 lg:pl-6 mt-4 lg:mt-0">
+
+        {/* Banner: turnos pendientes de días anteriores */}
+        {!isLoading && pendientesPasadosList.length > 0 && fechaMasAntigua && (
+          <button
+            type="button"
+            onClick={() => {
+              const [y, m, d] = fechaMasAntigua.split("-").map(Number)
+              setSelectedDate(new Date(y, m - 1, d))
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm hover:bg-amber-100 transition-colors text-left"
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+            <span>
+              <strong>{pendientesPasadosList.length} turno{pendientesPasadosList.length !== 1 ? "s" : ""}</strong>
+              {" sin confirmar de días anteriores — "}
+              <span className="underline">ir al primero</span>
+            </span>
+          </button>
+        )}
+
         <AgendaDia
           fecha={selectedDate}
           turnos={selectedDateTurnos}
@@ -364,6 +465,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
           }}
           onPrevDay={handlePrevDay}
           onNextDay={handleNextDay}
+          onConfirmarAsistencia={handleConfirmarAsistencia}
         />
 
         {/* Status legend */}

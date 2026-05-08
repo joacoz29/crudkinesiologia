@@ -65,14 +65,14 @@ export async function addToLibroDiario(entry: {
   // Agregar nueva entrada al array existente
   const updatedEntradas = [...(existingData.entradas || []), newEntry]
   
-  // Calcular nuevo total
   const totalHaber = updatedEntradas.reduce((sum, entrada) => sum + (entrada.haber || 0), 0)
-  
-  // Guardar datos actualizados
+  const totalDebe = updatedEntradas.reduce((sum, entrada) => sum + (entrada.debe || 0), 0)
+
   await set(libroDiarioRef, {
     fecha: new Date().toISOString(),
     entradas: updatedEntradas,
     totalHaber,
+    totalDebe,
   })
 }
 

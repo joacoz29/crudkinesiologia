@@ -12,7 +12,7 @@ import { toast } from "sonner"
 import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
 import { ref, push } from "firebase/database"
-import { addToLibroDiario, writeLog } from "@/lib/helpers"
+import { writeLog } from "@/lib/helpers"
 import { Tratamiento } from "@/types"
 
 interface NewPatientModalProps {
@@ -150,15 +150,6 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
           usuario: currentUser ? currentUser.displayName || currentUser.email : "Unknown",
         },
       })
-
-      const hasSessions =
-        sesionesText.trim() !== "" || tratamientos.some((t) => t.sesiones.length > 0)
-      if (hasSessions) {
-        await addToLibroDiario({
-          nombreApellido: `${patient.nombre} ${patient.apellido}`,
-          obraSocial: patient.obraSocial,
-        })
-      }
 
       toast.success("Paciente registrado correctamente")
       await writeLog({ accion: "crear_paciente", detalle: `Creó paciente ${patient.nombre} ${patient.apellido}` })

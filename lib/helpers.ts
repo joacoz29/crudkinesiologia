@@ -180,14 +180,17 @@ export type LogAccion =
   | "eliminar_turno"
   | "eliminar_todos_turnos"
 
+export type LogCambio = Record<string, { antes: string; despues: string }>
+
 export async function writeLog(entry: {
   accion: LogAccion
   detalle: string
   entidadId?: string
+  cambios?: LogCambio
 }): Promise<void> {
   const user = auth.currentUser
   if (!user) return
-  const mes = new Date().toISOString().slice(0, 7) // "2026-05"
+  const mes = new Date().toISOString().slice(0, 7)
   try {
     await push(ref(db, `logs/${mes}`), {
       timestamp: new Date().toISOString(),
@@ -196,6 +199,7 @@ export async function writeLog(entry: {
       accion: entry.accion,
       detalle: entry.detalle,
       ...(entry.entidadId && { entidadId: entry.entidadId }),
+      ...(entry.cambios && Object.keys(entry.cambios).length > 0 && { cambios: entry.cambios }),
     })
   } catch {
     // logs nunca deben romper el flujo principal

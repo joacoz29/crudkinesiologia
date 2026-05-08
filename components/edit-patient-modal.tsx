@@ -13,7 +13,7 @@ import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { ref, remove } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
-import { addToLibroDiario, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog } from "@/lib/helpers"
+import { addToLibroDiario, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog, LogCambio } from "@/lib/helpers"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
 import { toast } from "sonner"
 import {
@@ -214,7 +214,18 @@ export function EditPatientModal({
         })
       }
 
-      await writeLog({ accion: "editar_paciente", detalle: `Editó paciente ${updatedPatient.nombre} ${updatedPatient.apellido}`, entidadId: updatedPatient.id })
+      const CAMPOS_LABEL: Partial<Record<keyof Patient, string>> = {
+        nombre: "Nombre", apellido: "Apellido", edad: "Edad", dni: "DNI",
+        obraSocial: "Obra Social", nroAFL: "N°AFL", telefono: "Teléfono",
+        domicilio: "Domicilio", anotaciones: "Anotaciones", sexo: "Sexo",
+      }
+      const cambios: LogCambio = {}
+      for (const campo of Object.keys(CAMPOS_LABEL) as (keyof Patient)[]) {
+        const antes = String(patient?.[campo] ?? "")
+        const despues = String(updatedPatient[campo] ?? "")
+        if (antes !== despues) cambios[CAMPOS_LABEL[campo]!] = { antes, despues }
+      }
+      await writeLog({ accion: "editar_paciente", detalle: `Editó paciente ${updatedPatient.nombre} ${updatedPatient.apellido}`, entidadId: updatedPatient.id, cambios })
       onSave(updatedPatient)
       setNewSessionAdded(false)
     } catch (error) {

@@ -128,7 +128,9 @@ export function EditarTurnoModal({
       const rawSesiones = raw.sesiones
       const sesionesActual =
         Array.isArray(rawSesiones)
-          ? rawSesiones.join(" ")
+          ? (rawSesiones as string[]).join(" ")
+          : rawSesiones && typeof rawSesiones === "object"
+          ? Object.values(rawSesiones as Record<string, string>).join(" ")
           : typeof rawSesiones === "string"
           ? rawSesiones
           : ""

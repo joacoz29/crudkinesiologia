@@ -418,14 +418,20 @@ export default function Page() {
                               <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.diagnostico}</TableCell>
                               <TableCell className="py-3 text-slate-500 hidden sm:table-cell">{patient.doctor}</TableCell>
                               <TableCell className="py-3 hidden sm:table-cell">
-                                {patient.sesionesAutorizadas ? (() => {
-                                  const used = countPatientSessions(patient.sesiones)
+                                {(() => {
+                                  const tratsList = Array.isArray(patient.tratamientos) ? patient.tratamientos : []
+                                  const latestTrat = tratsList.length > 0 ? tratsList[tratsList.length - 1] : null
+                                  const authorized = latestTrat?.sesionesAutorizadas ?? patient.sesionesAutorizadas
+                                  if (!authorized) return null
+                                  const used = latestTrat
+                                    ? (Array.isArray(latestTrat.sesiones) ? latestTrat.sesiones.length : 0)
+                                    : countPatientSessions(patient.sesiones)
                                   return (
-                                    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${sessionBadgeClass(used, patient.sesionesAutorizadas)}`}>
-                                      {used}/{patient.sesionesAutorizadas}
+                                    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${sessionBadgeClass(used, authorized)}`}>
+                                      {used}/{authorized}
                                     </span>
                                   )
-                                })() : null}
+                                })()}
                               </TableCell>
                               <TableCell className="py-3">
                                 <div className="flex gap-1">

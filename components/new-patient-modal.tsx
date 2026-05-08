@@ -153,7 +153,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) resetForm(); onOpenChange(isOpen) }}>
       <DialogContent className="max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Registrar nuevo paciente</DialogTitle>

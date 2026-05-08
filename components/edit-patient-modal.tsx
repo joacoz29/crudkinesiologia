@@ -13,7 +13,7 @@ import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { ref, remove } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
-import { addToLibroDiario, fetchTurnosPorPaciente } from "@/lib/helpers"
+import { addToLibroDiario, fetchTurnosPorPaciente, parseTratamientosRaw } from "@/lib/helpers"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
 import { toast } from "sonner"
 import {
@@ -57,26 +57,6 @@ function formatSesiones(text: string): string {
   return text.replace(/\s+(\d+-)/g, "\n$1").trim()
 }
 
-function parseTratamientos(val: unknown): Tratamiento[] {
-  if (!val) return []
-  const items: unknown[] = Array.isArray(val) ? val : Object.values(val as object)
-  return items.filter(Boolean).map((item) => {
-    const t = item as Record<string, unknown>
-    const rawSesiones = t.sesiones
-    const sesiones: string[] = Array.isArray(rawSesiones)
-      ? (rawSesiones as string[]).filter(Boolean)
-      : rawSesiones && typeof rawSesiones === "object"
-      ? (Object.values(rawSesiones as object) as string[]).filter(Boolean)
-      : []
-    return {
-      id: String(t.id ?? Date.now()),
-      nroAutorizacion: String(t.nroAutorizacion ?? ""),
-      sesionesAutorizadas: Number(t.sesionesAutorizadas ?? 0),
-      fechaCreacion: String(t.fechaCreacion ?? new Date().toISOString()),
-      sesiones,
-    }
-  })
-}
 
 export function EditPatientModal({
   open,
@@ -108,7 +88,7 @@ export function EditPatientModal({
     setNewTreatmentNroAuth("")
     setNewTreatmentSesionesAuth("")
 
-    const loaded = parseTratamientos(patient.tratamientos)
+    const loaded = parseTratamientosRaw(patient.tratamientos)
     setTratamientos(loaded)
     setExpandedIds(loaded.length > 0 ? new Set([loaded[loaded.length - 1].id]) : new Set())
 

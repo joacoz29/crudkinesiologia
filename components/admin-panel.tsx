@@ -57,6 +57,8 @@ export function AdminPanel() {
   const mesKey = format(currentMonth, "yyyy-MM")
 
   useEffect(() => {
+    setFilterUser("todos")
+    setFilterAccion("todas")
     setIsLoading(true)
     get(ref(db, `logs/${mesKey}`))
       .then((snap) => {

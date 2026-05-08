@@ -86,7 +86,7 @@ export function EditarTurnoModal({
     setIsSaving(true)
     try {
       const data: Record<string, unknown> = { hora, estado }
-      if (notas.trim()) data.notas = notas.trim()
+      data.notas = notas.trim() || null
       if (estado === "ausente") data.justificado = justificado ?? false
       else data.justificado = null  // clear when not ausente
       await update(ref(db, `turnos/${fecha}/${turno.id}`), data)

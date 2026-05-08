@@ -19,6 +19,9 @@ export function parseTratamientosRaw(val: unknown): Tratamiento[] {
       sesionesAutorizadas: Number(t.sesionesAutorizadas ?? 0),
       fechaCreacion: String(t.fechaCreacion ?? ""),
       sesiones,
+      ...(t.tratamiento != null && { tratamiento: String(t.tratamiento) }),
+      ...(t.diagnostico != null && { diagnostico: String(t.diagnostico) }),
+      ...(t.doctor != null && { doctor: String(t.doctor) }),
     }
   })
 }

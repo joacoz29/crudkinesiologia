@@ -164,7 +164,8 @@ export default function Page() {
   const handleSaveEdit = async (updatedPatient: Patient) => {
     try {
       const patientRef = ref(db, `pacientes/${updatedPatient.id}`)
-      await update(patientRef, updatedPatient)
+      const cleanPatient = JSON.parse(JSON.stringify(updatedPatient))
+      await update(patientRef, cleanPatient)
       toast.success('Paciente actualizado correctamente')
       fetchPatients(searchTerm, currentPage)
       setEditModalOpen(false)

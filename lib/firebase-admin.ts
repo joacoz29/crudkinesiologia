@@ -1,8 +1,10 @@
 import { createPrivateKey } from 'crypto'
 import { initializeApp, getApps, cert, ServiceAccount } from 'firebase-admin/app'
 import { getDatabase, Database } from 'firebase-admin/database'
+import { getAuth, Auth } from 'firebase-admin/auth'
 
 let db: Database | null = null
+let adminAuth: Auth | null = null
 let initError: string | null = null
 
 const projectId = process.env.FIREBASE_PROJECT_ID
@@ -53,9 +55,11 @@ if (projectId) {
         databaseURL,
       })
       db = getDatabase(app)
+      adminAuth = getAuth(app)
       console.log('[firebase-admin] initialized successfully')
     } else {
       db = getDatabase(apps[0])
+      adminAuth = getAuth(apps[0])
       console.log('[firebase-admin] reusing existing app')
     }
   } catch (error) {
@@ -66,4 +70,4 @@ if (projectId) {
   console.error('[firebase-admin] FIREBASE_PROJECT_ID not set — skipping initialization')
 }
 
-export { db, initError }
+export { db, adminAuth, initError }

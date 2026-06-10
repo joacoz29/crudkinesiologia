@@ -22,6 +22,7 @@ const userNameMap: Record<string, string> = {
   'gonzalogonzalez@kinesiologia.com.ar': 'Gonzalo González',
   'anatullio@kinesiologia.com.ar': 'Ana Tullio',
   'alanmartineztullio@kinesiologia.com.ar': 'Alan Martinez Tullio',
+  'sofianussli@kinesiologia.com.ar': 'Sofia Nussli',
 }
 
 export function getUserDisplayName(user: User | null): string {

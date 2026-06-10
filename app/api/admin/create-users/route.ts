@@ -11,6 +11,7 @@ const USERS_TO_CREATE = [
   { email: 'gonzalogonzalez@kinesiologia.com.ar', password: 'gonzalogonzalez', displayName: 'Gonzalo González' },
   { email: 'anatullio@kinesiologia.com.ar', password: 'anapatriciatullio', displayName: 'Ana Tullio' },
   { email: 'alanmartineztullio@kinesiologia.com.ar', password: 'alangabrielmartineztullio', displayName: 'Alan Martinez Tullio' },
+  { email: 'sofianussli@kinesiologia.com.ar', password: 'sofianussli', displayName: 'Sofia Nussli' },
 ]
 
 export async function GET() {

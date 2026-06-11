@@ -16,10 +16,15 @@
     },
     "logs": {
       "$mes": {
-        ".read": "auth != null && (auth.token.email === 'joaco@joaco.com.ar' || auth.token.email === 'anatullio@kinesiologia.com.ar' || auth.token.email === 'alanmartineztullio@kinesiologia.com.ar')",
+        ".read": "auth != null && (auth.token.email === 'joaco@joaco.com.ar' || auth.token.email === 'joaco@gmail.com' || auth.token.email === 'anatullio@kinesiologia.com.ar' || auth.token.email === 'kinesiologiaintegral@gmail.com' || auth.token.email === 'alanmartineztullio@kinesiologia.com.ar')",
         "$logId": {
           ".write": "auth != null && !data.exists()"
         }
+      }
+    },
+    "opiniones": {
+      "$mes": {
+        ".read": "auth != null && (auth.token.email === 'joaco@joaco.com.ar' || auth.token.email === 'joaco@gmail.com' || auth.token.email === 'anatullio@kinesiologia.com.ar' || auth.token.email === 'kinesiologiaintegral@gmail.com' || auth.token.email === 'alanmartineztullio@kinesiologia.com.ar')"
       }
     }
   }

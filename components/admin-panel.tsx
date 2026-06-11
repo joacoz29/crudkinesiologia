@@ -5,7 +5,7 @@ import { ref, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { format, parseISO, isValid, addMonths, subMonths } from "date-fns"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Shield } from "lucide-react"
+import { ChevronLeft, ChevronRight, Shield, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -23,6 +23,29 @@ interface LogEntry {
   detalle: string
   entidadId?: string
   cambios?: Record<string, LogCambio>
+}
+
+interface Opinion {
+  id: string
+  patientId: string
+  nombre: string
+  rating: number
+  comentario?: string
+  atendidoPor?: string
+  fecha: string
+}
+
+function Estrellas({ rating, size = "h-4 w-4" }: { rating: number; size?: string }) {
+  return (
+    <span className="inline-flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={`${size} ${n <= rating ? "fill-amber-400 text-amber-400" : "text-slate-200"}`}
+        />
+      ))}
+    </span>
+  )
 }
 
 const ACCION_LABEL: Record<string, string> = {
@@ -60,6 +83,9 @@ export function AdminPanel() {
   const [filterUser, setFilterUser] = useState("todos")
   const [filterAccion, setFilterAccion] = useState("todas")
   const [searchPaciente, setSearchPaciente] = useState("")
+  const [vista, setVista] = useState<"registro" | "opiniones">("registro")
+  const [opiniones, setOpiniones] = useState<Opinion[]>([])
+  const [isLoadingOpiniones, setIsLoadingOpiniones] = useState(false)
 
   const mesKey = format(currentMonth, "yyyy-MM")
 
@@ -78,6 +104,37 @@ export function AdminPanel() {
       .catch(() => setLogs([]))
       .finally(() => setIsLoading(false))
   }, [mesKey])
+
+  useEffect(() => {
+    if (vista !== "opiniones") return
+    setIsLoadingOpiniones(true)
+    get(ref(db, `opiniones/${mesKey}`))
+      .then((snap) => {
+        if (!snap.exists()) { setOpiniones([]); return }
+        const entries: Opinion[] = Object.entries(snap.val() as Record<string, Omit<Opinion, "id">>)
+          .map(([id, val]) => ({ id, ...val }))
+          .sort((a, b) => b.fecha.localeCompare(a.fecha))
+        setOpiniones(entries)
+      })
+      .catch(() => setOpiniones([]))
+      .finally(() => setIsLoadingOpiniones(false))
+  }, [mesKey, vista])
+
+  const promedio = opiniones.length
+    ? opiniones.reduce((sum, o) => sum + o.rating, 0) / opiniones.length
+    : 0
+  const distribucion = [5, 4, 3, 2, 1].map((n) => ({
+    estrellas: n,
+    count: opiniones.filter((o) => o.rating === n).length,
+  }))
+  const porKine = Array.from(
+    opiniones.reduce((map, o) => {
+      if (!o.atendidoPor) return map
+      const cur = map.get(o.atendidoPor) ?? { sum: 0, count: 0 }
+      map.set(o.atendidoPor, { sum: cur.sum + o.rating, count: cur.count + 1 })
+      return map
+    }, new Map<string, { sum: number; count: number }>())
+  ).sort((a, b) => b[1].count - a[1].count)
 
   // Identidad por email (único e inmutable); el displayName puede cambiar o colapsar
   // entre usuarios sin mapear. Logs viejos sin email caen al displayName como clave.
@@ -123,8 +180,28 @@ export function AdminPanel() {
         <h2 className="text-2xl font-semibold text-[#001633]">Panel de administración</h2>
       </div>
 
+      {/* Vista: registro de actividad / opiniones */}
+      <div className="flex gap-2">
+        {([
+          ["registro", "Registro de actividad"],
+          ["opiniones", "Opiniones"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setVista(value)}
+            className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+              vista === value
+                ? "bg-[#001633] text-white border-[#001633]"
+                : "border-gray-200 text-gray-600 hover:border-[#001633]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Resumen del mes */}
-      {!isLoading && resumenUsuarios.length > 0 && (
+      {vista === "registro" && !isLoading && resumenUsuarios.length > 0 && (
         <div className="flex flex-wrap gap-3">
           {resumenUsuarios.map(({ key, nombre, count }) => (
             <div key={key} title={key} className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
@@ -152,6 +229,7 @@ export function AdminPanel() {
           </Button>
         </div>
 
+        {vista === "registro" && (
         <div className="flex gap-2 flex-wrap items-center">
           <Input
             placeholder="Buscar paciente..."
@@ -179,8 +257,85 @@ export function AdminPanel() {
             ))}
           </select>
         </div>
+        )}
       </div>
 
+      {vista === "opiniones" ? (
+        <>
+          {isLoadingOpiniones ? (
+            <p className="text-xs text-slate-400">Cargando...</p>
+          ) : opiniones.length === 0 ? (
+            <div className="rounded-xl bg-white shadow-sm px-4 py-16 text-center text-slate-400">
+              Sin opiniones para este período
+            </div>
+          ) : (
+            <>
+              {/* Resumen */}
+              <div className="flex flex-wrap gap-3">
+                <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm">
+                  <p className="text-2xl font-semibold text-slate-800 flex items-center gap-2">
+                    {promedio.toFixed(1)}
+                    <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                  </p>
+                  <p className="text-xs text-slate-400">{opiniones.length} opinión{opiniones.length !== 1 ? "es" : ""} este mes</p>
+                </div>
+                <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm">
+                  {distribucion.map(({ estrellas, count }) => (
+                    <div key={estrellas} className="flex items-center gap-2 text-xs">
+                      <span className="w-3 text-slate-500 tabular-nums">{estrellas}</span>
+                      <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                      <div className="w-28 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-400 rounded-full"
+                          style={{ width: `${opiniones.length ? (count / opiniones.length) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span className="text-slate-400 tabular-nums">{count}</span>
+                    </div>
+                  ))}
+                </div>
+                {porKine.map(([kine, { sum, count }]) => (
+                  <div key={kine} className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm">
+                    <p className="text-sm font-semibold text-slate-800">{kine}</p>
+                    <p className="text-xs text-slate-400 flex items-center gap-1">
+                      {(sum / count).toFixed(1)}
+                      <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                      · {count} opinión{count !== 1 ? "es" : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Listado */}
+              <div className="rounded-xl overflow-hidden bg-white shadow-sm divide-y divide-slate-100">
+                {opiniones.map((o) => {
+                  const d = parseISO(o.fecha)
+                  return (
+                    <div key={o.id} className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <Estrellas rating={o.rating} />
+                        <span className="text-sm font-medium text-slate-800">{o.nombre}</span>
+                        {o.atendidoPor && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
+                            Atendió: {o.atendidoPor}
+                          </span>
+                        )}
+                        <span className="text-xs text-slate-400 ml-auto tabular-nums">
+                          {isValid(d) ? format(d, "dd/MM/yyyy HH:mm") : o.fecha}
+                        </span>
+                      </div>
+                      {o.comentario && (
+                        <p className="text-sm text-slate-600 mt-1.5">{o.comentario}</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </>
+      ) : (
+      <>
       <p className="text-xs text-slate-400">
         {isLoading ? "Cargando..." : `${filtered.length} registro${filtered.length !== 1 ? "s" : ""}${logs.length !== filtered.length ? ` (de ${logs.length})` : ""}`}
       </p>
@@ -248,6 +403,8 @@ export function AdminPanel() {
           </tbody>
         </table>
       </div>
+      </>
+      )}
     </div>
   )
 }

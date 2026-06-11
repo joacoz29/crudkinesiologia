@@ -79,11 +79,22 @@ export function AdminPanel() {
       .finally(() => setIsLoading(false))
   }, [mesKey])
 
-  const usuarios = ["todos", ...Array.from(new Set(logs.map((l) => l.displayName)))]
+  // Identidad por email (único e inmutable); el displayName puede cambiar o colapsar
+  // entre usuarios sin mapear. Logs viejos sin email caen al displayName como clave.
+  const userKey = (l: LogEntry) => l.email || l.displayName
+
+  // email → displayName más reciente (logs ya ordenados desc por timestamp)
+  const usuariosMap = new Map<string, string>()
+  for (const l of logs) {
+    const key = userKey(l)
+    if (!usuariosMap.has(key)) usuariosMap.set(key, l.displayName)
+  }
+  const usuarios = Array.from(usuariosMap.entries()) // [email, nombre]
+
   const acciones = ["todas", ...Array.from(new Set(logs.map((l) => l.accion)))]
 
   const filtered = logs.filter((l) => {
-    if (filterUser !== "todos" && l.displayName !== filterUser) return false
+    if (filterUser !== "todos" && userKey(l) !== filterUser) return false
     if (filterAccion !== "todas" && l.accion !== filterAccion) return false
     if (searchPaciente.trim()) {
       const q = searchPaciente.toLowerCase()
@@ -95,10 +106,13 @@ export function AdminPanel() {
   // Resumen por usuario (sobre logs sin filtrar del mes)
   const resumenUsuarios = Array.from(
     logs.reduce((map, l) => {
-      map.set(l.displayName, (map.get(l.displayName) ?? 0) + 1)
+      const key = userKey(l)
+      map.set(key, (map.get(key) ?? 0) + 1)
       return map
     }, new Map<string, number>())
-  ).sort((a, b) => b[1] - a[1])
+  )
+    .map(([key, count]) => ({ key, nombre: usuariosMap.get(key) ?? key, count }))
+    .sort((a, b) => b.count - a.count)
 
   const mesLabel = format(currentMonth, "MMMM yyyy", { locale: es })
 
@@ -112,8 +126,8 @@ export function AdminPanel() {
       {/* Resumen del mes */}
       {!isLoading && resumenUsuarios.length > 0 && (
         <div className="flex flex-wrap gap-3">
-          {resumenUsuarios.map(([nombre, count]) => (
-            <div key={nombre} className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
+          {resumenUsuarios.map(({ key, nombre, count }) => (
+            <div key={key} title={key} className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
               <div className="h-8 w-8 rounded-full bg-[#001633] flex items-center justify-center text-white text-xs font-semibold shrink-0">
                 {nombre.charAt(0).toUpperCase()}
               </div>
@@ -150,8 +164,9 @@ export function AdminPanel() {
             onChange={(e) => setFilterUser(e.target.value)}
             className="text-sm border border-slate-200 rounded-md px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-[#001633]"
           >
-            {usuarios.map((u) => (
-              <option key={u} value={u}>{u === "todos" ? "Todos los usuarios" : u}</option>
+            <option value="todos">Todos los usuarios</option>
+            {usuarios.map(([email, nombre]) => (
+              <option key={email} value={email}>{nombre}</option>
             ))}
           </select>
           <select
@@ -205,7 +220,7 @@ export function AdminPanel() {
                 return (
                   <tr key={log.id} className={`transition-colors ${esCritico ? "bg-red-50/40 hover:bg-red-50/70" : "hover:bg-slate-50/70"}`}>
                     <td className="px-4 py-3 text-slate-400 whitespace-nowrap tabular-nums align-top">{fechaLabel}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-900 align-top">{log.displayName}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-900 align-top" title={log.email}>{log.displayName}</td>
                     <td className="px-4 py-3 align-top">
                       <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${accionBadgeClass(log.accion)}`}>
                         {ACCION_LABEL[log.accion] ?? log.accion}

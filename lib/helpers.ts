@@ -312,7 +312,8 @@ export async function writeLog(entry: {
 }): Promise<void> {
   const user = auth.currentUser
   if (!user) return
-  const mes = new Date().toISOString().slice(0, 7)
+  // Mes local de Argentina, no UTC (toISOString cae en el mes siguiente después de las 21:00 del último día)
+  const mes = format(new Date(), "yyyy-MM", { timeZone: TZ })
   try {
     await push(ref(db, `logs/${mes}`), {
       timestamp: new Date().toISOString(),

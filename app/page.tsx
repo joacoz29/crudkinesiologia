@@ -341,9 +341,11 @@ export default function Page() {
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-[#001633] transition-colors rounded-lg" onClick={() => handleEdit(patient)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 transition-colors rounded-lg" onClick={() => handleDelete(patient)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {isAdminUser && (
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 transition-colors rounded-lg" onClick={() => handleDelete(patient)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))
@@ -455,14 +457,16 @@ export default function Page() {
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 transition-colors rounded-lg"
-                                    onClick={() => handleDelete(patient)}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
+                                  {isAdminUser && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 transition-colors rounded-lg"
+                                      onClick={() => handleDelete(patient)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>

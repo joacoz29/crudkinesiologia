@@ -22,6 +22,9 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# credenciales generadas localmente (scripts/rotate-passwords.mjs)
+claves-nuevas.txt
+
 # vercel
 .vercel
 

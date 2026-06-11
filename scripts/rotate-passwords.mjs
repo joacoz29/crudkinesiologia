@@ -10,8 +10,11 @@
 // Nota: al rotar, Firebase revoca las sesiones activas — cada usuaria deberá
 // volver a iniciar sesión con su contraseña nueva.
 
-import { readFileSync, existsSync } from "node:fs"
+import { readFileSync, writeFileSync, existsSync } from "node:fs"
 import { randomBytes } from "node:crypto"
+
+// Archivo local con las claves nuevas (gitignoreado — borrarlo después de repartirlas)
+const ARCHIVO_SALIDA = "claves-nuevas.txt"
 import { initializeApp, cert } from "firebase-admin/app"
 import { getAuth } from "firebase-admin/auth"
 
@@ -57,6 +60,12 @@ function generarPassword() {
 
 console.log("Rotando contraseñas...\n")
 let errores = 0
+const lineas = [
+  "CONTRASEÑAS NUEVAS — Kinesiología Integral",
+  `Rotadas el ${new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}`,
+  "BORRAR ESTE ARCHIVO después de repartirlas.",
+  "",
+]
 
 for (const email of EMAILS_A_ROTAR) {
   try {
@@ -64,6 +73,7 @@ for (const email of EMAILS_A_ROTAR) {
     const password = generarPassword()
     await auth.updateUser(user.uid, { password })
     console.log(`  ${email.padEnd(45)} → ${password}`)
+    lineas.push(`${email.padEnd(45)} ${password}`)
   } catch (err) {
     errores++
     const code = err?.code ?? ""
@@ -75,4 +85,5 @@ for (const email of EMAILS_A_ROTAR) {
   }
 }
 
-console.log(`\nListo${errores ? ` (${errores} con error/salteados)` : ""}. Guardá estas contraseñas y repartilas — no se pueden volver a ver.`)
+writeFileSync(ARCHIVO_SALIDA, lineas.join("\r\n") + "\r\n", "utf8")
+console.log(`\nListo${errores ? ` (${errores} con error/salteados)` : ""}. Claves guardadas en ${ARCHIVO_SALIDA} — repartilas y borrá el archivo.`)

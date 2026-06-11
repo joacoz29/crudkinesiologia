@@ -73,11 +73,11 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isCopying, setIsCopying] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [lastSavedData, setLastSavedData] = useState("")
+  const [lastSavedData, setLastSavedData] = useState("[]")
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
   const [confirmCopyOpen, setConfirmCopyOpen] = useState(false)
-  const skipNextSave = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingSave = useRef<{ dateKey: string; entradas: EntradaLibroDiario[] } | null>(null)
 
   const isToday = toLocalDateKey(fecha) === toLocalDateKey(new Date())
 
@@ -94,22 +94,27 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const watchEntradas = useWatch({ control, name: "entradas" })
 
   const saveEntries = useCallback(
-    async (entries: EntradaLibroDiario[]) => {
+    async (entries: EntradaLibroDiario[], dateKey: string) => {
       setIsSaving(true)
       setError(null)
       try {
-        const dateKey = toLocalDateKey(fecha)
-        const newTotalHaber = entries.reduce((sum, e) => sum + (Number(e?.haber) || 0), 0)
-        const newTotalDebe = entries.reduce((sum, e) => sum + (Number(e?.debe) || 0), 0)
+        // Un campo numérico vacío llega como NaN (valueAsNumber) y Firebase rechaza NaN
+        const sanitized = entries.map((e) => ({
+          ...e,
+          debe: Number(e?.debe) || 0,
+          haber: Number(e?.haber) || 0,
+        }))
+        const newTotalHaber = sanitized.reduce((sum, e) => sum + e.haber, 0)
+        const newTotalDebe = sanitized.reduce((sum, e) => sum + e.debe, 0)
+
+        setLastSavedData(JSON.stringify(entries))
 
         await set(ref(db, `libroDiario/${dateKey}`), {
-          fecha: fecha.toISOString(),
-          entradas: entries,
+          fecha: dateKey,
+          entradas: sanitized,
           totalHaber: newTotalHaber,
           totalDebe: newTotalDebe,
         })
-
-        setLastSavedData(JSON.stringify(entries))
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Error desconocido'
         setError(`Error al guardar: ${msg}`)
@@ -118,8 +123,20 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         setIsSaving(false)
       }
     },
-    [fecha],
+    [],
   )
+
+  const flushPendingSave = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    if (pendingSave.current) {
+      const { dateKey, entradas } = pendingSave.current
+      pendingSave.current = null
+      saveEntries(entradas, dateKey)
+    }
+  }, [saveEntries])
 
   // Totales en tiempo real
   useEffect(() => {
@@ -134,29 +151,45 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
 
   // Auto-save con debounce de 800ms
   useEffect(() => {
-    if (skipNextSave.current) {
-      skipNextSave.current = false
+    if (!watchEntradas || !Array.isArray(watchEntradas)) return
+
+    const dateKey = toLocalDateKey(fecha)
+
+    // Cambió la fecha con una edición pendiente: guardarla ya en SU fecha,
+    // antes de que el fetch reemplace el formulario
+    if (pendingSave.current && pendingSave.current.dateKey !== dateKey) {
+      flushPendingSave()
       return
     }
-    if (!watchEntradas || !Array.isArray(watchEntradas)) return
 
     const currentData = JSON.stringify(watchEntradas)
     if (currentData === lastSavedData) return
 
+    pendingSave.current = { dateKey, entradas: watchEntradas as EntradaLibroDiario[] }
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      saveEntries(watchEntradas as EntradaLibroDiario[])
+      saveTimer.current = null
+      const pending = pendingSave.current
+      pendingSave.current = null
+      if (pending) saveEntries(pending.entradas, pending.dateKey)
     }, 800)
+  }, [watchEntradas, lastSavedData, fecha, saveEntries, flushPendingSave])
 
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-    }
-  }, [watchEntradas, lastSavedData, saveEntries])
+  // Al desmontar (cambio de pestaña), no perder la edición pendiente
+  useEffect(() => {
+    return () => flushPendingSave()
+  }, [flushPendingSave])
 
   const fetchEntriesForDate = useCallback(
     async (date: Date) => {
       setIsLoading(true)
       setError(null)
+      // El fetch reemplaza el formulario: descartar cualquier guardado pendiente
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current)
+        saveTimer.current = null
+      }
+      pendingSave.current = null
       try {
         const snapshot = await get(ref(db, `libroDiario/${toLocalDateKey(date)}`))
 
@@ -164,6 +197,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           const data = snapshot.val()
           const normalized = (data.entradas || []).map((e: EntradaLibroDiario) => ({
             ...e,
+            id: e.id || crypto.randomUUID(),
             tipo: (e.tipo as TipoEntrada) ?? "Paciente",
           }))
           setValue("entradas", normalized)
@@ -174,9 +208,8 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           setValue("entradas", [])
           setTotalHaber(0)
           setTotalDebe(0)
-          setLastSavedData("")
+          setLastSavedData("[]")
         }
-        skipNextSave.current = true
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Error desconocido'
         setError(`Error al cargar: ${msg}`)

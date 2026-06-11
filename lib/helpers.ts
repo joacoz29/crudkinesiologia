@@ -1,7 +1,10 @@
 import { ref, set, get, push, remove, update, query, orderByKey, startAt, endAt } from "firebase/database"
+import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
 import { Tratamiento, Turno, TurnoConFecha } from "@/types"
 import { getUserDisplayName } from "@/lib/auth-helper"
+
+const TZ = "America/Argentina/Buenos_Aires"
 
 export function parseTratamientosRaw(val: unknown): Tratamiento[] {
   if (!val) return []
@@ -28,6 +31,8 @@ export function parseTratamientosRaw(val: unknown): Tratamiento[] {
 }
 
 interface LibroDiarioEntry {
+  id?: string
+  tipo?: "Paciente" | "Gasto" | "Ingreso"
   nombreApellido: string
   cobertura: "Particular" | "Obra Social"
   obraSocial: string
@@ -40,36 +45,38 @@ export async function addToLibroDiario(entry: {
   obraSocial: string
   fecha?: string
 }) {
-  const today = entry.fecha ?? new Date().toISOString().split('T')[0]
-  const libroDiarioRef = ref(db, `libroDiario/${today}`)
-  
+  // Fecha local de Argentina, no UTC (toISOString cae en "mañana" después de las 21:00)
+  const dateKey = entry.fecha ?? format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
+  const libroDiarioRef = ref(db, `libroDiario/${dateKey}`)
+
   // Obtener entradas existentes
   const snapshot = await get(libroDiarioRef)
   const existingData = snapshot.exists() ? snapshot.val() : { entradas: [] }
-  
-  // Crear nueva entrada
-  const newEntry: LibroDiarioEntry = {
-    nombreApellido: entry.nombreApellido,
-    cobertura: entry.obraSocial === "-" ? "Particular" : "Obra Social",
-    obraSocial: entry.obraSocial,
-    debe: 0,
-    haber: 0,
-  }
-  
+
   // Skip if this patient already has an entry for this date
   const alreadyExists = (existingData.entradas || []).some(
     (e: LibroDiarioEntry) => e.nombreApellido === entry.nombreApellido
   )
   if (alreadyExists) return
 
+  const newEntry: LibroDiarioEntry = {
+    id: crypto.randomUUID(),
+    tipo: "Paciente",
+    nombreApellido: entry.nombreApellido,
+    cobertura: entry.obraSocial === "-" ? "Particular" : "Obra Social",
+    obraSocial: entry.obraSocial,
+    debe: 0,
+    haber: 0,
+  }
+
   // Agregar nueva entrada al array existente
   const updatedEntradas = [...(existingData.entradas || []), newEntry]
-  
-  const totalHaber = updatedEntradas.reduce((sum, entrada) => sum + (entrada.haber || 0), 0)
-  const totalDebe = updatedEntradas.reduce((sum, entrada) => sum + (entrada.debe || 0), 0)
+
+  const totalHaber = updatedEntradas.reduce((sum, entrada) => sum + (Number(entrada.haber) || 0), 0)
+  const totalDebe = updatedEntradas.reduce((sum, entrada) => sum + (Number(entrada.debe) || 0), 0)
 
   await set(libroDiarioRef, {
-    fecha: new Date().toISOString(),
+    fecha: existingData.fecha ?? dateKey,
     entradas: updatedEntradas,
     totalHaber,
     totalDebe,

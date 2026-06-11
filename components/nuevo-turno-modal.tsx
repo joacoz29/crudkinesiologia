@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { writeLog, parseTratamientosRaw } from "@/lib/helpers"
+import { getAuthHeaders } from "@/lib/auth-helper"
 import { Patient, Turno } from "@/types"
 import { toast } from "sonner"
 import { AlertTriangle } from "lucide-react"
@@ -165,7 +166,9 @@ export function NuevoTurnoModal({
     searchAbortRef.current = setTimeout(async () => {
       const seq = ++searchSeqRef.current
       try {
-        const res = await fetch(`/api/patients?search=${encodeURIComponent(search.trim())}&limit=10`)
+        const res = await fetch(`/api/patients?search=${encodeURIComponent(search.trim())}&limit=10`, {
+          headers: await getAuthHeaders(),
+        })
         if (!res.ok) return
         const data = await res.json()
         // Solo aplicar si sigue siendo la búsqueda más reciente (evita pisar con respuestas viejas)

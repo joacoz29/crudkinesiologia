@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db, initError } from '@/lib/firebase-admin'
+import { db, adminAuth, initError } from '@/lib/firebase-admin'
 import { Patient } from "@/types"
 
 // Ajustar a 5 segundos máximo para plan Hobby de Vercel
@@ -18,6 +18,22 @@ export async function GET(request: Request) {
         missing: missing.length ? missing : [],
         initError: initError ?? 'no error captured — check env vars',
       }, { status: 500 })
+    }
+
+    // Solo usuarios autenticados: el endpoint expone datos médicos.
+    // TODO antes de crear cuentas de pacientes (fase 1 QR): exigir además email del staff.
+    if (!adminAuth) {
+      return NextResponse.json({ error: 'Auth not initialized' }, { status: 500 })
+    }
+    const authHeader = request.headers.get('authorization') ?? ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    if (!token) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    }
+    try {
+      await adminAuth.verifyIdToken(token)
+    } catch {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)

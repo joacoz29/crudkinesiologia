@@ -17,7 +17,7 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import debounce from "lodash/debounce"
 import { Patient } from "@/types"
-import { getUserDisplayName, isAdmin } from "@/lib/auth-helper"
+import { getUserDisplayName, isAdmin, getAuthHeaders } from "@/lib/auth-helper"
 import { AdminPanel } from "@/components/admin-panel"
 import { toast } from "sonner"
 
@@ -87,7 +87,8 @@ export default function Page() {
     while (attempt < maxRetries) {
       try {
         const response = await fetch(
-          `/api/patients?search=${encodeURIComponent(search)}&page=${page}&limit=${patientsPerPage}`
+          `/api/patients?search=${encodeURIComponent(search)}&page=${page}&limit=${patientsPerPage}`,
+          { headers: await getAuthHeaders() }
         )
 
         if (!response.ok) {

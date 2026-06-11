@@ -3,11 +3,40 @@ import { auth } from '@/lib/firebase'
 
 export const ADMIN_EMAIL = 'joaco@joaco.com.ar'
 
-const ADMIN_EMAILS = new Set([
-  ADMIN_EMAIL,
-  'anatullio@kinesiologia.com.ar',
-  'alanmartineztullio@kinesiologia.com.ar',
-])
+export type UserRole = 'admin' | 'kinesiologo' | 'asistente'
+
+// Roles por cuenta. Admin ve todo; asistentes ven libro diario; kinesiólogos no.
+// Cuentas no mapeadas: sin rol → acceso mínimo (pacientes y calendario).
+const ROLE_MAP: Record<string, UserRole> = {
+  // Admins (Ana es la dueña; Joaco y Alan administran)
+  [ADMIN_EMAIL]: 'admin',
+  'joaco@gmail.com': 'admin',
+  'anatullio@kinesiologia.com.ar': 'admin',
+  'kinesiologiaintegral@gmail.com': 'admin',
+  'alanmartineztullio@kinesiologia.com.ar': 'admin',
+  // Kinesiólogos
+  'gonzalogonzalez@kinesiologia.com.ar': 'kinesiologo',
+  'camilabaldi@kinesiologia.com.ar': 'kinesiologo',
+  // Asistentes
+  'karina@kinesiologia.com.ar': 'asistente',
+  'karinadiaz@kinesiologia.com.ar': 'asistente',
+  'sofia@kinesiologia.com.ar': 'asistente',
+  'sofiamuslo@kinesiologia.com.ar': 'asistente',
+  'sofianussli@kinesiologia.com.ar': 'asistente',
+  'eugenia@kinesiologia.com': 'asistente',
+  'eugeniafunk@kinesiologia.com': 'asistente',
+}
+
+export function getUserRole(user: User | null): UserRole | null {
+  if (!user?.email) return null
+  return ROLE_MAP[user.email] ?? null
+}
+
+// Libro diario: solo administración (admins) y asistentes — los kinesiólogos no manejan la caja
+export function canAccessLibroDiario(user: User | null): boolean {
+  const rol = getUserRole(user)
+  return rol === 'admin' || rol === 'asistente'
+}
 
 const userNameMap: Record<string, string> = {
   'kinesiologiaintegral@gmail.com': 'Ana la Jefa',
@@ -35,7 +64,7 @@ export function getUserDisplayName(user: User | null): string {
 }
 
 export function isAdmin(user: User | null): boolean {
-  return !!user?.email && ADMIN_EMAILS.has(user.email)
+  return getUserRole(user) === 'admin'
 }
 
 // Header de autorización para las API routes (verificado server-side con verifyIdToken)

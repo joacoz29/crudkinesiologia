@@ -17,7 +17,7 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import debounce from "lodash/debounce"
 import { Patient } from "@/types"
-import { getUserDisplayName, isAdmin, getAuthHeaders } from "@/lib/auth-helper"
+import { getUserDisplayName, isAdmin, canAccessLibroDiario, getAuthHeaders } from "@/lib/auth-helper"
 import { AdminPanel } from "@/components/admin-panel"
 import { toast } from "sonner"
 
@@ -66,6 +66,7 @@ export default function Page() {
   const [totalPages, setTotalPages] = useState(1)
   const [currentUser, setCurrentUser] = useState<string | null>(null)
   const [isAdminUser, setIsAdminUser] = useState(false)
+  const [canSeeLibroDiario, setCanSeeLibroDiario] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
   const [activeTab, setActiveTab] = useState("pacientes")
@@ -121,6 +122,7 @@ export default function Page() {
         const displayName = getUserDisplayName(user)
         setCurrentUser(displayName)
         setIsAdminUser(isAdmin(user))
+        setCanSeeLibroDiario(canAccessLibroDiario(user))
         fetchPatients("", 1)
       } else {
         router.push("/login")
@@ -235,7 +237,7 @@ export default function Page() {
           <nav className="flex gap-1 border-b border-white/20">
             {([
               "pacientes",
-              "libroDiario",
+              ...(canSeeLibroDiario ? ["libroDiario"] : []),
               "calendario",
               ...(isAdminUser ? ["admin"] : []),
             ] as const).map((tab) => {
@@ -540,11 +542,11 @@ export default function Page() {
             />
           </>
         ) : activeTab === "libroDiario" ? (
-          <LibroDiario updateTrigger={libroDiarioUpdateTrigger} />
+          canSeeLibroDiario ? <LibroDiario updateTrigger={libroDiarioUpdateTrigger} /> : null
         ) : activeTab === "calendario" ? (
           <Calendario refreshTrigger={calendarioRefreshTrigger} />
         ) : (
-          <AdminPanel />
+          isAdminUser ? <AdminPanel /> : null
         )}
       </main>
     </div>

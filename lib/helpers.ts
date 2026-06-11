@@ -40,6 +40,44 @@ interface LibroDiarioEntry {
   haber: number
 }
 
+// Lee el libro diario del día y devuelve el nodo completo con el paciente agregado,
+// o null si el paciente ya tiene entrada ese día. `prev` es el nodo anterior (para deshacer).
+async function buildLibroDiarioUpdate(
+  dateKey: string,
+  nombreApellido: string,
+  obraSocial: string
+): Promise<{ node: Record<string, unknown>; prev: Record<string, unknown> | null } | null> {
+  const snapshot = await get(ref(db, `libroDiario/${dateKey}`))
+  const prev = snapshot.exists() ? (snapshot.val() as Record<string, unknown>) : null
+  const entradas = (prev?.entradas as LibroDiarioEntry[] | undefined) ?? []
+
+  // Skip if this patient already has an entry for this date
+  if (entradas.some((e) => e.nombreApellido === nombreApellido)) return null
+
+  const updatedEntradas: LibroDiarioEntry[] = [
+    ...entradas,
+    {
+      id: crypto.randomUUID(),
+      tipo: "Paciente",
+      nombreApellido,
+      cobertura: obraSocial === "-" ? "Particular" : "Obra Social",
+      obraSocial,
+      debe: 0,
+      haber: 0,
+    },
+  ]
+
+  return {
+    node: {
+      fecha: prev?.fecha ?? dateKey,
+      entradas: updatedEntradas,
+      totalHaber: updatedEntradas.reduce((sum, e) => sum + (Number(e.haber) || 0), 0),
+      totalDebe: updatedEntradas.reduce((sum, e) => sum + (Number(e.debe) || 0), 0),
+    },
+    prev,
+  }
+}
+
 export async function addToLibroDiario(entry: {
   nombreApellido: string
   obraSocial: string
@@ -47,50 +85,15 @@ export async function addToLibroDiario(entry: {
 }) {
   // Fecha local de Argentina, no UTC (toISOString cae en "mañana" después de las 21:00)
   const dateKey = entry.fecha ?? format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
-  const libroDiarioRef = ref(db, `libroDiario/${dateKey}`)
-
-  // Obtener entradas existentes
-  const snapshot = await get(libroDiarioRef)
-  const existingData = snapshot.exists() ? snapshot.val() : { entradas: [] }
-
-  // Skip if this patient already has an entry for this date
-  const alreadyExists = (existingData.entradas || []).some(
-    (e: LibroDiarioEntry) => e.nombreApellido === entry.nombreApellido
-  )
-  if (alreadyExists) return
-
-  const newEntry: LibroDiarioEntry = {
-    id: crypto.randomUUID(),
-    tipo: "Paciente",
-    nombreApellido: entry.nombreApellido,
-    cobertura: entry.obraSocial === "-" ? "Particular" : "Obra Social",
-    obraSocial: entry.obraSocial,
-    debe: 0,
-    haber: 0,
-  }
-
-  // Agregar nueva entrada al array existente
-  const updatedEntradas = [...(existingData.entradas || []), newEntry]
-
-  const totalHaber = updatedEntradas.reduce((sum, entrada) => sum + (Number(entrada.haber) || 0), 0)
-  const totalDebe = updatedEntradas.reduce((sum, entrada) => sum + (Number(entrada.debe) || 0), 0)
-
-  await set(libroDiarioRef, {
-    fecha: existingData.fecha ?? dateKey,
-    entradas: updatedEntradas,
-    totalHaber,
-    totalDebe,
-  })
+  const result = await buildLibroDiarioUpdate(dateKey, entry.nombreApellido, entry.obraSocial)
+  if (!result) return
+  await set(ref(db, `libroDiario/${dateKey}`), result.node)
 }
 
-export async function fetchTurnosPorMes(
-  year: number,
-  month: number
+export async function fetchTurnosPorRango(
+  start: string,
+  end: string
 ): Promise<Record<string, Turno[]>> {
-  const pad = (n: number) => String(n).padStart(2, "0")
-  const start = `${year}-${pad(month)}-01`
-  const end = `${year}-${pad(month)}-31`
-
   const turnosQuery = query(
     ref(db, "turnos"),
     orderByKey(),
@@ -178,9 +181,110 @@ export async function deleteTurno(fecha: string, id: string): Promise<void> {
 }
 
 export function getNextSessionNumber(text: string): number {
-  const matches = [...text.matchAll(/(\d+)-/g)]
+  // Solo "N-" seguido de espacio o fin de texto: evita falsos positivos con
+  // teléfonos ("02320-659087") o fechas ("2026-06-10") anotados en el historial
+  const matches = [...text.matchAll(/(\d+)-(?=\s|$)/g)]
   if (matches.length === 0) return 1
   return Math.max(...matches.map((m) => parseInt(m[1], 10))) + 1
+}
+
+export interface ConfirmarAsistenciaResult {
+  alreadyConfirmed: boolean
+  nextNum?: number
+  /** Sesiones restantes del último tratamiento, o null si el paciente no tiene tratamientos */
+  remaining?: number | null
+  /** Payload multi-path para revertir la confirmación con desconfirmarAsistencia */
+  revert?: Record<string, unknown>
+}
+
+// Confirma la asistencia de un turno: registra la sesión en el historial del paciente,
+// la sincroniza al último tratamiento, marca el turno como asistido y lo agrega al
+// libro diario — todo en UNA escritura multi-path (atómica: o se aplica todo o nada).
+export async function confirmarAsistencia(params: {
+  patientId: string
+  turnoId: string
+  fecha: string // yyyy-MM-dd
+  hora: string
+  nombre: string
+  apellido: string
+}): Promise<ConfirmarAsistenciaResult> {
+  const { patientId, turnoId, fecha, hora, nombre, apellido } = params
+
+  // Guard de idempotencia: si otro usuario ya lo confirmó, no duplicar la sesión
+  const turnoSnap = await get(ref(db, `turnos/${fecha}/${turnoId}`))
+  if (!turnoSnap.exists()) throw new Error("TURNO_NO_ENCONTRADO")
+  const estadoPrevio = (turnoSnap.val() as Turno).estado
+  if (estadoPrevio === "asistio") return { alreadyConfirmed: true }
+
+  const snap = await get(ref(db, `pacientes/${patientId}`))
+  if (!snap.exists()) throw new Error("PACIENTE_NO_ENCONTRADO")
+  const raw = snap.val() as Record<string, unknown>
+
+  const rawSesiones = raw.sesiones
+  const sesionesActual =
+    Array.isArray(rawSesiones) ? (rawSesiones as string[]).join(" ")
+    : rawSesiones && typeof rawSesiones === "object"
+    ? Object.values(rawSesiones as Record<string, string>).join(" ")
+    : typeof rawSesiones === "string" ? rawSesiones : ""
+
+  const [year, month, day] = fecha.split("-")
+  const nextNum = getNextSessionNumber(sesionesActual)
+  const newEntry = `${nextNum}- ${day}/${month}/${year} ${hora}`
+  const updatedSesiones = sesionesActual.trim() ? `${sesionesActual.trim()}\n${newEntry}` : newEntry
+
+  const updates: Record<string, unknown> = {
+    [`pacientes/${patientId}/sesiones`]: [updatedSesiones],
+    [`pacientes/${patientId}/ultima_actualizacion`]: {
+      fecha: new Date().toISOString(),
+      usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Calendario",
+    },
+    [`turnos/${fecha}/${turnoId}/estado`]: "asistio",
+  }
+  const revert: Record<string, unknown> = {
+    [`pacientes/${patientId}/sesiones`]: rawSesiones ?? null,
+    [`pacientes/${patientId}/ultima_actualizacion`]: raw.ultima_actualizacion ?? null,
+    [`turnos/${fecha}/${turnoId}/estado`]: estadoPrevio,
+  }
+
+  const tratamientos = parseTratamientosRaw(raw.tratamientos)
+  let remaining: number | null = null
+  if (tratamientos.length > 0) {
+    const latest = tratamientos[tratamientos.length - 1]
+    const sessionEntry = `Sesión ${latest.sesiones.length + 1} — ${day}/${month}/${year} ${hora}`
+    updates[`pacientes/${patientId}/tratamientos`] = tratamientos.map((t, i) =>
+      i === tratamientos.length - 1 ? { ...t, sesiones: [...t.sesiones, sessionEntry] } : t
+    )
+    revert[`pacientes/${patientId}/tratamientos`] = raw.tratamientos ?? null
+    remaining = latest.sesionesAutorizadas - (latest.sesiones.length + 1)
+  }
+
+  const libro = await buildLibroDiarioUpdate(fecha, `${nombre} ${apellido}`, (raw.obraSocial as string) || "-")
+  if (libro) {
+    updates[`libroDiario/${fecha}`] = libro.node
+    revert[`libroDiario/${fecha}`] = libro.prev
+  }
+
+  await update(ref(db), updates)
+
+  await writeLog({
+    accion: "confirmar_asistencia",
+    detalle: `Confirmó asistencia de ${nombre} ${apellido} (${fecha} ${hora})`,
+    entidadId: patientId,
+  })
+
+  return { alreadyConfirmed: false, nextNum, remaining, revert }
+}
+
+export async function desconfirmarAsistencia(
+  revert: Record<string, unknown>,
+  info: { patientId: string; nombre: string; apellido: string; fecha: string; hora: string }
+): Promise<void> {
+  await update(ref(db), revert)
+  await writeLog({
+    accion: "deshacer_asistencia",
+    detalle: `Deshizo la asistencia de ${info.nombre} ${info.apellido} (${info.fecha} ${info.hora})`,
+    entidadId: info.patientId,
+  })
 }
 
 export type LogAccion =
@@ -188,6 +292,7 @@ export type LogAccion =
   | "editar_paciente"
   | "eliminar_paciente"
   | "confirmar_asistencia"
+  | "deshacer_asistencia"
   | "crear_turno"
   | "editar_turno"
   | "eliminar_turno"

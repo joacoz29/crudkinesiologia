@@ -31,11 +31,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { CheckCircle2, Trash2 } from "lucide-react"
-import { ref, update, remove, get } from "firebase/database"
-import { db, auth } from "@/lib/firebase"
+import { ref, update, remove } from "firebase/database"
+import { db } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
-import { addToLibroDiario, parseTratamientosRaw, writeLog, LogCambio, getNextSessionNumber } from "@/lib/helpers"
+import { confirmarAsistencia, desconfirmarAsistencia, writeLog, LogCambio } from "@/lib/helpers"
 
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },
@@ -117,94 +117,72 @@ export function EditarTurnoModal({
     if (!turno.patientId) return
     setIsConfirming(true)
     try {
-      // 1. Fetch current patient data
-      const snap = await get(ref(db, `pacientes/${turno.patientId}`))
-      if (!snap.exists()) {
-        toast.error("No se encontró el paciente en la base de datos")
+      // Usa turno.hora (la guardada), no el campo editable: una hora modificada
+      // sin guardar no debe registrarse en el historial
+      const res = await confirmarAsistencia({
+        patientId: turno.patientId,
+        turnoId: turno.id,
+        fecha,
+        hora: turno.hora,
+        nombre: turno.nombre,
+        apellido: turno.apellido,
+      })
+
+      if (res.alreadyConfirmed) {
+        toast.info("Este turno ya estaba confirmado")
+        onSaved()
+        onOpenChange(false)
         return
       }
 
-      const raw = snap.val() as Record<string, unknown>
-      const rawSesiones = raw.sesiones
-      const sesionesActual =
-        Array.isArray(rawSesiones)
-          ? (rawSesiones as string[]).join(" ")
-          : rawSesiones && typeof rawSesiones === "object"
-          ? Object.values(rawSesiones as Record<string, string>).join(" ")
-          : typeof rawSesiones === "string"
-          ? rawSesiones
-          : ""
-
-      // 2. Build new session entry using turno's date and time
-      const [year, month, day] = fecha.split("-")
-      const nextNum = getNextSessionNumber(sesionesActual)
-      const newEntry = `${nextNum}- ${day}/${month}/${year} ${hora}`
-      const updatedSesiones = sesionesActual.trim()
-        ? `${sesionesActual.trim()}\n${newEntry}`
-        : newEntry
-
-      // 3. Sync to the latest tratamiento (if any)
-      const tratamientos = parseTratamientosRaw(raw.tratamientos)
-      const updatePayload: Record<string, unknown> = {
-        sesiones: [updatedSesiones],
-        ultima_actualizacion: {
-          fecha: new Date().toISOString(),
-          usuario:
-            auth.currentUser?.displayName ||
-            auth.currentUser?.email ||
-            "Calendario",
+      const revert = res.revert!
+      toast.success(`Sesión ${res.nextNum} registrada para ${turno.nombre} ${turno.apellido}`, {
+        duration: 8000,
+        action: {
+          label: "Deshacer",
+          onClick: async () => {
+            try {
+              await desconfirmarAsistencia(revert, {
+                patientId: turno.patientId!,
+                nombre: turno.nombre,
+                apellido: turno.apellido,
+                fecha,
+                hora: turno.hora,
+              })
+              toast.success("Asistencia deshecha")
+              onSaved()
+            } catch {
+              toast.error("No se pudo deshacer la asistencia")
+            }
+          },
         },
-      }
-      if (tratamientos.length > 0) {
-        const latest = tratamientos[tratamientos.length - 1]
-        const sessionEntry = `Sesión ${latest.sesiones.length + 1} — ${day}/${month}/${year} ${hora}`
-        updatePayload.tratamientos = tratamientos.map((t, i) =>
-          i === tratamientos.length - 1
-            ? { ...t, sesiones: [...t.sesiones, sessionEntry] }
-            : t
-        )
-      }
-
-      // 4. Update patient record
-      await update(ref(db, `pacientes/${turno.patientId}`), updatePayload)
-
-      // 5. Mark turno as asistió
-      await update(ref(db, `turnos/${fecha}/${turno.id}`), {
-        estado: "asistio",
       })
 
-      // 6. Add to libro diario for that day
-      await addToLibroDiario({
-        nombreApellido: `${turno.nombre} ${turno.apellido}`,
-        obraSocial: (raw.obraSocial as string) || "-",
-        fecha,
-      })
-
-      toast.success(`Sesión ${nextNum} registrada para ${turno.nombre} ${turno.apellido}`)
-
-      if (tratamientos.length > 0) {
-        const latest = tratamientos[tratamientos.length - 1]
-        const newCount = latest.sesiones.length + 1
-        const remaining = latest.sesionesAutorizadas - newCount
-        if (remaining <= 0) {
+      if (res.remaining != null) {
+        if (res.remaining <= 0) {
           toast.warning(
             `Autorización agotada para ${turno.nombre} ${turno.apellido} — recordá gestionar una nueva`,
             { duration: 8000 }
           )
-        } else if (remaining <= 2) {
+        } else if (res.remaining <= 2) {
           toast.warning(
-            `Queda${remaining === 1 ? "" : "n"} ${remaining} sesión${remaining === 1 ? "" : "es"} disponible${remaining === 1 ? "" : "s"} para ${turno.nombre} ${turno.apellido}`,
+            `Queda${res.remaining === 1 ? "" : "n"} ${res.remaining} sesión${res.remaining === 1 ? "" : "es"} disponible${res.remaining === 1 ? "" : "s"} para ${turno.nombre} ${turno.apellido}`,
             { duration: 6000 }
           )
         }
       }
 
-      await writeLog({ accion: "confirmar_asistencia", detalle: `Confirmó asistencia de ${turno.nombre} ${turno.apellido} (${fecha} ${hora})`, entidadId: turno.patientId })
       onSaved()
       onOpenChange(false)
     } catch (err) {
       console.error("[EditarTurnoModal] confirm error:", err)
-      toast.error("Error al confirmar asistencia")
+      const msg =
+        err instanceof Error && err.message === "PACIENTE_NO_ENCONTRADO"
+          ? "No se encontró el paciente en la base de datos"
+          : err instanceof Error && err.message === "TURNO_NO_ENCONTRADO"
+          ? "El turno ya no existe"
+          : "Error al confirmar asistencia"
+      toast.error(msg)
     } finally {
       setIsConfirming(false)
     }

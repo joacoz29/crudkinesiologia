@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import {
   format,
   startOfMonth,
@@ -19,9 +19,7 @@ import { es } from "date-fns/locale"
 import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
-import { ref, update, get } from "firebase/database"
-import { db, auth } from "@/lib/firebase"
-import { fetchTurnosPorMes, addToLibroDiario, parseTratamientosRaw, writeLog, getNextSessionNumber } from "@/lib/helpers"
+import { fetchTurnosPorRango, confirmarAsistencia, desconfirmarAsistencia } from "@/lib/helpers"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { AgendaDia } from "@/components/agenda-dia"
@@ -107,7 +105,12 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
   const loadTurnos = useCallback(async (month: Date) => {
     setIsLoading(true)
     try {
-      const data = await fetchTurnosPorMes(month.getFullYear(), month.getMonth() + 1)
+      // Rango completo de la grilla visible (incluye días de meses adyacentes)
+      const gridDays = getCalendarDays(month)
+      const data = await fetchTurnosPorRango(
+        format(gridDays[0], "yyyy-MM-dd"),
+        format(gridDays[gridDays.length - 1], "yyyy-MM-dd")
+      )
       setTurnosPorFecha(data)
     } catch {
       toast.error("No se pudieron cargar los turnos")
@@ -116,9 +119,39 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
     }
   }, [])
 
+  // Turnos pendientes sin confirmar de los últimos 45 días (independiente del mes visible)
+  const [pendientesPasados, setPendientesPasados] = useState<{ count: number; fechaMasAntigua: string | null }>({
+    count: 0,
+    fechaMasAntigua: null,
+  })
+
+  const loadPendientesPasados = useCallback(async () => {
+    try {
+      const desde = format(subDays(new Date(), 45), "yyyy-MM-dd")
+      const ayer = format(subDays(new Date(), 1), "yyyy-MM-dd")
+      const data = await fetchTurnosPorRango(desde, ayer)
+      let count = 0
+      let oldest: string | null = null
+      for (const [fecha, turnos] of Object.entries(data)) {
+        const pend = turnos.filter((t) => t.estado === "pendiente").length
+        if (pend > 0) {
+          count += pend
+          if (!oldest || fecha < oldest) oldest = fecha
+        }
+      }
+      setPendientesPasados({ count, fechaMasAntigua: oldest })
+    } catch {
+      // no crítico: el banner simplemente no se muestra
+    }
+  }, [])
+
   useEffect(() => {
     loadTurnos(currentMonth)
   }, [currentMonth, loadTurnos, refreshTrigger])
+
+  useEffect(() => {
+    loadPendientesPasados()
+  }, [loadPendientesPasados, refreshTrigger])
 
   useEffect(() => {
     const year = currentMonth.getFullYear()
@@ -157,83 +190,74 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
 
   const handleTurnoSaved = () => {
     loadTurnos(currentMonth)
+    loadPendientesPasados()
   }
 
   const handleConfirmarAsistencia = async (turno: Turno, fecha: string): Promise<void> => {
     if (!turno.patientId) return
     try {
-      const snap = await get(ref(db, `pacientes/${turno.patientId}`))
-      if (!snap.exists()) { toast.error("No se encontró el paciente"); return }
-      const raw = snap.val() as Record<string, unknown>
-
-      const rawSesiones = raw.sesiones
-      const sesionesActual =
-        Array.isArray(rawSesiones) ? (rawSesiones as string[]).join(" ")
-        : rawSesiones && typeof rawSesiones === "object"
-        ? Object.values(rawSesiones as Record<string, string>).join(" ")
-        : typeof rawSesiones === "string" ? rawSesiones : ""
-
-      const [year, month, day] = fecha.split("-")
-      const nextNum = getNextSessionNumber(sesionesActual)
-      const newEntry = `${nextNum}- ${day}/${month}/${year} ${turno.hora}`
-      const updatedSesiones = sesionesActual.trim() ? `${sesionesActual.trim()}\n${newEntry}` : newEntry
-
-      const tratamientos = parseTratamientosRaw(raw.tratamientos)
-      const updatePayload: Record<string, unknown> = {
-        sesiones: [updatedSesiones],
-        ultima_actualizacion: {
-          fecha: new Date().toISOString(),
-          usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Calendario",
-        },
-      }
-      if (tratamientos.length > 0) {
-        const latest = tratamientos[tratamientos.length - 1]
-        const sessionEntry = `Sesión ${latest.sesiones.length + 1} — ${day}/${month}/${year} ${turno.hora}`
-        updatePayload.tratamientos = tratamientos.map((t, i) =>
-          i === tratamientos.length - 1 ? { ...t, sesiones: [...t.sesiones, sessionEntry] } : t
-        )
-      }
-
-      await update(ref(db, `pacientes/${turno.patientId}`), updatePayload)
-      await update(ref(db, `turnos/${fecha}/${turno.id}`), { estado: "asistio" })
-      await addToLibroDiario({
-        nombreApellido: `${turno.nombre} ${turno.apellido}`,
-        obraSocial: (raw.obraSocial as string) || "-",
+      const res = await confirmarAsistencia({
+        patientId: turno.patientId,
+        turnoId: turno.id,
         fecha,
+        hora: turno.hora,
+        nombre: turno.nombre,
+        apellido: turno.apellido,
       })
 
-      toast.success(`Sesión ${nextNum} registrada para ${turno.nombre} ${turno.apellido}`)
+      if (res.alreadyConfirmed) {
+        toast.info(`El turno de ${turno.nombre} ${turno.apellido} ya estaba confirmado`)
+        loadTurnos(currentMonth)
+        loadPendientesPasados()
+        return
+      }
 
-      if (tratamientos.length > 0) {
-        const latest = tratamientos[tratamientos.length - 1]
-        const remaining = latest.sesionesAutorizadas - (latest.sesiones.length + 1)
-        if (remaining <= 0) {
+      const revert = res.revert!
+      toast.success(`Sesión ${res.nextNum} registrada para ${turno.nombre} ${turno.apellido}`, {
+        duration: 8000,
+        action: {
+          label: "Deshacer",
+          onClick: async () => {
+            try {
+              await desconfirmarAsistencia(revert, {
+                patientId: turno.patientId!,
+                nombre: turno.nombre,
+                apellido: turno.apellido,
+                fecha,
+                hora: turno.hora,
+              })
+              toast.success("Asistencia deshecha")
+              loadTurnos(currentMonth)
+              loadPendientesPasados()
+            } catch {
+              toast.error("No se pudo deshacer la asistencia")
+            }
+          },
+        },
+      })
+
+      if (res.remaining != null) {
+        if (res.remaining <= 0) {
           toast.warning(`Autorización agotada para ${turno.nombre} ${turno.apellido} — recordá gestionar una nueva`, { duration: 8000 })
-        } else if (remaining <= 2) {
-          toast.warning(`Queda${remaining === 1 ? "" : "n"} ${remaining} sesión${remaining === 1 ? "" : "es"} para ${turno.nombre} ${turno.apellido}`, { duration: 6000 })
+        } else if (res.remaining <= 2) {
+          toast.warning(`Queda${res.remaining === 1 ? "" : "n"} ${res.remaining} sesión${res.remaining === 1 ? "" : "es"} para ${turno.nombre} ${turno.apellido}`, { duration: 6000 })
         }
       }
 
-      await writeLog({ accion: "confirmar_asistencia", detalle: `Confirmó asistencia de ${turno.nombre} ${turno.apellido} (${fecha} ${turno.hora})`, entidadId: turno.patientId })
       loadTurnos(currentMonth)
+      loadPendientesPasados()
     } catch (err) {
       console.error("[Calendario] confirm error:", err)
-      toast.error("Error al confirmar asistencia")
+      const msg =
+        err instanceof Error && err.message === "PACIENTE_NO_ENCONTRADO"
+          ? "No se encontró el paciente"
+          : err instanceof Error && err.message === "TURNO_NO_ENCONTRADO"
+          ? "El turno ya no existe"
+          : "Error al confirmar asistencia"
+      toast.error(msg)
       throw err
     }
   }
-
-  const todayKey = format(new Date(), "yyyy-MM-dd")
-
-  const { pendientesPasadosList, fechaMasAntigua } = useMemo(() => {
-    const list = Object.entries(turnosPorFecha)
-      .filter(([fecha]) => fecha < todayKey)
-      .flatMap(([, turnos]) => turnos.filter((t) => t.estado === "pendiente"))
-    const oldest = Object.keys(turnosPorFecha)
-      .filter((f) => f < todayKey && turnosPorFecha[f].some((t) => t.estado === "pendiente"))
-      .sort()[0]
-    return { pendientesPasadosList: list, fechaMasAntigua: oldest }
-  }, [turnosPorFecha, todayKey])
 
   const days = getCalendarDays(currentMonth)
   const weeks: Date[][] = []
@@ -241,7 +265,11 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
     weeks.push(days.slice(i, i + 7))
   }
 
-  const allTurnos = Object.values(turnosPorFecha).flat()
+  // Solo el mes visible: turnosPorFecha también trae días de meses adyacentes de la grilla
+  const monthPrefix = format(currentMonth, "yyyy-MM")
+  const allTurnos = Object.entries(turnosPorFecha)
+    .filter(([fecha]) => fecha.startsWith(monthPrefix))
+    .flatMap(([, turnos]) => turnos)
   const totalTurnos = allTurnos.filter((t) => t.estado !== "cancelado").length
   const pendientes = allTurnos.filter((t) => t.estado === "pendiente").length
   const asistieron = allTurnos.filter((t) => t.estado === "asistio").length
@@ -431,19 +459,19 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
       {/* RIGHT: day agenda */}
       <div className="flex-1 min-w-0 border-t lg:border-t-0 lg:border-l border-gray-200 pt-5 lg:pt-0 lg:pl-6 mt-4 lg:mt-0">
 
-        {/* Banner: turnos pendientes de días anteriores */}
-        {!isLoading && pendientesPasadosList.length > 0 && fechaMasAntigua && (
+        {/* Banner: turnos pendientes de días anteriores (últimos 45 días) */}
+        {!isLoading && pendientesPasados.count > 0 && pendientesPasados.fechaMasAntigua && (
           <button
             type="button"
             onClick={() => {
-              const [y, m, d] = fechaMasAntigua.split("-").map(Number)
-              setSelectedDate(new Date(y, m - 1, d))
+              const [y, m, d] = pendientesPasados.fechaMasAntigua!.split("-").map(Number)
+              handleDayClick(new Date(y, m - 1, d))
             }}
             className="w-full flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm hover:bg-amber-100 transition-colors text-left"
           >
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
             <span>
-              <strong>{pendientesPasadosList.length} turno{pendientesPasadosList.length !== 1 ? "s" : ""}</strong>
+              <strong>{pendientesPasados.count} turno{pendientesPasados.count !== 1 ? "s" : ""}</strong>
               {" sin confirmar de días anteriores — "}
               <span className="underline">ir al primero</span>
             </span>

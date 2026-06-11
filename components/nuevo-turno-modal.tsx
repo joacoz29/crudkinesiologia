@@ -44,13 +44,22 @@ function snapToWeekday(d: Date): Date {
   return result
 }
 
-// Every N calendar days; if result is weekend, moves to Monday
+// Every N calendar days; if result is weekend, moves to Monday.
+// Dedupes: with intervals cortos, varios días pueden caer (snapeados) en el mismo lunes.
 function generarFechasIntervalo(base: Date, intervalo: number, vecesTotal: number): Date[] {
-  return Array.from({ length: Math.max(1, vecesTotal) }, (_, i) => {
+  const fechas: Date[] = []
+  const seen = new Set<string>()
+  for (let i = 0; i < Math.max(1, vecesTotal); i++) {
     const d = new Date(base)
     d.setDate(d.getDate() + i * Math.max(1, intervalo))
-    return snapToWeekday(d)
-  })
+    const snapped = snapToWeekday(d)
+    const key = format(snapped, "yyyy-MM-dd")
+    if (!seen.has(key)) {
+      seen.add(key)
+      fechas.push(snapped)
+    }
+  }
+  return fechas
 }
 
 function lunesDeSemanaDe(base: Date): Date {
@@ -131,6 +140,7 @@ export function NuevoTurnoModal({
   const [isSaving, setIsSaving] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const searchAbortRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchSeqRef = useRef(0)
   const [conflictDates, setConflictDates] = useState<string[]>([])
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
 
@@ -145,6 +155,7 @@ export function NuevoTurnoModal({
 
   useEffect(() => {
     if (!search.trim()) {
+      searchSeqRef.current++ // invalida respuestas en vuelo
       setPatients([])
       setIsSearching(false)
       return
@@ -152,13 +163,15 @@ export function NuevoTurnoModal({
     if (searchAbortRef.current) clearTimeout(searchAbortRef.current)
     setIsSearching(true)
     searchAbortRef.current = setTimeout(async () => {
+      const seq = ++searchSeqRef.current
       try {
         const res = await fetch(`/api/patients?search=${encodeURIComponent(search.trim())}&limit=10`)
         if (!res.ok) return
         const data = await res.json()
-        setPatients(data.patients ?? [])
+        // Solo aplicar si sigue siendo la búsqueda más reciente (evita pisar con respuestas viejas)
+        if (seq === searchSeqRef.current) setPatients(data.patients ?? [])
       } catch {}
-      finally { setIsSearching(false) }
+      finally { if (seq === searchSeqRef.current) setIsSearching(false) }
     }, 250)
     return () => { if (searchAbortRef.current) clearTimeout(searchAbortRef.current) }
   }, [search])
@@ -293,7 +306,7 @@ export function NuevoTurnoModal({
         const snap = snapshots[i]
         if (snap.exists()) {
           const dayTurnos = Object.values(snap.val() as Record<string, unknown>) as Turno[]
-          if (dayTurnos.some((t) => t.patientId === selectedPatient.id)) {
+          if (dayTurnos.some((t) => t.patientId === selectedPatient.id && t.estado !== "cancelado")) {
             conflicts.push(dateKey)
           }
         }

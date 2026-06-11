@@ -21,6 +21,7 @@ import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { ref, get, set } from "firebase/database"
 import { db } from "@/lib/firebase"
+import { writeLog, LogCambio } from "@/lib/helpers"
 import { toast } from "sonner"
 import { format } from "date-fns-tz"
 import { ChevronLeft, ChevronRight, ClipboardCopy, Loader2, Trash2 } from "lucide-react"
@@ -65,6 +66,18 @@ const TIPO_PLACEHOLDER: Record<TipoEntrada, string> = {
   Ingreso: "Motivo del ingreso",
 }
 
+interface AuditStats {
+  dateKey: string
+  count: number
+  debe: number
+  haber: number
+}
+
+function fechaLegible(dateKey: string): string {
+  const [y, m, d] = dateKey.split("-")
+  return `${d}/${m}/${y}`
+}
+
 export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const [fecha, setFecha] = useState<Date>(new Date())
   const [totalDebe, setTotalDebe] = useState(0)
@@ -78,6 +91,11 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const [confirmCopyOpen, setConfirmCopyOpen] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSave = useRef<{ dateKey: string; entradas: EntradaLibroDiario[] } | null>(null)
+  // Audit log: estado al cargar el día (baseline) y último estado guardado de la ráfaga de edición.
+  // Tras 60s sin guardados se escribe UN log con el diff — evita un log por cada auto-save.
+  const auditBaseline = useRef<AuditStats | null>(null)
+  const auditPending = useRef<AuditStats | null>(null)
+  const auditTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isToday = toLocalDateKey(fecha) === toLocalDateKey(new Date())
 
@@ -92,6 +110,34 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   })
 
   const watchEntradas = useWatch({ control, name: "entradas" })
+
+  const flushAuditLog = useCallback(() => {
+    if (auditTimer.current) {
+      clearTimeout(auditTimer.current)
+      auditTimer.current = null
+    }
+    const after = auditPending.current
+    auditPending.current = null
+    if (!after) return
+
+    const before = auditBaseline.current
+    const cambios: LogCambio = {}
+    if (before && before.dateKey === after.dateKey) {
+      if (before.count !== after.count)
+        cambios["Entradas"] = { antes: String(before.count), despues: String(after.count) }
+      if (before.haber !== after.haber)
+        cambios["Total Haber"] = { antes: `$${before.haber.toFixed(2)}`, despues: `$${after.haber.toFixed(2)}` }
+      if (before.debe !== after.debe)
+        cambios["Total Debe"] = { antes: `$${before.debe.toFixed(2)}`, despues: `$${after.debe.toFixed(2)}` }
+    }
+    auditBaseline.current = { ...after }
+
+    writeLog({
+      accion: "editar_libro_diario",
+      detalle: `Editó el libro diario del ${fechaLegible(after.dateKey)} (${after.count} entrada${after.count !== 1 ? "s" : ""}, saldo $${(after.haber - after.debe).toFixed(2)})`,
+      ...(Object.keys(cambios).length > 0 && { cambios }),
+    })
+  }, [])
 
   const saveEntries = useCallback(
     async (entries: EntradaLibroDiario[], dateKey: string) => {
@@ -115,6 +161,12 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           totalHaber: newTotalHaber,
           totalDebe: newTotalDebe,
         })
+
+        // Acumular la ráfaga de edición para el audit log
+        if (auditPending.current && auditPending.current.dateKey !== dateKey) flushAuditLog()
+        auditPending.current = { dateKey, count: sanitized.length, debe: newTotalDebe, haber: newTotalHaber }
+        if (auditTimer.current) clearTimeout(auditTimer.current)
+        auditTimer.current = setTimeout(flushAuditLog, 60_000)
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Error desconocido'
         setError(`Error al guardar: ${msg}`)
@@ -123,7 +175,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         setIsSaving(false)
       }
     },
-    [],
+    [flushAuditLog],
   )
 
   const flushPendingSave = useCallback(() => {
@@ -175,23 +227,29 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
     }, 800)
   }, [watchEntradas, lastSavedData, fecha, saveEntries, flushPendingSave])
 
-  // Al desmontar (cambio de pestaña), no perder la edición pendiente
+  // Al desmontar (cambio de pestaña), no perder la edición pendiente ni el log de la ráfaga
   useEffect(() => {
-    return () => flushPendingSave()
-  }, [flushPendingSave])
+    return () => {
+      flushPendingSave()
+      flushAuditLog()
+    }
+  }, [flushPendingSave, flushAuditLog])
 
   const fetchEntriesForDate = useCallback(
     async (date: Date) => {
       setIsLoading(true)
       setError(null)
       // El fetch reemplaza el formulario: descartar cualquier guardado pendiente
+      // y cerrar la ráfaga de auditoría del día anterior
       if (saveTimer.current) {
         clearTimeout(saveTimer.current)
         saveTimer.current = null
       }
       pendingSave.current = null
+      flushAuditLog()
       try {
-        const snapshot = await get(ref(db, `libroDiario/${toLocalDateKey(date)}`))
+        const dateKey = toLocalDateKey(date)
+        const snapshot = await get(ref(db, `libroDiario/${dateKey}`))
 
         if (snapshot.exists()) {
           const data = snapshot.val()
@@ -204,11 +262,18 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           setTotalHaber(data.totalHaber || 0)
           setTotalDebe(data.totalDebe || 0)
           setLastSavedData(JSON.stringify(normalized))
+          auditBaseline.current = {
+            dateKey,
+            count: normalized.length,
+            debe: Number(data.totalDebe) || 0,
+            haber: Number(data.totalHaber) || 0,
+          }
         } else {
           setValue("entradas", [])
           setTotalHaber(0)
           setTotalDebe(0)
           setLastSavedData("[]")
+          auditBaseline.current = { dateKey, count: 0, debe: 0, haber: 0 }
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Error desconocido'
@@ -218,7 +283,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         setIsLoading(false)
       }
     },
-    [setValue],
+    [setValue, flushAuditLog],
   )
 
   useEffect(() => {
@@ -245,9 +310,16 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
 
   const confirmDelete = () => {
     if (deleteIndex !== null) {
+      const entry = watchEntradas?.[deleteIndex]
       removeField(deleteIndex)
       setDeleteIndex(null)
       toast.success('Entrada eliminada')
+      if (entry) {
+        writeLog({
+          accion: "eliminar_entrada_libro",
+          detalle: `Eliminó "${entry.nombreApellido?.trim() || "(sin nombre)"}" del libro diario del ${fechaLegible(toLocalDateKey(fecha))} (Debe $${(Number(entry.debe) || 0).toFixed(2)}, Haber $${(Number(entry.haber) || 0).toFixed(2)})`,
+        })
+      }
     }
   }
 
@@ -274,6 +346,10 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
 
       prevEntradas.forEach(e => append(e))
       toast.success(`${prevEntradas.length} entrada${prevEntradas.length !== 1 ? 's' : ''} copiada${prevEntradas.length !== 1 ? 's' : ''} del día anterior`)
+      writeLog({
+        accion: "editar_libro_diario",
+        detalle: `Copió ${prevEntradas.length} entrada${prevEntradas.length !== 1 ? "s" : ""} del día anterior al libro diario del ${fechaLegible(toLocalDateKey(fecha))}`,
+      })
     } catch {
       toast.error('Error al copiar el día anterior')
     } finally {

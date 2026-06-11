@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { signInWithEmailAndPassword } from "firebase/auth"
 import { auth } from "@/lib/firebase"
+import { writeLog } from "@/lib/helpers"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,9 +18,8 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      console.log("Attempting to sign in with email:", email)
       await signInWithEmailAndPassword(auth, email, password)
-      console.log("Sign in successful, redirecting to home page")
+      await writeLog({ accion: "login", detalle: "Inició sesión" })
       router.push("/")
     } catch (error) {
       console.error("Sign in error:", error)

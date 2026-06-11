@@ -297,6 +297,10 @@ export type LogAccion =
   | "editar_turno"
   | "eliminar_turno"
   | "eliminar_todos_turnos"
+  | "editar_libro_diario"
+  | "eliminar_entrada_libro"
+  | "login"
+  | "logout"
 
 export type LogCambio = Record<string, { antes: string; despues: string }>
 

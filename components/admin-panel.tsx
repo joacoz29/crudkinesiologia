@@ -35,11 +35,16 @@ const ACCION_LABEL: Record<string, string> = {
   editar_turno: "Editar turno",
   eliminar_turno: "Eliminar turno",
   eliminar_todos_turnos: "Eliminar todos los turnos",
+  editar_libro_diario: "Editar libro diario",
+  eliminar_entrada_libro: "Eliminar entrada del libro",
+  login: "Inicio de sesión",
+  logout: "Cierre de sesión",
 }
 
 const ACCION_CRITICA = new Set(["eliminar_paciente", "eliminar_todos_turnos"])
 
 function accionBadgeClass(accion: string): string {
+  if (accion === "login" || accion === "logout") return "bg-sky-50 text-sky-700 border-sky-200"
   if (accion.startsWith("crear")) return "bg-green-50 text-green-700 border-green-200"
   if (accion.startsWith("editar")) return "bg-blue-50 text-blue-700 border-blue-200"
   if (accion.startsWith("eliminar")) return "bg-red-50 text-red-700 border-red-200"

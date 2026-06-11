@@ -219,10 +219,11 @@ export default function Page() {
               <Button
                 variant="secondary"
                 className="bg-white text-[#001633] hover:bg-gray-200 transition-colors flex items-center gap-2"
-                onClick={() => {
-                  signOut(auth).then(() => {
-                    router.push("/login")
-                  })
+                onClick={async () => {
+                  // Log antes de signOut: después ya no hay usuario autenticado para escribir
+                  await writeLog({ accion: "logout", detalle: "Cerró sesión" })
+                  await signOut(auth)
+                  router.push("/login")
                 }}
               >
                 <LogOut className="w-4 h-4" />

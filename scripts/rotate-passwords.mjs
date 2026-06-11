@@ -20,7 +20,6 @@ import { getAuth } from "firebase-admin/auth"
 
 const EMAILS_A_ROTAR = [
   "eugeniafunk@kinesiologia.com",
-  "sofiamuslo@kinesiologia.com.ar",
   "karinadiaz@kinesiologia.com.ar",
   "camilabaldi@kinesiologia.com.ar",
   "gonzalogonzalez@kinesiologia.com.ar",

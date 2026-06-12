@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { ChevronDown, MessageCircle, Plus, Trash2, X } from "lucide-react"
+import { MessageCircle, Trash2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO, isValid } from "date-fns"
@@ -14,6 +14,7 @@ import { es } from "date-fns/locale"
 import { ref, remove, update, get } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
 import { addToLibroDiario, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog, LogCambio } from "@/lib/helpers"
+import { TratamientosAccordion } from "@/components/tratamientos-accordion"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
 import { toast } from "sonner"
 import {
@@ -40,17 +41,6 @@ const ESTADO_CHIP: Record<TurnoEstado, string> = {
   asistio: "bg-green-50 text-green-700 border-green-200",
   ausente: "bg-red-50 text-red-700 border-red-200",
   cancelado: "bg-gray-50 text-gray-500 border-gray-200",
-}
-
-function getCurrentArgentinaDateTime() {
-  return formatTZ(new Date(), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
-}
-
-function sessionBadgeClass(used: number, authorized: number): string {
-  const ratio = used / authorized
-  if (ratio >= 1) return "bg-red-50 text-red-700 border-red-200"
-  if (ratio >= 0.8) return "bg-orange-50 text-orange-700 border-orange-200"
-  return "bg-green-50 text-green-700 border-green-200"
 }
 
 function formatSesiones(text: string): string {
@@ -120,26 +110,12 @@ export function EditPatientModal({
   const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false)
 
   const [tratamientos, setTratamientos] = useState<Tratamiento[]>([])
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
-  const [showNewTreatmentForm, setShowNewTreatmentForm] = useState(false)
-  const [newTreatmentNroAuth, setNewTreatmentNroAuth] = useState("")
-  const [newTreatmentSesionesAuth, setNewTreatmentSesionesAuth] = useState("")
-  const [newTreatmentDiagnostico, setNewTreatmentDiagnostico] = useState("")
-  const [newTreatmentDoctor, setNewTreatmentDoctor] = useState("")
 
   useEffect(() => {
     if (!patient) return
     setEditedPatient(patient)
     setSesionesText(formatSesiones((patient.sesiones ?? []).join(" ")))
-    setShowNewTreatmentForm(false)
-    setNewTreatmentNroAuth("")
-    setNewTreatmentSesionesAuth("")
-    setNewTreatmentDiagnostico("")
-    setNewTreatmentDoctor("")
-
-    const loaded = parseTratamientosRaw(patient.tratamientos)
-    setTratamientos(loaded)
-    setExpandedIds(loaded.length > 0 ? new Set([loaded[loaded.length - 1].id]) : new Set())
+    setTratamientos(parseTratamientosRaw(patient.tratamientos))
 
     setIsLoadingTurnos(true)
     fetchTurnosPorPaciente(patient.id)
@@ -147,67 +123,6 @@ export function EditPatientModal({
       .catch(() => setTurnos([]))
       .finally(() => setIsLoadingTurnos(false))
   }, [patient])
-
-  const toggleExpanded = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const handleCreateTratamiento = () => {
-    if (!newTreatmentSesionesAuth) return
-    const id = `trat_${Date.now()}`
-    const nuevo: Tratamiento = {
-      id,
-      nroAutorizacion: newTreatmentNroAuth.trim(),
-      sesionesAutorizadas: parseInt(newTreatmentSesionesAuth, 10),
-      fechaCreacion: new Date().toISOString(),
-      sesiones: [],
-      ...(newTreatmentDiagnostico.trim() && { diagnostico: newTreatmentDiagnostico.trim() }),
-      ...(newTreatmentDoctor.trim() && { doctor: newTreatmentDoctor.trim() }),
-    }
-    setTratamientos((prev) => [...prev, nuevo])
-    setExpandedIds((prev) => new Set([...prev, id]))
-    setNewTreatmentNroAuth("")
-    setNewTreatmentSesionesAuth("")
-    setNewTreatmentDiagnostico("")
-    setNewTreatmentDoctor("")
-    setShowNewTreatmentForm(false)
-  }
-
-  const addSessionToTratamiento = (tratamientoId: string) => {
-    const timestamp = getCurrentArgentinaDateTime()
-    setTratamientos((prev) =>
-      prev.map((t) => {
-        if (t.id !== tratamientoId) return t
-        const nextNum = t.sesiones.length + 1
-        return { ...t, sesiones: [...t.sesiones, `Sesión ${nextNum} — ${timestamp}`] }
-      })
-    )
-  }
-
-  const removeSessionFromTratamiento = (tratamientoId: string, sessionIndex: number) => {
-    setTratamientos((prev) =>
-      prev.map((t) => {
-        if (t.id !== tratamientoId) return t
-        return { ...t, sesiones: t.sesiones.filter((_, i) => i !== sessionIndex) }
-      })
-    )
-  }
-
-  const updateSessionInTratamiento = (tratamientoId: string, sessionIndex: number, value: string) => {
-    setTratamientos((prev) =>
-      prev.map((t) => {
-        if (t.id !== tratamientoId) return t
-        const newSesiones = [...t.sesiones]
-        newSesiones[sessionIndex] = value
-        return { ...t, sesiones: newSesiones }
-      })
-    )
-  }
 
   // "Hoy" en hora argentina (no UTC): después de las 21:00 el día UTC ya es mañana
   const hoyKey = formatTZ(new Date(), "yyyy-MM-dd", { timeZone: "America/Argentina/Buenos_Aires" })
@@ -519,259 +434,7 @@ export function EditPatientModal({
               </div>
             </div>
 
-            {/* Tratamientos */}
-            <div className="space-y-4 border-t border-slate-100 pt-5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tratamientos</h3>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-1 text-xs border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
-                  onClick={() => setShowNewTreatmentForm((v) => !v)}
-                >
-                  <Plus className="h-3 w-3" />
-                  Nuevo tratamiento
-                </Button>
-              </div>
-
-              {/* Formulario nuevo tratamiento */}
-              {showNewTreatmentForm && (
-                <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/40 space-y-3">
-                  <p className="text-sm font-medium text-[#001633]">Nuevo tratamiento</p>
-                  <div className="flex items-end gap-3 flex-wrap">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-gray-500">N° autorización</Label>
-                      <Input
-                        value={newTreatmentNroAuth}
-                        onChange={(e) => setNewTreatmentNroAuth(e.target.value)}
-                        placeholder="Código"
-                        className="w-40 h-8 text-sm border-slate-200 focus:border-[#001633]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-gray-500">Sesiones autorizadas</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={newTreatmentSesionesAuth}
-                        onChange={(e) => setNewTreatmentSesionesAuth(e.target.value)}
-                        placeholder="10"
-                        className="w-28 h-8 text-sm border-slate-200 focus:border-[#001633]"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-gray-500">Diagnóstico</Label>
-                      <Input
-                        value={newTreatmentDiagnostico}
-                        onChange={(e) => setNewTreatmentDiagnostico(e.target.value)}
-                        placeholder="Ej: Lumbalgia"
-                        className="h-8 text-sm border-slate-200 focus:border-[#001633]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-gray-500">Doctor</Label>
-                      <Input
-                        value={newTreatmentDoctor}
-                        onChange={(e) => setNewTreatmentDoctor(e.target.value)}
-                        placeholder="Nombre del médico"
-                        className="h-8 text-sm border-slate-200 focus:border-[#001633]"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 text-xs bg-[#001633] hover:bg-[#002966]"
-                      onClick={handleCreateTratamiento}
-                      disabled={!newTreatmentSesionesAuth}
-                    >
-                      Crear
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setShowNewTreatmentForm(false)}
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-
-              {/* Lista de tratamientos */}
-              {tratamientos.length === 0 && !showNewTreatmentForm ? (
-                <p className="text-sm text-gray-400">Sin tratamientos registrados</p>
-              ) : (
-                <div className="space-y-2">
-                  {tratamientos.map((trat, index) => {
-                    const isExpanded = expandedIds.has(trat.id)
-                    const usedCount = trat.sesiones.length
-                    const fechaDate = new Date(trat.fechaCreacion)
-                    const fechaLabel = isValid(fechaDate) ? format(fechaDate, "dd/MM/yyyy") : ""
-
-                    return (
-                      <div key={trat.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                        {/* Header accordion */}
-                        <button
-                          type="button"
-                          onClick={() => toggleExpanded(trat.id)}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-                        >
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <ChevronDown
-                              className={`h-4 w-4 text-gray-400 transition-transform duration-150 ${isExpanded ? "" : "-rotate-90"}`}
-                            />
-                            <span className="font-medium text-sm text-gray-800">
-                              {trat.nroAutorizacion
-                                ? `Autorización #${trat.nroAutorizacion}`
-                                : `Tratamiento ${index + 1}`}
-                            </span>
-                            <span
-                              className={`text-[11px] px-1.5 py-0.5 rounded-full border font-medium ${sessionBadgeClass(usedCount, trat.sesionesAutorizadas)}`}
-                            >
-                              {usedCount}/{trat.sesionesAutorizadas} sesiones
-                            </span>
-                          </div>
-                          {fechaLabel && (
-                            <span className="text-xs text-gray-400 shrink-0 ml-2">{fechaLabel}</span>
-                          )}
-                        </button>
-
-                        {/* Contenido expandido */}
-                        {isExpanded && (
-                          <div className="px-4 py-3 space-y-2 border-t border-gray-100">
-                            <div className="flex gap-4 flex-wrap items-start">
-                              <div className="space-y-1">
-                                <Label className="text-xs text-gray-500 whitespace-nowrap">N° autorización</Label>
-                                <Input
-                                  value={trat.nroAutorizacion}
-                                  onChange={(e) =>
-                                    setTratamientos((prev) =>
-                                      prev.map((t) =>
-                                        t.id === trat.id ? { ...t, nroAutorizacion: e.target.value } : t
-                                      )
-                                    )
-                                  }
-                                  placeholder="—"
-                                  className="h-7 text-sm w-44 border-slate-200 focus:border-[#001633]"
-                                />
-                              </div>
-                              <div className="space-y-1 flex-1 min-w-[160px]">
-                                <Label className="text-xs text-gray-500">Tratamiento</Label>
-                                <Textarea
-                                  value={trat.tratamiento ?? ""}
-                                  onChange={(e) =>
-                                    setTratamientos((prev) =>
-                                      prev.map((t) =>
-                                        t.id === trat.id ? { ...t, tratamiento: e.target.value } : t
-                                      )
-                                    )
-                                  }
-                                  className="min-h-[60px] text-sm border-slate-200 focus:border-[#001633]"
-                                />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <div className="space-y-1">
-                                <Label className="text-xs text-gray-500">Diagnóstico</Label>
-                                <Input
-                                  value={trat.diagnostico ?? ""}
-                                  onChange={(e) =>
-                                    setTratamientos((prev) =>
-                                      prev.map((t) =>
-                                        t.id === trat.id ? { ...t, diagnostico: e.target.value } : t
-                                      )
-                                    )
-                                  }
-                                  placeholder="—"
-                                  className="h-7 text-sm border-slate-200 focus:border-[#001633]"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs text-gray-500">Doctor</Label>
-                                <Input
-                                  value={trat.doctor ?? ""}
-                                  onChange={(e) =>
-                                    setTratamientos((prev) =>
-                                      prev.map((t) =>
-                                        t.id === trat.id ? { ...t, doctor: e.target.value } : t
-                                      )
-                                    )
-                                  }
-                                  placeholder="—"
-                                  className="h-7 text-sm border-slate-200 focus:border-[#001633]"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs text-gray-500">Sesiones autorizadas</Label>
-                              <Input
-                                type="number"
-                                min={1}
-                                value={trat.sesionesAutorizadas}
-                                onChange={(e) =>
-                                  setTratamientos((prev) =>
-                                    prev.map((t) =>
-                                      t.id === trat.id
-                                        ? { ...t, sesionesAutorizadas: parseInt(e.target.value, 10) || 0 }
-                                        : t
-                                    )
-                                  )
-                                }
-                                className="h-7 text-sm w-24 border-slate-200 focus:border-[#001633]"
-                              />
-                            </div>
-                            {trat.sesiones.length === 0 ? (
-                              <p className="text-sm text-gray-400">Sin sesiones registradas</p>
-                            ) : (
-                              <div className="space-y-1">
-                                {trat.sesiones.map((s, si) => (
-                                  <div
-                                    key={si}
-                                    className="flex items-center justify-between px-3 py-1.5 rounded bg-white border border-gray-100 text-sm text-gray-700"
-                                  >
-                                    <input
-                                      type="text"
-                                      value={s}
-                                      onChange={(e) => updateSessionInTratamiento(trat.id, si, e.target.value)}
-                                      className="flex-1 bg-transparent text-sm text-gray-700 outline-none border-b border-transparent focus:border-slate-300 transition-colors min-w-0"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => removeSessionFromTratamiento(trat.id, si)}
-                                      className="text-gray-300 hover:text-red-500 transition-colors ml-3 shrink-0"
-                                    >
-                                      <X className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs gap-1 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
-                              onClick={() => addSessionToTratamiento(trat.id)}
-                            >
-                              <Plus className="h-3 w-3" />
-                              Nueva sesión
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+            <TratamientosAccordion key={editedPatient.id} tratamientos={tratamientos} onChange={setTratamientos} />
 
             {/* Historial libre */}
             <div className="space-y-2 border-t border-slate-100 pt-5">

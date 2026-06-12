@@ -13,7 +13,7 @@ import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { ref, remove, update, get } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
-import { addToLibroDiario, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog, LogCambio } from "@/lib/helpers"
+import { addToLibroDiario, appendSesionAlHistorial, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog, LogCambio } from "@/lib/helpers"
 import { TratamientosAccordion } from "@/components/tratamientos-accordion"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
 import { toast } from "sonner"
@@ -434,7 +434,12 @@ export function EditPatientModal({
               </div>
             </div>
 
-            <TratamientosAccordion key={editedPatient.id} tratamientos={tratamientos} onChange={setTratamientos} />
+            <TratamientosAccordion
+              key={editedPatient.id}
+              tratamientos={tratamientos}
+              onChange={setTratamientos}
+              onSessionAdded={(fechaHora) => setSesionesText((prev) => appendSesionAlHistorial(prev, fechaHora))}
+            />
 
             {/* Historial libre */}
             <div className="space-y-2 border-t border-slate-100 pt-5">

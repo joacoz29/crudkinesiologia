@@ -180,6 +180,13 @@ export async function deleteTurno(fecha: string, id: string): Promise<void> {
   }
 }
 
+// Agrega una entrada "N- dd/mm/yyyy HH:mm" al historial libre, con numeración
+// correlativa — mismo formato que usa confirmarAsistencia
+export function appendSesionAlHistorial(historial: string, fechaHora: string): string {
+  const entry = `${getNextSessionNumber(historial)}- ${fechaHora}`
+  return historial.trim() ? `${historial.trim()}\n${entry}` : entry
+}
+
 export function getNextSessionNumber(text: string): number {
   // Solo "N-" seguido de espacio o fin de texto: evita falsos positivos con
   // teléfonos ("02320-659087") o fechas ("2026-06-10") anotados en el historial

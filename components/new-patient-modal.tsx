@@ -20,7 +20,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { db, auth } from "@/lib/firebase"
 import { ref, push } from "firebase/database"
-import { writeLog } from "@/lib/helpers"
+import { writeLog, appendSesionAlHistorial } from "@/lib/helpers"
 import { getAuthHeaders } from "@/lib/auth-helper"
 import { TratamientosAccordion } from "@/components/tratamientos-accordion"
 import { Tratamiento } from "@/types"
@@ -199,7 +199,11 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
             </div>
           </div>
 
-          <TratamientosAccordion tratamientos={tratamientos} onChange={setTratamientos} />
+          <TratamientosAccordion
+            tratamientos={tratamientos}
+            onChange={setTratamientos}
+            onSessionAdded={(fechaHora) => setSesionesText((prev) => appendSesionAlHistorial(prev, fechaHora))}
+          />
 
           {/* Historial libre */}
           <div className="space-y-2 border-t border-slate-100 pt-5">

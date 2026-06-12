@@ -25,11 +25,14 @@ interface TratamientosAccordionProps {
   /** Lista controlada por el padre (la necesita al guardar) */
   tratamientos: Tratamiento[]
   onChange: (next: Tratamiento[]) => void
+  /** Se llama al agregar una sesión manual, con su fecha/hora ("dd/MM/yyyy HH:mm") —
+   *  el padre la registra también en el historial libre para que todo quede en un lugar */
+  onSessionAdded?: (fechaHora: string) => void
 }
 
 // Sección "Tratamientos" completa: alta de tratamiento + acordeón editable de
 // sesiones/autorización/diagnóstico/doctor. Compartida entre crear y editar paciente.
-export function TratamientosAccordion({ tratamientos, onChange }: TratamientosAccordionProps) {
+export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }: TratamientosAccordionProps) {
   // El último tratamiento arranca expandido (es el activo)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() =>
     tratamientos.length > 0 ? new Set([tratamientos[tratamientos.length - 1].id]) : new Set()
@@ -76,7 +79,9 @@ export function TratamientosAccordion({ tratamientos, onChange }: TratamientosAc
   const addSession = (id: string) => {
     const trat = tratamientos.find((t) => t.id === id)
     if (!trat) return
-    updateTrat(id, { sesiones: [...trat.sesiones, `Sesión ${trat.sesiones.length + 1} — ${getCurrentArgentinaDateTime()}`] })
+    const fechaHora = getCurrentArgentinaDateTime()
+    updateTrat(id, { sesiones: [...trat.sesiones, `Sesión ${trat.sesiones.length + 1} — ${fechaHora}`] })
+    onSessionAdded?.(fechaHora)
   }
 
   const removeSession = (id: string, index: number) => {

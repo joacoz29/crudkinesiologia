@@ -367,6 +367,24 @@ export function EditPatientModal({
       const guardado = await onSave(updatedPatient)
       if (!guardado) return
 
+      // Los turnos guardan nombre/apellido copiados: si cambiaron, propagar a
+      // todos los turnos cargados para que calendario y WhatsApp no muestren el viejo
+      const nombreCambio =
+        patient && (patient.nombre !== updatedPatient.nombre || patient.apellido !== updatedPatient.apellido)
+      if (nombreCambio && turnos.length > 0) {
+        const updates: Record<string, unknown> = {}
+        for (const t of turnos) {
+          updates[`turnos/${t.fecha}/${t.id}/nombre`] = updatedPatient.nombre
+          updates[`turnos/${t.fecha}/${t.id}/apellido`] = updatedPatient.apellido
+        }
+        try {
+          await update(ref(db), updates)
+          setTurnos((prev) => prev.map((t) => ({ ...t, nombre: updatedPatient.nombre, apellido: updatedPatient.apellido })))
+        } catch {
+          toast.error("Paciente guardado, pero no se pudo actualizar el nombre en sus turnos")
+        }
+      }
+
       // Al libro diario solo si quedaron MÁS sesiones que al abrir (una sesión
       // agregada y luego borrada antes de guardar no debe generar entrada en la caja)
       const sesionesIniciales = tratsIniciales.reduce((s, t) => s + t.sesiones.length, 0)

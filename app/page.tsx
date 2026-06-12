@@ -164,7 +164,7 @@ export default function Page() {
     }
   }
 
-  const handleSaveEdit = async (updatedPatient: Patient) => {
+  const handleSaveEdit = async (updatedPatient: Patient): Promise<boolean> => {
     try {
       const patientRef = ref(db, `pacientes/${updatedPatient.id}`)
       const cleanPatient = JSON.parse(JSON.stringify(updatedPatient))
@@ -173,10 +173,12 @@ export default function Page() {
       fetchPatients(searchTerm, currentPage)
       setEditModalOpen(false)
       setLibroDiarioUpdateTrigger((prev: number) => prev + 1)
+      return true
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al guardar los cambios'
       setError(errorMessage)
       toast.error(errorMessage)
+      return false
     }
   }
 

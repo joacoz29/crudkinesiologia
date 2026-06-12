@@ -31,7 +31,7 @@ interface EditPatientModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   patient: Patient | null
-  onSave: (updatedPatient: Patient) => void
+  onSave: (updatedPatient: Patient) => Promise<boolean>
   setLibroDiarioUpdateTrigger: (value: (prev: number) => number) => void
 }
 
@@ -315,17 +315,6 @@ export function EditPatientModal({
         },
       }
 
-      // Al libro diario solo si quedaron MÁS sesiones que al abrir (una sesión
-      // agregada y luego borrada antes de guardar no debe generar entrada en la caja)
-      const sesionesIniciales = parseTratamientosRaw(patient?.tratamientos).reduce((s, t) => s + t.sesiones.length, 0)
-      const sesionesActuales = tratamientos.reduce((s, t) => s + t.sesiones.length, 0)
-      if (sesionesActuales > sesionesIniciales) {
-        await addToLibroDiario({
-          nombreApellido: `${updatedPatient.nombre} ${updatedPatient.apellido}`,
-          obraSocial: updatedPatient.obraSocial,
-        })
-      }
-
       const CAMPOS_LABEL: Partial<Record<keyof Patient, string>> = {
         nombre: "Nombre", apellido: "Apellido", edad: "Edad", dni: "DNI",
         obraSocial: "Obra Social", nroAFL: "N°AFL", telefono: "Teléfono",
@@ -345,11 +334,25 @@ export function EditPatientModal({
       }
       diffTratamientos(parseTratamientosRaw(patient?.tratamientos), tratamientos, cambios)
 
+      // Primero el guardado real; el log y el libro diario solo si fue exitoso
+      const guardado = await onSave(updatedPatient)
+      if (!guardado) return
+
+      // Al libro diario solo si quedaron MÁS sesiones que al abrir (una sesión
+      // agregada y luego borrada antes de guardar no debe generar entrada en la caja)
+      const sesionesIniciales = parseTratamientosRaw(patient?.tratamientos).reduce((s, t) => s + t.sesiones.length, 0)
+      const sesionesActuales = tratamientos.reduce((s, t) => s + t.sesiones.length, 0)
+      if (sesionesActuales > sesionesIniciales) {
+        await addToLibroDiario({
+          nombreApellido: `${updatedPatient.nombre} ${updatedPatient.apellido}`,
+          obraSocial: updatedPatient.obraSocial,
+        })
+      }
+
       // Sin cambios reales → no ensuciar el audit log
       if (Object.keys(cambios).length > 0) {
         await writeLog({ accion: "editar_paciente", detalle: `Editó paciente ${updatedPatient.nombre} ${updatedPatient.apellido}`, entidadId: updatedPatient.id, cambios })
       }
-      onSave(updatedPatient)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error al guardar los cambios")
     } finally {

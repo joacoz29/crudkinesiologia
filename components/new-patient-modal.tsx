@@ -137,7 +137,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
       const currentUser = auth.currentUser
       const latestTrat = tratamientos.length > 0 ? tratamientos[tratamientos.length - 1] : null
 
-      await push(ref(db, "pacientes"), {
+      const newRef = await push(ref(db, "pacientes"), {
         ...patient,
         sesiones: sesionesText ? [sesionesText] : [],
         ...(tratamientos.length > 0 && { tratamientos }),
@@ -152,7 +152,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
       })
 
       toast.success("Paciente registrado correctamente")
-      await writeLog({ accion: "crear_paciente", detalle: `Creó paciente ${patient.nombre} ${patient.apellido}` })
+      await writeLog({ accion: "crear_paciente", detalle: `Creó paciente ${patient.nombre} ${patient.apellido}`, entidadId: newRef.key ?? undefined })
       onOpenChange(false)
       resetForm()
     } catch (error) {

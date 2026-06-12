@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
-import { writeLog, parseTratamientosRaw } from "@/lib/helpers"
+import { writeLog, getSessionStats } from "@/lib/helpers"
 import { getAuthHeaders } from "@/lib/auth-helper"
 import { Patient, Turno } from "@/types"
 import { toast } from "sonner"
@@ -209,21 +209,10 @@ export function NuevoTurnoModal({
 
   const feriadosSet = useMemo(() => new Set(Object.keys(feriados)), [feriados])
 
-  const sessionStats = useMemo((): { used: number; authorized: number } | null => {
-    if (!selectedPatient) return null
-    const trats = parseTratamientosRaw(selectedPatient.tratamientos)
-    if (trats.length > 0) {
-      const authorized = trats.reduce((sum, t) => sum + (t.sesionesAutorizadas ?? 0), 0)
-      if (!authorized) return null
-      const used = trats.reduce((sum, t) => sum + t.sesiones.length, 0)
-      return { used, authorized }
-    }
-    const authorized = selectedPatient.sesionesAutorizadas
-    if (!authorized) return null
-    const sesionesText = (selectedPatient.sesiones ?? []).join(" ")
-    const used = [...sesionesText.matchAll(/\d+-/g)].length
-    return { used, authorized }
-  }, [selectedPatient])
+  const sessionStats = useMemo(
+    () => (selectedPatient ? getSessionStats(selectedPatient) : null),
+    [selectedPatient]
+  )
 
   // Raw candidates before holiday filter — used only for preview display (shows strikethrough on skipped days)
   const fechasTodasCandidatas = useMemo(() => {

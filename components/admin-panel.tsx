@@ -8,6 +8,7 @@ import { es } from "date-fns/locale"
 import { ChevronLeft, ChevronRight, Shield, Star, Search, Inbox } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { AdminDatos } from "@/components/admin-datos"
 
 interface LogCambio {
   antes: string
@@ -100,7 +101,7 @@ export function AdminPanel() {
   const [filterUser, setFilterUser] = useState("todos")
   const [filterAccion, setFilterAccion] = useState("todas")
   const [searchPaciente, setSearchPaciente] = useState("")
-  const [vista, setVista] = useState<"registro" | "opiniones">("registro")
+  const [vista, setVista] = useState<"registro" | "opiniones" | "datos">("registro")
   const [opiniones, setOpiniones] = useState<Opinion[]>([])
   const [isLoadingOpiniones, setIsLoadingOpiniones] = useState(false)
 
@@ -213,7 +214,11 @@ export function AdminPanel() {
           <div>
             <h2 className="text-xl font-semibold text-[#001633] leading-tight">Panel de administración</h2>
             <p className="text-xs text-slate-400">
-              {vista === "registro" ? "Registro de actividad del equipo" : "Opiniones de pacientes"}
+              {vista === "registro"
+                ? "Registro de actividad del equipo"
+                : vista === "opiniones"
+                ? "Opiniones de pacientes"
+                : "Métricas del consultorio"}
             </p>
           </div>
         </div>
@@ -224,6 +229,7 @@ export function AdminPanel() {
             {([
               ["registro", "Registro de actividad"],
               ["opiniones", "Opiniones"],
+              ["datos", "Datos"],
             ] as const).map(([value, label]) => (
               <button
                 key={value}
@@ -264,7 +270,9 @@ export function AdminPanel() {
         </div>
       </div>
 
-      {vista === "opiniones" ? (
+      {vista === "datos" ? (
+        <AdminDatos currentMonth={currentMonth} />
+      ) : vista === "opiniones" ? (
         <>
           {isLoadingOpiniones ? (
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-16 text-center text-sm text-slate-400">

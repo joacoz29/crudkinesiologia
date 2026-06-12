@@ -1,7 +1,7 @@
 import { ref, set, get, push, remove, update, query, orderByKey, startAt, endAt } from "firebase/database"
 import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
-import { Tratamiento, Turno, TurnoConFecha } from "@/types"
+import { Patient, Tratamiento, Turno, TurnoConFecha } from "@/types"
 import { getUserDisplayName } from "@/lib/auth-helper"
 
 const TZ = "America/Argentina/Buenos_Aires"
@@ -28,6 +28,24 @@ export function parseTratamientosRaw(val: unknown): Tratamiento[] {
       ...(t.doctor != null && { doctor: String(t.doctor) }),
     }
   })
+}
+
+// Sesiones usadas/autorizadas de un paciente: suma los tratamientos del acordeón,
+// o cae al esquema legacy (sesionesAutorizadas + conteo de "N-" en el historial libre).
+// null si el paciente no tiene sesiones autorizadas cargadas.
+export function getSessionStats(patient: Patient): { used: number; authorized: number } | null {
+  const trats = parseTratamientosRaw(patient.tratamientos)
+  if (trats.length > 0) {
+    const authorized = trats.reduce((sum, t) => sum + (t.sesionesAutorizadas ?? 0), 0)
+    if (!authorized) return null
+    const used = trats.reduce((sum, t) => sum + t.sesiones.length, 0)
+    return { used, authorized }
+  }
+  const authorized = patient.sesionesAutorizadas
+  if (!authorized) return null
+  const sesionesText = (patient.sesiones ?? []).join(" ")
+  const used = [...sesionesText.matchAll(/\d+-/g)].length
+  return { used, authorized }
 }
 
 interface LibroDiarioEntry {

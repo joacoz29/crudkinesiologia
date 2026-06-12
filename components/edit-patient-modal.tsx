@@ -57,6 +57,53 @@ function formatSesiones(text: string): string {
   return text.replace(/\s+(\d+-)/g, "\n$1").trim()
 }
 
+// Para diffs de textos largos en el log: muestra el final, que es donde se agregan sesiones
+function resumirTexto(s: string, max = 120): string {
+  const limpio = s.replace(/\n/g, " · ").trim()
+  return limpio.length > max ? `…${limpio.slice(-max)}` : limpio || "—"
+}
+
+// Diff de tratamientos para el audit log: detecta altas, sesiones agregadas/quitadas/editadas
+// y cambios de autorización/diagnóstico/doctor por tratamiento
+function diffTratamientos(antes: Tratamiento[], despues: Tratamiento[], cambios: LogCambio) {
+  const prevById = new Map(antes.map((t) => [t.id, t]))
+  despues.forEach((t, i) => {
+    const label = `Tratamiento ${i + 1}${t.nroAutorizacion ? ` (#${t.nroAutorizacion})` : ""}`
+    const prev = prevById.get(t.id)
+    if (!prev) {
+      cambios[`${label} — nuevo`] = { antes: "—", despues: `${t.sesionesAutorizadas} sesiones autorizadas` }
+      return
+    }
+    if (prev.sesionesAutorizadas !== t.sesionesAutorizadas) {
+      cambios[`${label} — sesiones autorizadas`] = { antes: String(prev.sesionesAutorizadas), despues: String(t.sesionesAutorizadas) }
+    }
+    if (prev.sesiones.length !== t.sesiones.length) {
+      cambios[`${label} — sesiones`] = { antes: `${prev.sesiones.length}`, despues: `${t.sesiones.length}` }
+    } else if (JSON.stringify(prev.sesiones) !== JSON.stringify(t.sesiones)) {
+      cambios[`${label} — sesiones`] = { antes: "—", despues: "texto de sesiones editado" }
+    }
+    const campos = [
+      ["nroAutorizacion", "n° autorización"],
+      ["diagnostico", "diagnóstico"],
+      ["doctor", "doctor"],
+      ["tratamiento", "descripción"],
+    ] as const
+    for (const [campo, lbl] of campos) {
+      const a = String(prev[campo] ?? "")
+      const d = String(t[campo] ?? "")
+      if (a !== d) cambios[`${label} — ${lbl}`] = { antes: a || "—", despues: d || "—" }
+    }
+  })
+  antes.forEach((t, i) => {
+    if (!despues.some((d) => d.id === t.id)) {
+      cambios[`Tratamiento ${i + 1}${t.nroAutorizacion ? ` (#${t.nroAutorizacion})` : ""}`] = {
+        antes: `${t.sesiones.length}/${t.sesionesAutorizadas} sesiones`,
+        despues: "eliminado",
+      }
+    }
+  })
+}
+
 
 export function EditPatientModal({
   open,
@@ -289,7 +336,18 @@ export function EditPatientModal({
         const despues = String(updatedPatient[campo] ?? "")
         if (antes !== despues) cambios[CAMPOS_LABEL[campo]!] = { antes, despues }
       }
-      await writeLog({ accion: "editar_paciente", detalle: `Editó paciente ${updatedPatient.nombre} ${updatedPatient.apellido}`, entidadId: updatedPatient.id, cambios })
+
+      // Diff del historial libre y de los tratamientos (sesiones, autorizaciones, etc.)
+      const historialInicial = formatSesiones((patient?.sesiones ?? []).join(" "))
+      if (historialInicial !== sesionesText.trim()) {
+        cambios["Historial"] = { antes: resumirTexto(historialInicial), despues: resumirTexto(sesionesText) }
+      }
+      diffTratamientos(parseTratamientosRaw(patient?.tratamientos), tratamientos, cambios)
+
+      // Sin cambios reales → no ensuciar el audit log
+      if (Object.keys(cambios).length > 0) {
+        await writeLog({ accion: "editar_paciente", detalle: `Editó paciente ${updatedPatient.nombre} ${updatedPatient.apellido}`, entidadId: updatedPatient.id, cambios })
+      }
       onSave(updatedPatient)
       setNewSessionAdded(false)
     } catch (error) {

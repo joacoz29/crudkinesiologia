@@ -57,7 +57,8 @@ const ACCION_LABEL: Record<string, string> = {
   crear_turno: "Crear turno",
   editar_turno: "Editar turno",
   eliminar_turno: "Eliminar turno",
-  eliminar_todos_turnos: "Eliminar todos los turnos",
+  eliminar_todos_turnos: "Eliminar turnos próximos",
+  deshacer_eliminar_turnos: "Deshacer eliminación de turnos",
   editar_libro_diario: "Editar libro diario",
   eliminar_entrada_libro: "Eliminar entrada del libro",
   login: "Inicio de sesión",
@@ -68,11 +69,11 @@ const ACCION_CRITICA = new Set(["eliminar_paciente", "eliminar_todos_turnos"])
 
 function accionBadgeClass(accion: string): string {
   if (accion === "login" || accion === "logout") return "bg-sky-50 text-sky-700 border-sky-200"
+  if (accion.startsWith("deshacer")) return "bg-amber-50 text-amber-700 border-amber-200"
   if (accion.startsWith("crear")) return "bg-green-50 text-green-700 border-green-200"
   if (accion.startsWith("editar")) return "bg-blue-50 text-blue-700 border-blue-200"
   if (accion.startsWith("eliminar")) return "bg-red-50 text-red-700 border-red-200"
   if (accion === "confirmar_asistencia") return "bg-violet-50 text-violet-700 border-violet-200"
-  if (accion === "deshacer_asistencia") return "bg-amber-50 text-amber-700 border-amber-200"
   return "bg-gray-50 text-gray-600 border-gray-200"
 }
 

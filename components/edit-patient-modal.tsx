@@ -11,7 +11,7 @@ import { useState, useEffect } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
-import { ref, remove } from "firebase/database"
+import { ref, remove, update } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
 import { addToLibroDiario, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog, LogCambio } from "@/lib/helpers"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
@@ -165,6 +165,12 @@ export function EditPatientModal({
     )
   }
 
+  // "Hoy" en hora argentina (no UTC): después de las 21:00 el día UTC ya es mañana
+  const hoyKey = formatTZ(new Date(), "yyyy-MM-dd", { timeZone: "America/Argentina/Buenos_Aires" })
+  const turnosFuturos = turnos.filter((t) => t.fecha >= hoyKey)
+  const pasadosPendientes = turnos.filter((t) => t.fecha < hoyKey && t.estado === "pendiente")
+  const pasadosCount = turnos.length - turnosFuturos.length
+
   const handleDeleteTurno = async (turno: TurnoConFecha) => {
     try {
       await remove(ref(db, `turnos/${turno.fecha}/${turno.id}`))
@@ -176,13 +182,71 @@ export function EditPatientModal({
     }
   }
 
+  // Elimina solo los turnos desde hoy en adelante; los previos quedan como registro
+  // (los pendientes pasados se marcan cancelados). Una sola escritura multi-path.
   const handleDeleteAllTurnos = async () => {
+    const nombrePaciente = `${editedPatient?.nombre ?? ""} ${editedPatient?.apellido ?? ""}`.trim()
+    const turnosPrevios = turnos
     try {
-      await Promise.all(turnos.map((t) => remove(ref(db, `turnos/${t.fecha}/${t.id}`))))
-      const count = turnos.length
-      setTurnos([])
-      toast.success(`${count} turno${count !== 1 ? "s" : ""} eliminados`)
-      await writeLog({ accion: "eliminar_todos_turnos", detalle: `Eliminó ${count} turno${count !== 1 ? "s" : ""} de ${editedPatient?.nombre} ${editedPatient?.apellido}` })
+      const updates: Record<string, unknown> = {}
+      const revert: Record<string, unknown> = {}
+
+      for (const t of turnosFuturos) {
+        updates[`turnos/${t.fecha}/${t.id}`] = null
+        // Nodo completo para poder restaurar con "Deshacer" (sin id/fecha ni undefined)
+        const { id: _id, fecha: _fecha, ...nodo } = t
+        revert[`turnos/${t.fecha}/${t.id}`] = Object.fromEntries(
+          Object.entries(nodo).filter(([, v]) => v !== undefined)
+        )
+      }
+      for (const t of pasadosPendientes) {
+        updates[`turnos/${t.fecha}/${t.id}/estado`] = "cancelado"
+        revert[`turnos/${t.fecha}/${t.id}/estado`] = "pendiente"
+      }
+      if (Object.keys(updates).length === 0) return
+
+      await update(ref(db), updates)
+
+      setTurnos(
+        turnosPrevios
+          .filter((t) => t.fecha < hoyKey)
+          .map((t) => (t.estado === "pendiente" ? { ...t, estado: "cancelado" as TurnoEstado } : t))
+      )
+
+      const partes: string[] = []
+      if (turnosFuturos.length > 0)
+        partes.push(`${turnosFuturos.length} turno${turnosFuturos.length !== 1 ? "s" : ""} eliminado${turnosFuturos.length !== 1 ? "s" : ""} desde hoy`)
+      if (pasadosPendientes.length > 0)
+        partes.push(`${pasadosPendientes.length} previo${pasadosPendientes.length !== 1 ? "s" : ""} cancelado${pasadosPendientes.length !== 1 ? "s" : ""}`)
+
+      toast.success(partes.join(" · "), {
+        duration: 8000,
+        action: {
+          label: "Deshacer",
+          onClick: async () => {
+            try {
+              await update(ref(db), revert)
+              setTurnos(turnosPrevios)
+              toast.success("Turnos restaurados")
+              await writeLog({
+                accion: "deshacer_eliminar_turnos",
+                detalle: `Restauró ${turnosFuturos.length} turno${turnosFuturos.length !== 1 ? "s" : ""} de ${nombrePaciente}`,
+              })
+            } catch {
+              toast.error("No se pudieron restaurar los turnos")
+            }
+          },
+        },
+      })
+
+      await writeLog({
+        accion: "eliminar_todos_turnos",
+        detalle: `Eliminó ${turnosFuturos.length} turno${turnosFuturos.length !== 1 ? "s" : ""} desde hoy de ${nombrePaciente}${
+          pasadosPendientes.length > 0
+            ? ` y marcó ${pasadosPendientes.length} turno${pasadosPendientes.length !== 1 ? "s" : ""} previo${pasadosPendientes.length !== 1 ? "s" : ""} como cancelado`
+            : ""
+        }`,
+      })
     } catch {
       toast.error("Error al eliminar los turnos")
     }
@@ -630,7 +694,7 @@ export function EditPatientModal({
                       WhatsApp
                     </Button>
                   )}
-                  {turnos.length > 0 && (
+                  {(turnosFuturos.length > 0 || pasadosPendientes.length > 0) && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -638,7 +702,7 @@ export function EditPatientModal({
                       className="text-xs text-red-500 hover:text-red-700 h-7"
                       onClick={() => setConfirmDeleteAllOpen(true)}
                     >
-                      Eliminar todos
+                      Eliminar próximos
                     </Button>
                   )}
                 </div>
@@ -712,16 +776,26 @@ export function EditPatientModal({
       <AlertDialog open={confirmDeleteAllOpen} onOpenChange={setConfirmDeleteAllOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar todos los turnos?</AlertDialogTitle>
+            <AlertDialogTitle>¿Eliminar los turnos próximos?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminarán los {turnos.length} turno{turnos.length !== 1 ? "s" : ""} agendados
-              para {editedPatient?.nombre} {editedPatient?.apellido}. Esta acción no se puede deshacer.
+              {turnosFuturos.length > 0
+                ? `Se eliminarán ${turnosFuturos.length} turno${turnosFuturos.length !== 1 ? "s" : ""} desde hoy en adelante de ${editedPatient?.nombre} ${editedPatient?.apellido}. `
+                : `${editedPatient?.nombre} ${editedPatient?.apellido} no tiene turnos próximos. `}
+              {pasadosCount > 0 && (
+                <>
+                  Los {pasadosCount} turno{pasadosCount !== 1 ? "s" : ""} anteriores quedan registrados
+                  {pasadosPendientes.length > 0 && (
+                    <> ({pasadosPendientes.length} pendiente{pasadosPendientes.length !== 1 ? "s" : ""} pasará{pasadosPendientes.length !== 1 ? "n" : ""} a cancelado)</>
+                  )}
+                  .
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteAllTurnos} className="bg-red-600 hover:bg-red-700">
-              Eliminar todos
+              Eliminar próximos
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

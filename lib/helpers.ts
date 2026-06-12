@@ -297,6 +297,7 @@ export type LogAccion =
   | "editar_turno"
   | "eliminar_turno"
   | "eliminar_todos_turnos"
+  | "deshacer_eliminar_turnos"
   | "editar_libro_diario"
   | "eliminar_entrada_libro"
   | "login"

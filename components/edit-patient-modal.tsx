@@ -362,8 +362,10 @@ export function EditPatientModal({
     const raw = editedPatient.telefono.replace(/\D/g, "")
     const phone = raw.startsWith("54") ? raw : raw.startsWith("0") ? `54${raw.slice(1)}` : `54${raw}`
 
+    // Solo pendientes desde hoy: el fetch trae hasta 2 años atrás y no
+    // tiene sentido "recordar" turnos que ya pasaron
     const pendientes = turnos
-      .filter((t) => t.estado === "pendiente")
+      .filter((t) => t.estado === "pendiente" && t.fecha >= hoyKey)
       .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora))
 
     const lineas = pendientes.map((t) => {

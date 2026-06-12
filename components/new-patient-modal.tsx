@@ -2,6 +2,16 @@
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -13,6 +23,7 @@ import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
 import { ref, push } from "firebase/database"
 import { writeLog } from "@/lib/helpers"
+import { getAuthHeaders } from "@/lib/auth-helper"
 import { Tratamiento } from "@/types"
 
 interface NewPatientModalProps {
@@ -48,6 +59,8 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
   const [patient, setPatient] = useState(EMPTY_PATIENT)
   const [sesionesText, setSesionesText] = useState("")
   const [isSaving, setIsSaving] = useState(false)
+  const [confirmDupOpen, setConfirmDupOpen] = useState(false)
+  const [dupNombre, setDupNombre] = useState("")
 
   const [tratamientos, setTratamientos] = useState<Tratamiento[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -132,6 +145,36 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Aviso si ya existe un paciente con el mismo DNI (el QR de opiniones y los
+    // historiales dependen de que el DNI sea único)
+    const dniNorm = patient.dni.replace(/\D/g, "")
+    if (dniNorm) {
+      setIsSaving(true)
+      try {
+        const res = await fetch(`/api/patients?search=${encodeURIComponent(dniNorm)}&limit=50`, {
+          headers: await getAuthHeaders(),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const dup = (data.patients ?? []).find(
+            (p: { dni?: string }) => String(p.dni ?? "").replace(/\D/g, "") === dniNorm
+          ) as { nombre?: string; apellido?: string } | undefined
+          if (dup) {
+            setDupNombre(`${dup.nombre ?? ""} ${dup.apellido ?? ""}`.trim())
+            setConfirmDupOpen(true)
+            return
+          }
+        }
+      } catch {
+        // si el chequeo falla (sin conexión, etc.) no bloquear el alta
+      } finally {
+        setIsSaving(false)
+      }
+    }
+    await doSubmit()
+  }
+
+  const doSubmit = async () => {
     setIsSaving(true)
     try {
       const currentUser = auth.currentUser
@@ -163,6 +206,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) resetForm(); onOpenChange(isOpen) }}>
       <DialogContent className="max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -505,5 +549,27 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
         </form>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={confirmDupOpen} onOpenChange={setConfirmDupOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>DNI ya registrado</AlertDialogTitle>
+          <AlertDialogDescription>
+            Ya existe un paciente con el DNI {patient.dni}: <span className="font-medium">{dupNombre || "(sin nombre)"}</span>.
+            Registrar un duplicado parte el historial en dos. ¿Registrar de todos modos?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => { setConfirmDupOpen(false); doSubmit() }}
+            className="bg-[#001633] hover:bg-[#002966]"
+          >
+            Registrar igual
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }

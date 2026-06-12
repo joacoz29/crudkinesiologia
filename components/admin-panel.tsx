@@ -5,7 +5,7 @@ import { ref, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { format, parseISO, isValid, addMonths, subMonths } from "date-fns"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Shield, Star } from "lucide-react"
+import { ChevronLeft, ChevronRight, Shield, Star, Search, Inbox } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -67,14 +67,30 @@ const ACCION_LABEL: Record<string, string> = {
 
 const ACCION_CRITICA = new Set(["eliminar_paciente", "eliminar_todos_turnos"])
 
-function accionBadgeClass(accion: string): string {
-  if (accion === "login" || accion === "logout") return "bg-sky-50 text-sky-700 border-sky-200"
-  if (accion.startsWith("deshacer")) return "bg-amber-50 text-amber-700 border-amber-200"
-  if (accion.startsWith("crear")) return "bg-green-50 text-green-700 border-green-200"
-  if (accion.startsWith("editar")) return "bg-blue-50 text-blue-700 border-blue-200"
-  if (accion.startsWith("eliminar")) return "bg-red-50 text-red-700 border-red-200"
-  if (accion === "confirmar_asistencia") return "bg-violet-50 text-violet-700 border-violet-200"
-  return "bg-gray-50 text-gray-600 border-gray-200"
+function accionTheme(accion: string): { badge: string; dot: string } {
+  if (accion === "login" || accion === "logout")
+    return { badge: "bg-sky-50 text-sky-700 border-sky-200", dot: "bg-sky-500" }
+  if (accion.startsWith("deshacer"))
+    return { badge: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" }
+  if (accion.startsWith("crear"))
+    return { badge: "bg-green-50 text-green-700 border-green-200", dot: "bg-green-500" }
+  if (accion.startsWith("editar"))
+    return { badge: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" }
+  if (accion.startsWith("eliminar"))
+    return { badge: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500" }
+  if (accion === "confirmar_asistencia")
+    return { badge: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" }
+  return { badge: "bg-gray-50 text-gray-600 border-gray-200", dot: "bg-gray-400" }
+}
+
+function AccionBadge({ accion }: { accion: string }) {
+  const { badge, dot } = accionTheme(accion)
+  return (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] px-2.5 py-1 rounded-full border font-medium ${badge}`}>
+      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot}`} />
+      {ACCION_LABEL[accion] ?? accion}
+    </span>
+  )
 }
 
 export function AdminPanel() {
@@ -91,34 +107,43 @@ export function AdminPanel() {
   const mesKey = format(currentMonth, "yyyy-MM")
 
   useEffect(() => {
+    // Flag de cancelación: si el usuario cambia de mes antes de que llegue la
+    // respuesta, el resultado viejo se descarta (evita pisar el mes actual)
+    let cancelado = false
     setFilterUser("todos")
     setFilterAccion("todas")
+    setSearchPaciente("")
     setIsLoading(true)
     get(ref(db, `logs/${mesKey}`))
       .then((snap) => {
+        if (cancelado) return
         if (!snap.exists()) { setLogs([]); return }
         const entries: LogEntry[] = Object.entries(snap.val() as Record<string, Omit<LogEntry, "id">>)
           .map(([id, val]) => ({ id, ...val }))
           .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
         setLogs(entries)
       })
-      .catch(() => setLogs([]))
-      .finally(() => setIsLoading(false))
+      .catch(() => { if (!cancelado) setLogs([]) })
+      .finally(() => { if (!cancelado) setIsLoading(false) })
+    return () => { cancelado = true }
   }, [mesKey])
 
   useEffect(() => {
     if (vista !== "opiniones") return
+    let cancelado = false
     setIsLoadingOpiniones(true)
     get(ref(db, `opiniones/${mesKey}`))
       .then((snap) => {
+        if (cancelado) return
         if (!snap.exists()) { setOpiniones([]); return }
         const entries: Opinion[] = Object.entries(snap.val() as Record<string, Omit<Opinion, "id">>)
           .map(([id, val]) => ({ id, ...val }))
           .sort((a, b) => b.fecha.localeCompare(a.fecha))
         setOpiniones(entries)
       })
-      .catch(() => setOpiniones([]))
-      .finally(() => setIsLoadingOpiniones(false))
+      .catch(() => { if (!cancelado) setOpiniones([]) })
+      .finally(() => { if (!cancelado) setIsLoadingOpiniones(false) })
+    return () => { cancelado = true }
   }, [mesKey, vista])
 
   const promedio = opiniones.length
@@ -174,113 +199,94 @@ export function AdminPanel() {
 
   const mesLabel = format(currentMonth, "MMMM yyyy", { locale: es })
 
+  const selectClass =
+    "h-8 text-sm border border-slate-200 rounded-lg px-2 bg-white text-slate-700 focus:outline-none focus:border-[#001633] transition-colors"
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Shield className="h-5 w-5 text-[#001633]" />
-        <h2 className="text-2xl font-semibold text-[#001633]">Panel de administración</h2>
-      </div>
-
-      {/* Vista: registro de actividad / opiniones */}
-      <div className="flex gap-2">
-        {([
-          ["registro", "Registro de actividad"],
-          ["opiniones", "Opiniones"],
-        ] as const).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setVista(value)}
-            className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
-              vista === value
-                ? "bg-[#001633] text-white border-[#001633]"
-                : "border-gray-200 text-gray-600 hover:border-[#001633]"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Resumen del mes */}
-      {vista === "registro" && !isLoading && resumenUsuarios.length > 0 && (
-        <div className="flex flex-wrap gap-3">
-          {resumenUsuarios.map(({ key, nombre, count }) => (
-            <div key={key} title={key} className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
-              <div className="h-8 w-8 rounded-full bg-[#001633] flex items-center justify-center text-white text-xs font-semibold shrink-0">
-                {nombre.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">{nombre}</p>
-                <p className="text-xs text-slate-400">{count} acción{count !== 1 ? "es" : ""} este mes</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Navegación de mes + filtros */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => setCurrentMonth((m) => subMonths(m, 1))}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm font-medium text-slate-700 capitalize w-36 text-center">{mesLabel}</span>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => setCurrentMonth((m) => addMonths(m, 1))}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+    <div className="space-y-5">
+      {/* Encabezado */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-[#001633] flex items-center justify-center shrink-0">
+            <Shield className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-[#001633] leading-tight">Panel de administración</h2>
+            <p className="text-xs text-slate-400">
+              {vista === "registro" ? "Registro de actividad del equipo" : "Opiniones de pacientes"}
+            </p>
+          </div>
         </div>
 
-        {vista === "registro" && (
-        <div className="flex gap-2 flex-wrap items-center">
-          <Input
-            placeholder="Buscar paciente..."
-            value={searchPaciente}
-            onChange={(e) => setSearchPaciente(e.target.value)}
-            className="h-8 text-sm w-44 border-slate-200 focus:border-[#001633]"
-          />
-          <select
-            value={filterUser}
-            onChange={(e) => setFilterUser(e.target.value)}
-            className="text-sm border border-slate-200 rounded-md px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-[#001633]"
-          >
-            <option value="todos">Todos los usuarios</option>
-            {usuarios.map(([email, nombre]) => (
-              <option key={email} value={email}>{nombre}</option>
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Toggle registro / opiniones */}
+          <div className="inline-flex rounded-lg bg-slate-100 p-1">
+            {([
+              ["registro", "Registro de actividad"],
+              ["opiniones", "Opiniones"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setVista(value)}
+                className={`px-3.5 py-1.5 text-sm rounded-md transition-all ${
+                  vista === value
+                    ? "bg-white text-[#001633] font-semibold shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {label}
+              </button>
             ))}
-          </select>
-          <select
-            value={filterAccion}
-            onChange={(e) => setFilterAccion(e.target.value)}
-            className="text-sm border border-slate-200 rounded-md px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-[#001633]"
-          >
-            {acciones.map((a) => (
-              <option key={a} value={a}>{a === "todas" ? "Todas las acciones" : (ACCION_LABEL[a] ?? a)}</option>
-            ))}
-          </select>
+          </div>
+
+          {/* Navegación de mes */}
+          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-slate-500 hover:text-[#001633]"
+              onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium text-slate-700 capitalize w-32 text-center select-none">
+              {mesLabel}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-slate-500 hover:text-[#001633]"
+              onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        )}
       </div>
 
       {vista === "opiniones" ? (
         <>
           {isLoadingOpiniones ? (
-            <p className="text-xs text-slate-400">Cargando...</p>
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-16 text-center text-sm text-slate-400">
+              Cargando...
+            </div>
           ) : opiniones.length === 0 ? (
-            <div className="rounded-xl bg-white shadow-sm px-4 py-16 text-center text-slate-400">
-              Sin opiniones para este período
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-16 text-center">
+              <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-sm text-slate-400">Sin opiniones para este período</p>
             </div>
           ) : (
             <>
               {/* Resumen */}
               <div className="flex flex-wrap gap-3">
-                <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm">
+                <div className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm">
                   <p className="text-2xl font-semibold text-slate-800 flex items-center gap-2">
                     {promedio.toFixed(1)}
                     <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
                   </p>
                   <p className="text-xs text-slate-400">{opiniones.length} opinión{opiniones.length !== 1 ? "es" : ""} este mes</p>
                 </div>
-                <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm">
+                <div className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm">
                   {distribucion.map(({ estrellas, count }) => (
                     <div key={estrellas} className="flex items-center gap-2 text-xs">
                       <span className="w-3 text-slate-500 tabular-nums">{estrellas}</span>
@@ -296,7 +302,7 @@ export function AdminPanel() {
                   ))}
                 </div>
                 {porKine.map(([kine, { sum, count }]) => (
-                  <div key={kine} className="bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm">
+                  <div key={kine} className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm">
                     <p className="text-sm font-semibold text-slate-800">{kine}</p>
                     <p className="text-xs text-slate-400 flex items-center gap-1">
                       {(sum / count).toFixed(1)}
@@ -308,11 +314,11 @@ export function AdminPanel() {
               </div>
 
               {/* Listado */}
-              <div className="rounded-xl overflow-hidden bg-white shadow-sm divide-y divide-slate-100">
+              <div className="rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm divide-y divide-slate-100">
                 {opiniones.map((o) => {
                   const d = parseISO(o.fecha)
                   return (
-                    <div key={o.id} className="px-4 py-3">
+                    <div key={o.id} className="px-4 py-3 hover:bg-slate-50/60 transition-colors">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <Estrellas rating={o.rating} />
                         <span className="text-sm font-medium text-slate-800">{o.nombre}</span>
@@ -336,75 +342,143 @@ export function AdminPanel() {
           )}
         </>
       ) : (
-      <>
-      <p className="text-xs text-slate-400">
-        {isLoading ? "Cargando..." : `${filtered.length} registro${filtered.length !== 1 ? "s" : ""}${logs.length !== filtered.length ? ` (de ${logs.length})` : ""}`}
-      </p>
+        <>
+          {/* Resumen del mes por usuario */}
+          {!isLoading && resumenUsuarios.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {resumenUsuarios.map(({ key, nombre, count }) => (
+                <div key={key} title={key} className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-[#001633] flex items-center justify-center text-white text-sm font-semibold shrink-0">
+                    {nombre.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{nombre}</p>
+                    <p className="text-xs text-slate-400">{count} acción{count !== 1 ? "es" : ""} este mes</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
-      {/* Tabla */}
-      <div className="rounded-xl overflow-hidden bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-[#001633]">
-              <th className="text-left px-4 py-3 text-[11px] font-medium tracking-wider text-white/50">Fecha y hora</th>
-              <th className="text-left px-4 py-3 text-[11px] font-medium tracking-wider text-white/50">Usuario</th>
-              <th className="text-left px-4 py-3 text-[11px] font-medium tracking-wider text-white/50">Acción</th>
-              <th className="text-left px-4 py-3 text-[11px] font-medium tracking-wider text-white/50">Detalle</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {isLoading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i}>
-                  <td className="px-4 py-3"><div className="h-4 w-32 bg-slate-200 rounded animate-pulse" /></td>
-                  <td className="px-4 py-3"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></td>
-                  <td className="px-4 py-3"><div className="h-5 w-28 bg-slate-200 rounded-full animate-pulse" /></td>
-                  <td className="px-4 py-3"><div className="h-4 w-48 bg-slate-200 rounded animate-pulse" /></td>
-                </tr>
-              ))
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-16 text-center text-slate-400">
-                  Sin registros para este período
-                </td>
-              </tr>
-            ) : (
-              filtered.map((log) => {
-                const d = parseISO(log.timestamp)
-                const fechaLabel = isValid(d) ? format(d, "dd/MM/yyyy HH:mm") : log.timestamp
-                const esCritico = ACCION_CRITICA.has(log.accion)
-                return (
-                  <tr key={log.id} className={`transition-colors ${esCritico ? "bg-red-50/40 hover:bg-red-50/70" : "hover:bg-slate-50/70"}`}>
-                    <td className="px-4 py-3 text-slate-400 whitespace-nowrap tabular-nums align-top">{fechaLabel}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-900 align-top" title={log.email}>{log.displayName}</td>
-                    <td className="px-4 py-3 align-top">
-                      <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${accionBadgeClass(log.accion)}`}>
-                        {ACCION_LABEL[log.accion] ?? log.accion}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 align-top">
-                      <p>{log.detalle}</p>
-                      {log.cambios && Object.keys(log.cambios).length > 0 && (
-                        <div className="mt-1.5 space-y-0.5">
-                          {Object.entries(log.cambios).map(([campo, { antes, despues }]) => (
-                            <p key={campo} className="text-xs text-slate-400">
-                              <span className="font-medium text-slate-500">{campo}:</span>{" "}
-                              <span className="line-through text-slate-400">{antes || "—"}</span>
-                              {" → "}
-                              <span className="text-slate-600">{despues || "—"}</span>
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </td>
+          {/* Tabla con barra de filtros */}
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                <Input
+                  placeholder="Buscar paciente..."
+                  value={searchPaciente}
+                  onChange={(e) => setSearchPaciente(e.target.value)}
+                  className="h-8 pl-8 text-sm w-48 bg-white border-slate-200 focus:border-[#001633] rounded-lg"
+                />
+              </div>
+              <select
+                value={filterUser}
+                onChange={(e) => setFilterUser(e.target.value)}
+                className={selectClass}
+              >
+                <option value="todos">Todos los usuarios</option>
+                {usuarios.map(([email, nombre]) => (
+                  <option key={email} value={email}>{nombre}</option>
+                ))}
+              </select>
+              <select
+                value={filterAccion}
+                onChange={(e) => setFilterAccion(e.target.value)}
+                className={selectClass}
+              >
+                {acciones.map((a) => (
+                  <option key={a} value={a}>{a === "todas" ? "Todas las acciones" : (ACCION_LABEL[a] ?? a)}</option>
+                ))}
+              </select>
+              <span className="ml-auto text-xs text-slate-400 tabular-nums">
+                {isLoading
+                  ? "Cargando..."
+                  : `${filtered.length} registro${filtered.length !== 1 ? "s" : ""}${logs.length !== filtered.length ? ` (de ${logs.length})` : ""}`}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[#001633]">
+                    {/* w-px + nowrap: las tres primeras columnas se ajustan a su contenido
+                        y todo el ancho sobrante va a Detalle (en pantallas anchas la
+                        columna Acción ya no queda flotando en un espacio gigante) */}
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 w-px whitespace-nowrap">Fecha y hora</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 w-px whitespace-nowrap">Usuario</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 w-px whitespace-nowrap">Acción</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60">Detalle</th>
                   </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-      </>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isLoading ? (
+                    Array.from({ length: 6 }).map((_, i) => (
+                      <tr key={i}>
+                        <td className="px-4 py-3.5"><div className="h-4 w-28 bg-slate-200 rounded animate-pulse" /></td>
+                        <td className="px-4 py-3.5"><div className="h-4 w-32 bg-slate-200 rounded animate-pulse" /></td>
+                        <td className="px-4 py-3.5"><div className="h-5 w-32 bg-slate-200 rounded-full animate-pulse" /></td>
+                        <td className="px-4 py-3.5"><div className="h-4 w-64 bg-slate-200 rounded animate-pulse" /></td>
+                      </tr>
+                    ))
+                  ) : filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-16 text-center">
+                        <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                        <p className="text-sm text-slate-400">Sin registros para este período</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filtered.map((log) => {
+                      const d = parseISO(log.timestamp)
+                      const esCritico = ACCION_CRITICA.has(log.accion)
+                      return (
+                        <tr key={log.id} className={`transition-colors ${esCritico ? "bg-red-50/40 hover:bg-red-50/70" : "hover:bg-slate-50/70"}`}>
+                          <td className="px-4 py-3.5 whitespace-nowrap align-top">
+                            {isValid(d) ? (
+                              <>
+                                <p className="text-slate-600 tabular-nums leading-tight">{format(d, "dd/MM/yyyy")}</p>
+                                <p className="text-xs text-slate-400 tabular-nums">{format(d, "HH:mm")} hs</p>
+                              </>
+                            ) : (
+                              <p className="text-slate-400 tabular-nums">{log.timestamp}</p>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap align-top">
+                            <div className="flex items-center gap-2" title={log.email}>
+                              <div className="h-7 w-7 rounded-full bg-[#001633]/90 flex items-center justify-center text-white text-[11px] font-semibold shrink-0">
+                                {log.displayName.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-medium text-slate-800">{log.displayName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap align-top">
+                            <AccionBadge accion={log.accion} />
+                          </td>
+                          <td className="px-4 py-3.5 text-slate-600 align-top">
+                            <p className="leading-relaxed">{log.detalle}</p>
+                            {log.cambios && Object.keys(log.cambios).length > 0 && (
+                              <div className="mt-2 space-y-1 border-l-2 border-slate-200 pl-3">
+                                {Object.entries(log.cambios).map(([campo, { antes, despues }]) => (
+                                  <p key={campo} className="text-xs leading-relaxed">
+                                    <span className="font-medium text-slate-500">{campo}:</span>{" "}
+                                    <span className="line-through text-slate-400 decoration-slate-300">{antes || "—"}</span>
+                                    <span className="mx-1.5 text-slate-300">→</span>
+                                    <span className="text-slate-700">{despues || "—"}</span>
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

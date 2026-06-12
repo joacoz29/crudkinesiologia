@@ -11,7 +11,7 @@ import { useState, useEffect } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
-import { ref, remove, update } from "firebase/database"
+import { ref, remove, update, get } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
 import { addToLibroDiario, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog, LogCambio } from "@/lib/helpers"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
@@ -300,11 +300,41 @@ export function EditPatientModal({
     if (!editedPatient) return
     setIsSaving(true)
     try {
-      const latestTrat = tratamientos.length > 0 ? tratamientos[tratamientos.length - 1] : null
+      // Anti lost-update: si mientras el modal estuvo abierto alguien confirmó una
+      // asistencia (calendario), el snapshot local quedó viejo. Si el usuario NO
+      // editó historial/tratamientos acá, conservamos lo que haya ahora en la base.
+      const historialInicial = formatSesiones((patient?.sesiones ?? []).join(" "))
+      const tratsIniciales = parseTratamientosRaw(patient?.tratamientos)
+      const usuarioTocoHistorial = sesionesText.trim() !== historialInicial
+      const usuarioTocoTrats = JSON.stringify(tratamientos) !== JSON.stringify(tratsIniciales)
+
+      let sesionesFinales = sesionesText ? [sesionesText] : []
+      let tratamientosFinales = tratamientos
+      if (!usuarioTocoHistorial || !usuarioTocoTrats) {
+        const freshSnap = await get(ref(db, `pacientes/${editedPatient.id}`))
+        if (freshSnap.exists()) {
+          const fresh = freshSnap.val() as Record<string, unknown>
+          if (!usuarioTocoHistorial) {
+            const rawSes = fresh.sesiones
+            sesionesFinales = Array.isArray(rawSes)
+              ? (rawSes as string[])
+              : rawSes && typeof rawSes === "object"
+              ? (Object.values(rawSes as object) as string[])
+              : typeof rawSes === "string"
+              ? [rawSes]
+              : []
+          }
+          if (!usuarioTocoTrats) {
+            tratamientosFinales = parseTratamientosRaw(fresh.tratamientos)
+          }
+        }
+      }
+
+      const latestTrat = tratamientosFinales.length > 0 ? tratamientosFinales[tratamientosFinales.length - 1] : null
       const updatedPatient: Patient = {
         ...editedPatient,
-        tratamientos,
-        sesiones: sesionesText ? [sesionesText] : [],
+        tratamientos: tratamientosFinales,
+        sesiones: sesionesFinales,
         sesionesAutorizadas: latestTrat?.sesionesAutorizadas ?? editedPatient.sesionesAutorizadas,
         nroAutorizacion: latestTrat?.nroAutorizacion || editedPatient.nroAutorizacion,
         diagnostico: latestTrat?.diagnostico || editedPatient.diagnostico,
@@ -328,11 +358,10 @@ export function EditPatientModal({
       }
 
       // Diff del historial libre y de los tratamientos (sesiones, autorizaciones, etc.)
-      const historialInicial = formatSesiones((patient?.sesiones ?? []).join(" "))
-      if (historialInicial !== sesionesText.trim()) {
+      if (usuarioTocoHistorial) {
         cambios["Historial"] = { antes: resumirTexto(historialInicial), despues: resumirTexto(sesionesText) }
       }
-      diffTratamientos(parseTratamientosRaw(patient?.tratamientos), tratamientos, cambios)
+      diffTratamientos(tratsIniciales, tratamientos, cambios)
 
       // Primero el guardado real; el log y el libro diario solo si fue exitoso
       const guardado = await onSave(updatedPatient)
@@ -340,7 +369,7 @@ export function EditPatientModal({
 
       // Al libro diario solo si quedaron MÁS sesiones que al abrir (una sesión
       // agregada y luego borrada antes de guardar no debe generar entrada en la caja)
-      const sesionesIniciales = parseTratamientosRaw(patient?.tratamientos).reduce((s, t) => s + t.sesiones.length, 0)
+      const sesionesIniciales = tratsIniciales.reduce((s, t) => s + t.sesiones.length, 0)
       const sesionesActuales = tratamientos.reduce((s, t) => s + t.sesiones.length, 0)
       if (sesionesActuales > sesionesIniciales) {
         await addToLibroDiario({

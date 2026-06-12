@@ -114,7 +114,6 @@ export function EditPatientModal({
 }: EditPatientModalProps) {
   const [editedPatient, setEditedPatient] = useState<Patient | null>(null)
   const [sesionesText, setSesionesText] = useState("")
-  const [newSessionAdded, setNewSessionAdded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [turnos, setTurnos] = useState<TurnoConFecha[]>([])
   const [isLoadingTurnos, setIsLoadingTurnos] = useState(false)
@@ -132,7 +131,6 @@ export function EditPatientModal({
     if (!patient) return
     setEditedPatient(patient)
     setSesionesText(formatSesiones((patient.sesiones ?? []).join(" ")))
-    setNewSessionAdded(false)
     setShowNewTreatmentForm(false)
     setNewTreatmentNroAuth("")
     setNewTreatmentSesionesAuth("")
@@ -189,7 +187,6 @@ export function EditPatientModal({
         return { ...t, sesiones: [...t.sesiones, `Sesión ${nextNum} — ${timestamp}`] }
       })
     )
-    setNewSessionAdded(true)
   }
 
   const removeSessionFromTratamiento = (tratamientoId: string, sessionIndex: number) => {
@@ -318,7 +315,11 @@ export function EditPatientModal({
         },
       }
 
-      if (newSessionAdded) {
+      // Al libro diario solo si quedaron MÁS sesiones que al abrir (una sesión
+      // agregada y luego borrada antes de guardar no debe generar entrada en la caja)
+      const sesionesIniciales = parseTratamientosRaw(patient?.tratamientos).reduce((s, t) => s + t.sesiones.length, 0)
+      const sesionesActuales = tratamientos.reduce((s, t) => s + t.sesiones.length, 0)
+      if (sesionesActuales > sesionesIniciales) {
         await addToLibroDiario({
           nombreApellido: `${updatedPatient.nombre} ${updatedPatient.apellido}`,
           obraSocial: updatedPatient.obraSocial,
@@ -349,7 +350,6 @@ export function EditPatientModal({
         await writeLog({ accion: "editar_paciente", detalle: `Editó paciente ${updatedPatient.nombre} ${updatedPatient.apellido}`, entidadId: updatedPatient.id, cambios })
       }
       onSave(updatedPatient)
-      setNewSessionAdded(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error al guardar los cambios")
     } finally {

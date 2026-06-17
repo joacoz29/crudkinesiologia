@@ -16,6 +16,23 @@ export function invalidateMonth(key: string): void {
   cache.delete(key)
 }
 
+/** Borra todas las entradas cuya clave empieza con `prefix` (p. ej. al mutar). */
+export function clearCachePrefix(prefix: string): void {
+  for (const k of cache.keys()) {
+    if (k.startsWith(prefix)) cache.delete(k)
+  }
+}
+
+/** Lectura imperativa de la caché (para componentes que no usan el hook). */
+export function getCachedMonth<T>(key: string): T | undefined {
+  return cache.has(key) ? (cache.get(key) as T) : undefined
+}
+
+/** Escritura imperativa de la caché. */
+export function setCachedMonth<T>(key: string, value: T): void {
+  cache.set(key, value)
+}
+
 /**
  * Lee `key` de la caché o lo baja con `fetcher`. El render siempre lee de la
  * caché (sin parpadeo ni datos viejos al navegar entre meses ya visitados).

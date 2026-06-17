@@ -20,6 +20,7 @@ import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
 import { fetchTurnosPorRango, confirmarAsistencia, desconfirmarAsistencia } from "@/lib/helpers"
+import { getCachedMonth, setCachedMonth, clearCachePrefix } from "@/lib/monthly-cache"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { AgendaDia } from "@/components/agenda-dia"
@@ -102,7 +103,18 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
     }
   }, [])
 
-  const loadTurnos = useCallback(async (month: Date) => {
+  // Caché de sesión por mes. Como la grilla de meses adyacentes se solapa, ante
+  // CUALQUIER mutación se limpia todo el prefijo (ver reloadTurnos), así que un
+  // mes cacheado nunca queda desactualizado. El ahorro es navegar meses sin cambios.
+  const loadTurnos = useCallback(async (month: Date, force = false) => {
+    const key = `turnos-cal/${format(month, "yyyy-MM")}`
+    if (!force) {
+      const cached = getCachedMonth<Record<string, Turno[]>>(key)
+      if (cached) {
+        setTurnosPorFecha(cached)
+        return
+      }
+    }
     setIsLoading(true)
     try {
       // Rango completo de la grilla visible (incluye días de meses adyacentes)
@@ -111,6 +123,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
         format(gridDays[0], "yyyy-MM-dd"),
         format(gridDays[gridDays.length - 1], "yyyy-MM-dd")
       )
+      setCachedMonth(key, data)
       setTurnosPorFecha(data)
     } catch {
       toast.error("No se pudieron cargar los turnos")
@@ -118,6 +131,15 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
       setIsLoading(false)
     }
   }, [])
+
+  // Recarga tras una mutación: invalida toda la caché de turnos y baja fresco
+  const reloadTurnos = useCallback(
+    (month: Date) => {
+      clearCachePrefix("turnos-cal/")
+      loadTurnos(month, true)
+    },
+    [loadTurnos],
+  )
 
   // Turnos pendientes sin confirmar de los últimos 45 días (independiente del mes visible)
   const [pendientesPasados, setPendientesPasados] = useState<{ count: number; fechaMasAntigua: string | null }>({
@@ -145,9 +167,18 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
     }
   }, [])
 
+  // Navegación de mes usa la caché; un cambio de refreshTrigger (re-entrar a la
+  // pestaña o un cambio externo) invalida y baja fresco.
+  const lastTrigger = useRef(refreshTrigger)
   useEffect(() => {
-    loadTurnos(currentMonth)
-  }, [currentMonth, loadTurnos, refreshTrigger])
+    const triggered = lastTrigger.current !== refreshTrigger
+    lastTrigger.current = refreshTrigger
+    if (triggered) {
+      reloadTurnos(currentMonth)
+    } else {
+      loadTurnos(currentMonth)
+    }
+  }, [currentMonth, refreshTrigger, loadTurnos, reloadTurnos])
 
   useEffect(() => {
     loadPendientesPasados()
@@ -189,7 +220,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
   }
 
   const handleTurnoSaved = () => {
-    loadTurnos(currentMonth)
+    reloadTurnos(currentMonth)
     loadPendientesPasados()
   }
 
@@ -207,7 +238,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
 
       if (res.alreadyConfirmed) {
         toast.info(`El turno de ${turno.nombre} ${turno.apellido} ya estaba confirmado`)
-        loadTurnos(currentMonth)
+        reloadTurnos(currentMonth)
         loadPendientesPasados()
         return
       }
@@ -227,7 +258,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
                 hora: turno.hora,
               })
               toast.success("Asistencia deshecha")
-              loadTurnos(currentMonth)
+              reloadTurnos(currentMonth)
               loadPendientesPasados()
             } catch {
               toast.error("No se pudo deshacer la asistencia")
@@ -244,7 +275,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
         }
       }
 
-      loadTurnos(currentMonth)
+      reloadTurnos(currentMonth)
       loadPendientesPasados()
     } catch (err) {
       console.error("[Calendario] confirm error:", err)

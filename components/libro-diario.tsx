@@ -19,9 +19,9 @@ import {
 import { useForm, useFieldArray, useWatch } from "react-hook-form"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
-import { ref, get, set } from "firebase/database"
+import { ref, get, update } from "firebase/database"
 import { db } from "@/lib/firebase"
-import { writeLog, LogCambio } from "@/lib/helpers"
+import { writeLog, LogCambio, normalizeLibroEntradas } from "@/lib/helpers"
 import { toast } from "sonner"
 import { format } from "date-fns-tz"
 import { ChevronLeft, ChevronRight, ClipboardCopy, Loader2, Trash2 } from "lucide-react"
@@ -78,6 +78,20 @@ function fechaLegible(dateKey: string): string {
   return `${d}/${m}/${y}`
 }
 
+// Forma canónica y estable de una entrada (mismo orden de claves para comparar
+// JSON entre baseline y estado actual). El `id` es la clave bajo `entradas/`.
+function sanitizeEntry(e: Partial<EntradaLibroDiario>): EntradaLibroDiario {
+  return {
+    id: e.id as string,
+    tipo: (e.tipo as TipoEntrada) ?? "Paciente",
+    nombreApellido: e.nombreApellido ?? "",
+    cobertura: (e.cobertura as "Particular" | "Obra Social") ?? "Particular",
+    obraSocial: e.obraSocial ?? "-",
+    debe: Number(e?.debe) || 0,
+    haber: Number(e?.haber) || 0,
+  }
+}
+
 export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const [fecha, setFecha] = useState<Date>(new Date())
   const [totalDebe, setTotalDebe] = useState(0)
@@ -91,6 +105,14 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const [confirmCopyOpen, setConfirmCopyOpen] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSave = useRef<{ dateKey: string; entradas: EntradaLibroDiario[] } | null>(null)
+  // Lost-update: en vez de pisar el nodo entero, se escribe por-entrada (`entradas/{id}`).
+  // baselineRef = id → JSON de la entrada tal como se guardó por última vez; permite
+  // escribir SOLO las entradas que cambiaron y nulificar las borradas, sin tocar las
+  // que agregó otro usuario (o confirmar asistencia) en paralelo.
+  const baselineRef = useRef<Record<string, string>>({})
+  // El día se cargó en formato array legacy: el primer guardado reemplaza el subárbol
+  // `entradas` para limpiar los índices numéricos viejos.
+  const loadedAsArrayRef = useRef(false)
   // Audit log: estado al cargar el día (baseline) y último estado guardado de la ráfaga de edición.
   // Tras 60s sin guardados se escribe UN log con el diff — evita un log por cada auto-save.
   const auditBaseline = useRef<AuditStats | null>(null)
@@ -144,25 +166,51 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
       setIsSaving(true)
       setError(null)
       try {
-        // Un campo numérico vacío llega como NaN (valueAsNumber) y Firebase rechaza NaN
-        const sanitized = entries.map((e) => ({
-          ...e,
-          debe: Number(e?.debe) || 0,
-          haber: Number(e?.haber) || 0,
-        }))
-        const newTotalHaber = sanitized.reduce((sum, e) => sum + e.haber, 0)
-        const newTotalDebe = sanitized.reduce((sum, e) => sum + e.debe, 0)
+        // `valueAsNumber` deja NaN en campos vacíos (Firebase lo rechaza); sanitizar
+        const sanitized = entries.map(sanitizeEntry)
 
+        if (loadedAsArrayRef.current) {
+          // Primer guardado de un día legacy (array): reemplazar el subárbol `entradas`
+          // para limpiar los índices numéricos y los totales denormalizados viejos.
+          const map: Record<string, EntradaLibroDiario> = {}
+          for (const e of sanitized) map[e.id] = e
+          await update(ref(db), {
+            [`libroDiario/${dateKey}/fecha`]: dateKey,
+            [`libroDiario/${dateKey}/entradas`]: sanitized.length ? map : null,
+            [`libroDiario/${dateKey}/totalHaber`]: null,
+            [`libroDiario/${dateKey}/totalDebe`]: null,
+          })
+          loadedAsArrayRef.current = false
+        } else {
+          // Escribir solo las entradas que cambiaron y nulificar las borradas.
+          // Las entradas que no están en el baseline (las agregó otro en paralelo)
+          // no se tocan → no se pisan.
+          const updates: Record<string, unknown> = {}
+          const currentIds = new Set<string>()
+          for (const e of sanitized) {
+            currentIds.add(e.id)
+            if (baselineRef.current[e.id] !== JSON.stringify(e)) {
+              updates[`libroDiario/${dateKey}/entradas/${e.id}`] = e
+            }
+          }
+          for (const id of Object.keys(baselineRef.current)) {
+            if (!currentIds.has(id)) updates[`libroDiario/${dateKey}/entradas/${id}`] = null
+          }
+          if (Object.keys(updates).length > 0) {
+            updates[`libroDiario/${dateKey}/fecha`] = dateKey
+            await update(ref(db), updates)
+          }
+        }
+
+        // Reconstruir baseline con lo recién guardado
+        const nextBaseline: Record<string, string> = {}
+        for (const e of sanitized) nextBaseline[e.id] = JSON.stringify(e)
+        baselineRef.current = nextBaseline
         setLastSavedData(JSON.stringify(entries))
 
-        await set(ref(db, `libroDiario/${dateKey}`), {
-          fecha: dateKey,
-          entradas: sanitized,
-          totalHaber: newTotalHaber,
-          totalDebe: newTotalDebe,
-        })
-
         // Acumular la ráfaga de edición para el audit log
+        const newTotalHaber = sanitized.reduce((sum, e) => sum + e.haber, 0)
+        const newTotalDebe = sanitized.reduce((sum, e) => sum + e.debe, 0)
         if (auditPending.current && auditPending.current.dateKey !== dateKey) flushAuditLog()
         auditPending.current = { dateKey, count: sanitized.length, debe: newTotalDebe, haber: newTotalHaber }
         if (auditTimer.current) clearTimeout(auditTimer.current)
@@ -253,22 +301,25 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
 
         if (snapshot.exists()) {
           const data = snapshot.val()
-          const normalized = (data.entradas || []).map((e: EntradaLibroDiario) => ({
-            ...e,
-            id: e.id || crypto.randomUUID(),
-            tipo: (e.tipo as TipoEntrada) ?? "Paciente",
-          }))
+          loadedAsArrayRef.current = Array.isArray(data.entradas)
+          const normalized = normalizeLibroEntradas(data.entradas).map(sanitizeEntry)
           setValue("entradas", normalized)
-          setTotalHaber(data.totalHaber || 0)
-          setTotalDebe(data.totalDebe || 0)
-          setLastSavedData(JSON.stringify(normalized))
-          auditBaseline.current = {
-            dateKey,
-            count: normalized.length,
-            debe: Number(data.totalDebe) || 0,
-            haber: Number(data.totalHaber) || 0,
+          // Totales y baseline derivados de las entradas (ya no se leen del nodo)
+          const baseline: Record<string, string> = {}
+          let h = 0, d = 0
+          for (const e of normalized) {
+            baseline[e.id] = JSON.stringify(e)
+            h += e.haber
+            d += e.debe
           }
+          baselineRef.current = baseline
+          setTotalHaber(h)
+          setTotalDebe(d)
+          setLastSavedData(JSON.stringify(normalized))
+          auditBaseline.current = { dateKey, count: normalized.length, debe: d, haber: h }
         } else {
+          loadedAsArrayRef.current = false
+          baselineRef.current = {}
           setValue("entradas", [])
           setTotalHaber(0)
           setTotalDebe(0)
@@ -328,21 +379,19 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
     try {
       const prevDate = addDays(fecha, -1)
       const snapshot = await get(ref(db, `libroDiario/${toLocalDateKey(prevDate)}`))
+      const prevList = normalizeLibroEntradas(snapshot.val()?.entradas)
 
-      if (!snapshot.exists() || !snapshot.val().entradas?.length) {
+      if (!prevList.length) {
         toast.error('No hay entradas el día anterior')
         return
       }
 
-      const prevEntradas: EntradaLibroDiario[] = (snapshot.val().entradas || []).map(
-        (e: EntradaLibroDiario) => ({
-          ...e,
-          id: crypto.randomUUID(),
-          tipo: e.tipo ?? "Paciente",
-          debe: 0,
-          haber: 0,
-        })
-      )
+      const prevEntradas: EntradaLibroDiario[] = prevList.map((e) => ({
+        ...sanitizeEntry(e),
+        id: crypto.randomUUID(),
+        debe: 0,
+        haber: 0,
+      }))
 
       prevEntradas.forEach(e => append(e))
       toast.success(`${prevEntradas.length} entrada${prevEntradas.length !== 1 ? 's' : ''} copiada${prevEntradas.length !== 1 ? 's' : ''} del día anterior`)

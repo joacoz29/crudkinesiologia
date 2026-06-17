@@ -1,4 +1,4 @@
-import { ref, set, get, push, remove, update, query, orderByKey, startAt, endAt } from "firebase/database"
+import { ref, get, push, remove, update, query, orderByKey, startAt, endAt } from "firebase/database"
 import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
 import { Patient, Tratamiento, Turno, TurnoConFecha } from "@/types"
@@ -48,7 +48,7 @@ export function getSessionStats(patient: Patient): { used: number; authorized: n
   return { used, authorized }
 }
 
-interface LibroDiarioEntry {
+export interface LibroDiarioEntry {
   id?: string
   tipo?: "Paciente" | "Gasto" | "Ingreso"
   nombreApellido: string
@@ -58,42 +58,54 @@ interface LibroDiarioEntry {
   haber: number
 }
 
-// Lee el libro diario del día y devuelve el nodo completo con el paciente agregado,
-// o null si el paciente ya tiene entrada ese día. `prev` es el nodo anterior (para deshacer).
-async function buildLibroDiarioUpdate(
+// Normaliza las entradas del libro diario soportando ambos formatos:
+// - array (legacy: se guardaba el nodo entero) → id = inner `id`
+// - mapa { entryId: entry } (nuevo: escrituras por-entrada) → id = la clave
+// La clave manda en el formato mapa: es la identidad estable para los updates.
+export function normalizeLibroEntradas(raw: unknown): (LibroDiarioEntry & { id: string })[] {
+  if (!raw) return []
+  const entries: (LibroDiarioEntry & { id: string })[] = []
+  if (Array.isArray(raw)) {
+    for (const e of raw) {
+      if (!e) continue
+      const v = e as LibroDiarioEntry
+      entries.push({ ...v, id: v.id || (typeof crypto !== "undefined" ? crypto.randomUUID() : String(Math.random())), tipo: v.tipo ?? "Paciente" })
+    }
+  } else if (typeof raw === "object") {
+    for (const [key, val] of Object.entries(raw as Record<string, LibroDiarioEntry>)) {
+      if (!val) continue
+      entries.push({ ...val, id: key, tipo: val.tipo ?? "Paciente" })
+    }
+  }
+  return entries
+}
+
+// Prepara UNA entrada de paciente para el libro diario del día, o null si el
+// paciente ya tiene entrada ese día. Devuelve solo la entrada + su id para
+// escribirla de forma puntual (`entradas/{id}`), sin tocar las demás entradas
+// (evita el lost-update con quien esté editando el libro en simultáneo).
+async function buildLibroDiarioEntry(
   dateKey: string,
   nombreApellido: string,
   obraSocial: string
-): Promise<{ node: Record<string, unknown>; prev: Record<string, unknown> | null } | null> {
-  const snapshot = await get(ref(db, `libroDiario/${dateKey}`))
-  const prev = snapshot.exists() ? (snapshot.val() as Record<string, unknown>) : null
-  const entradas = (prev?.entradas as LibroDiarioEntry[] | undefined) ?? []
+): Promise<{ entryId: string; entry: LibroDiarioEntry } | null> {
+  const snapshot = await get(ref(db, `libroDiario/${dateKey}/entradas`))
+  const entradas = normalizeLibroEntradas(snapshot.val())
 
   // Skip if this patient already has an entry for this date
   if (entradas.some((e) => e.nombreApellido === nombreApellido)) return null
 
-  const updatedEntradas: LibroDiarioEntry[] = [
-    ...entradas,
-    {
-      id: crypto.randomUUID(),
-      tipo: "Paciente",
-      nombreApellido,
-      cobertura: obraSocial === "-" ? "Particular" : "Obra Social",
-      obraSocial,
-      debe: 0,
-      haber: 0,
-    },
-  ]
-
-  return {
-    node: {
-      fecha: prev?.fecha ?? dateKey,
-      entradas: updatedEntradas,
-      totalHaber: updatedEntradas.reduce((sum, e) => sum + (Number(e.haber) || 0), 0),
-      totalDebe: updatedEntradas.reduce((sum, e) => sum + (Number(e.debe) || 0), 0),
-    },
-    prev,
+  const entryId = crypto.randomUUID()
+  const entry: LibroDiarioEntry = {
+    id: entryId,
+    tipo: "Paciente",
+    nombreApellido,
+    cobertura: obraSocial === "-" ? "Particular" : "Obra Social",
+    obraSocial,
+    debe: 0,
+    haber: 0,
   }
+  return { entryId, entry }
 }
 
 export async function addToLibroDiario(entry: {
@@ -103,9 +115,12 @@ export async function addToLibroDiario(entry: {
 }) {
   // Fecha local de Argentina, no UTC (toISOString cae en "mañana" después de las 21:00)
   const dateKey = entry.fecha ?? format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
-  const result = await buildLibroDiarioUpdate(dateKey, entry.nombreApellido, entry.obraSocial)
+  const result = await buildLibroDiarioEntry(dateKey, entry.nombreApellido, entry.obraSocial)
   if (!result) return
-  await set(ref(db, `libroDiario/${dateKey}`), result.node)
+  await update(ref(db), {
+    [`libroDiario/${dateKey}/fecha`]: dateKey,
+    [`libroDiario/${dateKey}/entradas/${result.entryId}`]: result.entry,
+  })
 }
 
 export async function fetchTurnosPorRango(
@@ -283,10 +298,13 @@ export async function confirmarAsistencia(params: {
     remaining = latest.sesionesAutorizadas - (latest.sesiones.length + 1)
   }
 
-  const libro = await buildLibroDiarioUpdate(fecha, `${nombre} ${apellido}`, (raw.obraSocial as string) || "-")
+  const libro = await buildLibroDiarioEntry(fecha, `${nombre} ${apellido}`, (raw.obraSocial as string) || "-")
   if (libro) {
-    updates[`libroDiario/${fecha}`] = libro.node
-    revert[`libroDiario/${fecha}`] = libro.prev
+    // Escritura puntual de la entrada (no pisa otras entradas del día); el revert
+    // solo borra la entrada agregada
+    updates[`libroDiario/${fecha}/fecha`] = fecha
+    updates[`libroDiario/${fecha}/entradas/${libro.entryId}`] = libro.entry
+    revert[`libroDiario/${fecha}/entradas/${libro.entryId}`] = null
   }
 
   await update(ref(db), updates)

@@ -110,9 +110,11 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   // escribir SOLO las entradas que cambiaron y nulificar las borradas, sin tocar las
   // que agregó otro usuario (o confirmar asistencia) en paralelo.
   const baselineRef = useRef<Record<string, string>>({})
-  // El día se cargó en formato array legacy: el primer guardado reemplaza el subárbol
-  // `entradas` para limpiar los índices numéricos viejos.
+  // El día se cargó en formato array legacy: el primer guardado migra a mapa por id.
   const loadedAsArrayRef = useRef(false)
+  // Claves de almacenamiento viejas (índices "0","1",...) del día legacy, para
+  // nulificarlas puntualmente en la migración sin pisar entradas que agregó otro.
+  const legacyKeysRef = useRef<string[]>([])
   // Audit log: estado al cargar el día (baseline) y último estado guardado de la ráfaga de edición.
   // Tras 60s sin guardados se escribe UN log con el diff — evita un log por cada auto-save.
   const auditBaseline = useRef<AuditStats | null>(null)
@@ -170,17 +172,22 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         const sanitized = entries.map(sanitizeEntry)
 
         if (loadedAsArrayRef.current) {
-          // Primer guardado de un día legacy (array): reemplazar el subárbol `entradas`
-          // para limpiar los índices numéricos y los totales denormalizados viejos.
-          const map: Record<string, EntradaLibroDiario> = {}
-          for (const e of sanitized) map[e.id] = e
-          await update(ref(db), {
+          // Migración de día legacy (array → mapa por id): escribir cada entrada con
+          // su clave uuid y borrar SOLO los índices numéricos viejos. No se toca
+          // ninguna clave nueva que haya agregado otro en paralelo (p. ej. confirmar
+          // asistencia), evitando el lost-update durante la migración.
+          const updates: Record<string, unknown> = {
             [`libroDiario/${dateKey}/fecha`]: dateKey,
-            [`libroDiario/${dateKey}/entradas`]: sanitized.length ? map : null,
             [`libroDiario/${dateKey}/totalHaber`]: null,
             [`libroDiario/${dateKey}/totalDebe`]: null,
-          })
+          }
+          for (const e of sanitized) updates[`libroDiario/${dateKey}/entradas/${e.id}`] = e
+          for (const k of legacyKeysRef.current) {
+            if (!sanitized.some((e) => e.id === k)) updates[`libroDiario/${dateKey}/entradas/${k}`] = null
+          }
+          await update(ref(db), updates)
           loadedAsArrayRef.current = false
+          legacyKeysRef.current = []
         } else {
           // Escribir solo las entradas que cambiaron y nulificar las borradas.
           // Las entradas que no están en el baseline (las agregó otro en paralelo)
@@ -302,6 +309,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         if (snapshot.exists()) {
           const data = snapshot.val()
           loadedAsArrayRef.current = Array.isArray(data.entradas)
+          legacyKeysRef.current = loadedAsArrayRef.current ? Object.keys(data.entradas ?? {}) : []
           const normalized = normalizeLibroEntradas(data.entradas).map(sanitizeEntry)
           setValue("entradas", normalized)
           // Totales y baseline derivados de las entradas (ya no se leen del nodo)
@@ -319,6 +327,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           auditBaseline.current = { dateKey, count: normalized.length, debe: d, haber: h }
         } else {
           loadedAsArrayRef.current = false
+          legacyKeysRef.current = []
           baselineRef.current = {}
           setValue("entradas", [])
           setTotalHaber(0)

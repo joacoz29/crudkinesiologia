@@ -5,11 +5,14 @@ import { ref, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { format, parseISO, isValid, addMonths, subMonths } from "date-fns"
+import { formatInTimeZone } from "date-fns-tz"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Shield, Star, Search, Inbox } from "lucide-react"
+import { ChevronLeft, ChevronRight, Shield, Star, Search, Inbox, CalendarDays } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AdminDatos } from "@/components/admin-datos"
+
+const TZ = "America/Argentina/Buenos_Aires"
 
 interface LogCambio {
   antes: string
@@ -101,6 +104,7 @@ export function AdminPanel() {
   const [filterAccion, setFilterAccion] = useState("todas")
   const [searchPaciente, setSearchPaciente] = useState("")
   const [vista, setVista] = useState<"registro" | "opiniones" | "datos">("registro")
+  const [diaIndex, setDiaIndex] = useState(0) // paginación por día del registro (0 = día más reciente)
 
   const mesKey = format(currentMonth, "yyyy-MM")
   // El mes actual puede crecer (logs/opiniones nuevas) → revalidar; los pasados son inmutables
@@ -138,6 +142,11 @@ export function AdminPanel() {
     setFilterAccion("todas")
     setSearchPaciente("")
   }, [mesKey])
+
+  // Volver al día más reciente cuando cambia el universo de logs (mes o filtros)
+  useEffect(() => {
+    setDiaIndex(0)
+  }, [mesKey, filterUser, filterAccion, searchPaciente])
 
   const promedio = opiniones.length
     ? opiniones.reduce((sum, o) => sum + o.rating, 0) / opiniones.length
@@ -178,6 +187,32 @@ export function AdminPanel() {
     }
     return true
   })
+
+  // Agrupación por día (hora Argentina, igual criterio que el bucket de mes).
+  // `filtered` viene desc por timestamp, así que los días quedan del más reciente al más viejo.
+  const dias: { dayKey: string; logs: LogEntry[] }[] = []
+  {
+    const map = new Map<string, LogEntry[]>()
+    for (const l of filtered) {
+      const d = parseISO(l.timestamp)
+      const dayKey = isValid(d) ? formatInTimeZone(d, TZ, "yyyy-MM-dd") : "sin-fecha"
+      const arr = map.get(dayKey)
+      if (arr) {
+        arr.push(l)
+      } else {
+        const nuevo = [l]
+        map.set(dayKey, nuevo)
+        dias.push({ dayKey, logs: nuevo })
+      }
+    }
+  }
+  const safeDiaIndex = dias.length ? Math.min(diaIndex, dias.length - 1) : 0
+  const diaActual = dias[safeDiaIndex]
+  const diaLabel = diaActual
+    ? diaActual.dayKey === "sin-fecha"
+      ? "Sin fecha"
+      : format(parseISO(diaActual.dayKey), "EEEE d 'de' MMMM", { locale: es })
+    : ""
 
   // Resumen por usuario (sobre logs sin filtrar del mes)
   const resumenUsuarios = Array.from(
@@ -398,85 +433,120 @@ export function AdminPanel() {
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[#001633]">
-                    {/* w-px + nowrap: las tres primeras columnas se ajustan a su contenido
-                        y todo el ancho sobrante va a Detalle (en pantallas anchas la
-                        columna Acción ya no queda flotando en un espacio gigante) */}
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 w-px whitespace-nowrap">Fecha y hora</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 w-px whitespace-nowrap">Usuario</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 w-px whitespace-nowrap">Acción</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60">Detalle</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {isLoading ? (
-                    Array.from({ length: 6 }).map((_, i) => (
+            {isLoading ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <tbody className="divide-y divide-slate-100">
+                    {Array.from({ length: 6 }).map((_, i) => (
                       <tr key={i}>
-                        <td className="px-4 py-3.5"><div className="h-4 w-28 bg-slate-200 rounded animate-pulse" /></td>
+                        <td className="px-4 py-3.5"><div className="h-4 w-16 bg-slate-200 rounded animate-pulse" /></td>
                         <td className="px-4 py-3.5"><div className="h-4 w-32 bg-slate-200 rounded animate-pulse" /></td>
                         <td className="px-4 py-3.5"><div className="h-5 w-32 bg-slate-200 rounded-full animate-pulse" /></td>
                         <td className="px-4 py-3.5"><div className="h-4 w-64 bg-slate-200 rounded animate-pulse" /></td>
                       </tr>
-                    ))
-                  ) : filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-16 text-center">
-                        <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                        <p className="text-sm text-slate-400">Sin registros para este período</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filtered.map((log) => {
-                      const d = parseISO(log.timestamp)
-                      const esCritico = ACCION_CRITICA.has(log.accion)
-                      return (
-                        <tr key={log.id} className={`transition-colors ${esCritico ? "bg-red-50/40 hover:bg-red-50/70" : "hover:bg-slate-50/70"}`}>
-                          <td className="px-4 py-3.5 whitespace-nowrap align-top">
-                            {isValid(d) ? (
-                              <>
-                                <p className="text-slate-600 tabular-nums leading-tight">{format(d, "dd/MM/yyyy")}</p>
-                                <p className="text-xs text-slate-400 tabular-nums">{format(d, "HH:mm")} hs</p>
-                              </>
-                            ) : (
-                              <p className="text-slate-400 tabular-nums">{log.timestamp}</p>
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap align-top">
-                            <div className="flex items-center gap-2" title={log.email}>
-                              <div className="h-7 w-7 rounded-full bg-[#001633]/90 flex items-center justify-center text-white text-[11px] font-semibold shrink-0">
-                                {log.displayName.charAt(0).toUpperCase()}
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : dias.length === 0 ? (
+              <div className="px-4 py-16 text-center">
+                <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-400">Sin registros para este período</p>
+              </div>
+            ) : (
+              <>
+                {/* Navegador por día */}
+                <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-slate-100 bg-slate-50/30">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-slate-500 hover:text-[#001633] disabled:opacity-30"
+                    onClick={() => setDiaIndex(safeDiaIndex + 1)}
+                    disabled={safeDiaIndex >= dias.length - 1}
+                    title="Día anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-2 min-w-0 text-center">
+                    <CalendarDays className="h-4 w-4 text-[#001633] shrink-0 hidden sm:block" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 capitalize truncate leading-tight">{diaLabel}</p>
+                      <p className="text-[11px] text-slate-400 tabular-nums">
+                        {diaActual.logs.length} registro{diaActual.logs.length !== 1 ? "s" : ""} · día {safeDiaIndex + 1} de {dias.length}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-slate-500 hover:text-[#001633] disabled:opacity-30"
+                    onClick={() => setDiaIndex(safeDiaIndex - 1)}
+                    disabled={safeDiaIndex <= 0}
+                    title="Día siguiente"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-[#001633]">
+                        {/* w-px + nowrap: las tres primeras columnas se ajustan a su contenido
+                            y todo el ancho sobrante va a Detalle */}
+                        <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 w-px whitespace-nowrap">Hora</th>
+                        <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 w-px whitespace-nowrap">Usuario</th>
+                        <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 w-px whitespace-nowrap">Acción</th>
+                        <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-white/60">Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {diaActual.logs.map((log) => {
+                        const d = parseISO(log.timestamp)
+                        const esCritico = ACCION_CRITICA.has(log.accion)
+                        return (
+                          <tr key={log.id} className={`transition-colors ${esCritico ? "bg-red-50/40 hover:bg-red-50/70" : "hover:bg-slate-50/70"}`}>
+                            <td className="px-4 py-3.5 whitespace-nowrap align-top">
+                              {isValid(d) ? (
+                                <p className="text-slate-600 tabular-nums leading-tight">{formatInTimeZone(d, TZ, "HH:mm")} <span className="text-xs text-slate-400">hs</span></p>
+                              ) : (
+                                <p className="text-slate-400 tabular-nums text-xs">{log.timestamp}</p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 whitespace-nowrap align-top">
+                              <div className="flex items-center gap-2" title={log.email}>
+                                <div className="h-7 w-7 rounded-full bg-[#001633]/90 flex items-center justify-center text-white text-[11px] font-semibold shrink-0">
+                                  {log.displayName.charAt(0).toUpperCase()}
+                                </div>
+                                <span className="font-medium text-slate-800">{log.displayName}</span>
                               </div>
-                              <span className="font-medium text-slate-800">{log.displayName}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap align-top">
-                            <AccionBadge accion={log.accion} />
-                          </td>
-                          <td className="px-4 py-3.5 text-slate-600 align-top">
-                            <p className="leading-relaxed">{log.detalle}</p>
-                            {log.cambios && Object.keys(log.cambios).length > 0 && (
-                              <div className="mt-2 space-y-1 border-l-2 border-slate-200 pl-3">
-                                {Object.entries(log.cambios).map(([campo, { antes, despues }]) => (
-                                  <p key={campo} className="text-xs leading-relaxed">
-                                    <span className="font-medium text-slate-500">{campo}:</span>{" "}
-                                    <span className="line-through text-slate-400 decoration-slate-300">{antes || "—"}</span>
-                                    <span className="mx-1.5 text-slate-300">→</span>
-                                    <span className="text-slate-700">{despues || "—"}</span>
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            </td>
+                            <td className="px-4 py-3.5 whitespace-nowrap align-top">
+                              <AccionBadge accion={log.accion} />
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-600 align-top">
+                              <p className="leading-relaxed">{log.detalle}</p>
+                              {log.cambios && Object.keys(log.cambios).length > 0 && (
+                                <div className="mt-2 space-y-1 border-l-2 border-slate-200 pl-3">
+                                  {Object.entries(log.cambios).map(([campo, { antes, despues }]) => (
+                                    <p key={campo} className="text-xs leading-relaxed">
+                                      <span className="font-medium text-slate-500">{campo}:</span>{" "}
+                                      <span className="line-through text-slate-400 decoration-slate-300">{antes || "—"}</span>
+                                      <span className="mx-1.5 text-slate-300">→</span>
+                                      <span className="text-slate-700">{despues || "—"}</span>
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

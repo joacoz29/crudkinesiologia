@@ -51,7 +51,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
   const [dupNombre, setDupNombre] = useState("")
 
   const [tratamientos, setTratamientos] = useState<Tratamiento[]>([])
-  const { patients: allPatients } = usePatients()
+  const { patients: allPatients, isLoading: isLoadingPatients } = usePatients()
 
   const resetForm = () => {
     setPatient(EMPTY_PATIENT)
@@ -205,8 +205,11 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
             />
           </div>
 
-          <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors" disabled={isSaving}>
-            {isSaving ? "Registrando..." : "Registrar"}
+          {/* Esperar a que cargue la caché de pacientes garantiza que el aviso de
+              DNI duplicado corra contra datos completos (isLoading pasa a false
+              también si la suscripción falla, así que nunca bloquea de forma permanente) */}
+          <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors" disabled={isSaving || isLoadingPatients}>
+            {isSaving ? "Registrando..." : isLoadingPatients ? "Cargando base…" : "Registrar"}
           </Button>
         </form>
       </DialogContent>

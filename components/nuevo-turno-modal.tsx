@@ -133,7 +133,7 @@ export function NuevoTurnoModal({
   feriados = {},
 }: NuevoTurnoModalProps) {
   // Caché compartida: la búsqueda de pacientes se resuelve en memoria
-  const { patients: allPatients } = usePatients()
+  const { patients: allPatients, isLoading: isLoadingPatients } = usePatients()
   const [search, setSearch] = useState("")
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [hora, setHora] = useState(horaInicial)
@@ -387,6 +387,8 @@ export function NuevoTurnoModal({
                           <span className="text-xs text-gray-400">{p.obraSocial}</span>
                         </button>
                       ))
+                    ) : isLoadingPatients ? (
+                      <p className="px-3 py-2 text-sm text-gray-400">Cargando pacientes…</p>
                     ) : (
                       <p className="px-3 py-2 text-sm text-gray-500">Sin resultados</p>
                     )}

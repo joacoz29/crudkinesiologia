@@ -39,7 +39,7 @@ function setState(next: Partial<State>) {
   emit()
 }
 
-// Normaliza `sesiones` legacy guardadas como string (misma regla que /api/patients)
+// Normaliza `sesiones` legacy guardadas como string (formato histórico: "a, b, c")
 function normalize(val: Record<string, Record<string, unknown>> | null): Patient[] {
   if (!val) return []
   return Object.entries(val).map(([id, raw]) => {

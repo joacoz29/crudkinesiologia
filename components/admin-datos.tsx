@@ -3,11 +3,16 @@
 import { useMemo } from "react"
 import { format, parseISO, startOfMonth, endOfMonth, getDay, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
-import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle } from "lucide-react"
-import { fetchTurnosPorRango, getSessionStats } from "@/lib/helpers"
+import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins } from "lucide-react"
+import { fetchTurnosPorRango, fetchLibroDiarioPorRango, getSessionStats } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { Patient, Turno } from "@/types"
+
+// Formato de moneda argentino: $1.234,56
+function formatMoney(n: number): string {
+  return `$${n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
 
 const DIAS_SEMANA = [
   { label: "Lun", value: 1 },
@@ -51,6 +56,42 @@ function StatCard({
   )
 }
 
+const MONEY_TONES = {
+  green: { bg: "bg-emerald-50", icon: "text-emerald-600", value: "text-emerald-700" },
+  orange: { bg: "bg-orange-50", icon: "text-orange-600", value: "text-orange-700" },
+  red: { bg: "bg-red-50", icon: "text-red-600", value: "text-red-700" },
+  slate: { bg: "bg-[#001633]/5", icon: "text-[#001633]", value: "text-slate-800" },
+}
+
+function MoneyCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: typeof CalendarCheck
+  label: string
+  value: string
+  detail: string
+  tone: keyof typeof MONEY_TONES
+}) {
+  const t = MONEY_TONES[tone]
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
+      <div className={`h-9 w-9 rounded-xl ${t.bg} flex items-center justify-center shrink-0`}>
+        <Icon className={`h-5 w-5 ${t.icon}`} />
+      </div>
+      <div className="min-w-0">
+        <p className={`text-lg font-semibold leading-tight tabular-nums truncate ${t.value}`}>{value}</p>
+        <p className="text-xs text-slate-400 truncate">
+          <span className="font-medium text-slate-500">{label}</span> · {detail}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
   // Caché compartida: reusa la suscripción live de pacientes (no baja la colección de nuevo)
   const { patients, isLoading: isLoadingPatients } = usePatients()
@@ -70,7 +111,18 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     { revalidate: esMesActual, fallback: {} },
   )
 
-  const isLoading = isLoadingTurnos || isLoadingPatients
+  // Recaudación del mes desde el libro diario (haber/debe por día), cacheada por sesión
+  const { data: libroPorDia, isLoading: isLoadingLibro } = useCachedMonth<Record<string, { haber: number; debe: number }>>(
+    `libro-datos/${mesKey}`,
+    () =>
+      fetchLibroDiarioPorRango(
+        format(startOfMonth(currentMonth), "yyyy-MM-dd"),
+        format(endOfMonth(currentMonth), "yyyy-MM-dd"),
+      ),
+    { revalidate: esMesActual, fallback: {} },
+  )
+
+  const isLoading = isLoadingTurnos || isLoadingPatients || isLoadingLibro
 
   const metrics = useMemo(() => {
     const patientById = new Map(patients.map((p) => [p.id, p]))
@@ -167,6 +219,25 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       }))
       .sort((a, b) => a.restantes - b.restantes || a.nombre.localeCompare(b.nombre))
 
+    // Recaudación del mes (libro diario): saldo diario = haber - debe
+    const recaudPorDia = porDia.map(({ dia, fecha, weekday }) => {
+      const l = libroPorDia[fecha]
+      const haber = l?.haber ?? 0
+      const debe = l?.debe ?? 0
+      return { dia, fecha, weekday, haber, debe, saldo: haber - debe }
+    })
+    const totalHaber = recaudPorDia.reduce((s, d) => s + d.haber, 0)
+    const totalDebe = recaudPorDia.reduce((s, d) => s + d.debe, 0)
+    const saldoMes = totalHaber - totalDebe
+    const diasConMovimiento = recaudPorDia.filter((d) => d.haber !== 0 || d.debe !== 0).length
+    const promedioRecaud = diasConMovimiento ? totalHaber / diasConMovimiento : 0
+    const maxSaldoAbs = Math.max(1, ...recaudPorDia.map((d) => Math.abs(d.saldo)))
+    const mejorDia = recaudPorDia.reduce<typeof recaudPorDia[number] | null>(
+      (best, d) => (d.saldo > 0 && (!best || d.saldo > best.saldo) ? d : best),
+      null,
+    )
+    const hayRecaudacion = totalHaber !== 0 || totalDebe !== 0
+
     return {
       atenciones: asistidos.length,
       ausencias: ausentes.length,
@@ -183,9 +254,18 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       maxHeat,
       inasistentes,
       porAgotar,
+      recaudPorDia,
+      totalHaber,
+      totalDebe,
+      saldoMes,
+      diasConMovimiento,
+      promedioRecaud,
+      maxSaldoAbs,
+      mejorDia,
+      hayRecaudacion,
       sinTurnos: todos.length === 0,
     }
-  }, [turnosPorDia, patients, currentMonth])
+  }, [turnosPorDia, libroPorDia, patients, currentMonth])
 
   const mesNombre = format(currentMonth, "MMMM", { locale: es })
 
@@ -339,6 +419,61 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
           </div>
         </>
       )}
+
+      {/* Recaudación (libro diario) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+            <Coins className="h-4 w-4 text-emerald-500" />
+            Recaudación de {mesNombre}
+          </p>
+          {metrics.mejorDia && (
+            <p className="text-[11px] text-slate-400 truncate">
+              Mejor día: {format(parseISO(metrics.mejorDia.fecha), "d 'de' MMM", { locale: es })} · {formatMoney(metrics.mejorDia.saldo)}
+            </p>
+          )}
+        </div>
+
+        {!metrics.hayRecaudacion ? (
+          <div className="py-8 text-center">
+            <Coins className="h-8 w-8 text-slate-200 mx-auto mb-2" />
+            <p className="text-xs text-slate-400">Sin montos cargados en el libro diario de {mesNombre}</p>
+            <p className="text-[11px] text-slate-300 mt-0.5">Completá Debe / Haber en el libro diario para ver la recaudación</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <MoneyCard icon={Banknote} label="Recaudado" value={formatMoney(metrics.totalHaber)} detail="ingresos (Haber)" tone="green" />
+              <MoneyCard icon={ArrowDownCircle} label="Egresos" value={formatMoney(metrics.totalDebe)} detail="gastos (Debe)" tone="orange" />
+              <MoneyCard icon={Coins} label="Saldo neto" value={formatMoney(metrics.saldoMes)} detail={`en ${mesNombre}`} tone={metrics.saldoMes >= 0 ? "green" : "red"} />
+              <MoneyCard icon={TrendingUp} label="Promedio diario" value={formatMoney(metrics.promedioRecaud)} detail={`${metrics.diasConMovimiento} día${metrics.diasConMovimiento !== 1 ? "s" : ""} con caja`} tone="slate" />
+            </div>
+
+            <p className="text-xs font-medium text-slate-500 mb-2">Saldo por día</p>
+            <div className="flex items-end gap-[3px] h-28">
+              {metrics.recaudPorDia.map(({ dia, fecha, saldo }) => {
+                const cero = saldo === 0
+                const altura = cero ? 3 : Math.max(8, (Math.abs(saldo) / metrics.maxSaldoAbs) * 90)
+                return (
+                  <div
+                    key={dia}
+                    className="flex-1 flex flex-col items-center gap-1 min-w-0"
+                    title={`${format(parseISO(fecha), "EEEE d", { locale: es })}: ${formatMoney(saldo)}`}
+                  >
+                    <div className="w-full flex items-end" style={{ height: "90px" }}>
+                      <div
+                        className={`w-full rounded-t transition-all ${cero ? "bg-slate-100" : saldo > 0 ? "bg-emerald-500" : "bg-red-400"}`}
+                        style={{ height: `${altura}px` }}
+                      />
+                    </div>
+                    <span className="text-[9px] tabular-nums text-slate-400">{dia}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="grid lg:grid-cols-2 gap-3 items-start">
         {/* Sesiones por agotar (estado actual, independiente del mes) */}

@@ -149,6 +149,31 @@ export async function fetchTurnosPorRango(
   return result
 }
 
+// Recaudación por día del libro diario en un rango (claves yyyy-MM-dd).
+// Computa haber/debe sumando las entradas (los totales denormalizados se dropearon).
+export async function fetchLibroDiarioPorRango(
+  start: string,
+  end: string
+): Promise<Record<string, { haber: number; debe: number }>> {
+  const q = query(ref(db, "libroDiario"), orderByKey(), startAt(start), endAt(end))
+  const snapshot = await get(q)
+  if (!snapshot.exists()) return {}
+
+  const result: Record<string, { haber: number; debe: number }> = {}
+  snapshot.forEach((daySnap) => {
+    const fecha = daySnap.key!
+    const entradas = normalizeLibroEntradas((daySnap.val() as { entradas?: unknown })?.entradas)
+    let haber = 0
+    let debe = 0
+    for (const e of entradas) {
+      haber += Number(e.haber) || 0
+      debe += Number(e.debe) || 0
+    }
+    result[fecha] = { haber, debe }
+  })
+  return result
+}
+
 export async function saveTurno(
   fecha: string,
   turno: Omit<Turno, "id">

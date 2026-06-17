@@ -1,12 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ref, get } from "firebase/database"
-import { db } from "@/lib/firebase"
 import { format, parseISO, startOfMonth, endOfMonth, getDay, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle } from "lucide-react"
 import { fetchTurnosPorRango, getSessionStats } from "@/lib/helpers"
+import { usePatients } from "@/lib/patients-store"
 import { Patient, Turno } from "@/types"
 
 const DIAS_SEMANA = [
@@ -54,8 +53,8 @@ function StatCard({
 export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
   const [turnosPorDia, setTurnosPorDia] = useState<Record<string, Turno[]>>({})
   const [isLoadingTurnos, setIsLoadingTurnos] = useState(true)
-  const [patients, setPatients] = useState<Patient[]>([])
-  const [isLoadingPatients, setIsLoadingPatients] = useState(true)
+  // Caché compartida: reusa la suscripción live de pacientes (no baja la colección de nuevo)
+  const { patients, isLoading: isLoadingPatients } = usePatients()
 
   const mesKey = format(currentMonth, "yyyy-MM")
 
@@ -71,30 +70,6 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     return () => { cancelado = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mesKey])
-
-  // Los pacientes no dependen del mes: una sola carga al montar
-  useEffect(() => {
-    let cancelado = false
-    get(ref(db, "pacientes"))
-      .then((snap) => {
-        if (cancelado) return
-        if (!snap.exists()) { setPatients([]); return }
-        const data = snap.val() as Record<string, Record<string, unknown>>
-        const list = Object.entries(data).map(([id, raw]) => {
-          // Normaliza sesiones legacy guardadas como string (misma regla que /api/patients)
-          const sesiones = Array.isArray(raw.sesiones)
-            ? (raw.sesiones as string[])
-            : typeof raw.sesiones === "string"
-              ? (raw.sesiones as string).split(", ").filter(Boolean)
-              : []
-          return { ...raw, id, sesiones } as unknown as Patient
-        })
-        setPatients(list)
-      })
-      .catch(() => { if (!cancelado) setPatients([]) })
-      .finally(() => { if (!cancelado) setIsLoadingPatients(false) })
-    return () => { cancelado = true }
-  }, [])
 
   const isLoading = isLoadingTurnos || isLoadingPatients
 

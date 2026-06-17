@@ -21,7 +21,7 @@ import { toast } from "sonner"
 import { db, auth } from "@/lib/firebase"
 import { ref, push } from "firebase/database"
 import { writeLog, appendSesionAlHistorial } from "@/lib/helpers"
-import { getAuthHeaders } from "@/lib/auth-helper"
+import { usePatients } from "@/lib/patients-store"
 import { TratamientosAccordion } from "@/components/tratamientos-accordion"
 import { Tratamiento } from "@/types"
 
@@ -51,6 +51,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
   const [dupNombre, setDupNombre] = useState("")
 
   const [tratamientos, setTratamientos] = useState<Tratamiento[]>([])
+  const { patients: allPatients } = usePatients()
 
   const resetForm = () => {
     setPatient(EMPTY_PATIENT)
@@ -64,26 +65,14 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
     // historiales dependen de que el DNI sea único)
     const dniNorm = patient.dni.replace(/\D/g, "")
     if (dniNorm) {
-      setIsSaving(true)
-      try {
-        const res = await fetch(`/api/patients?search=${encodeURIComponent(dniNorm)}&limit=50`, {
-          headers: await getAuthHeaders(),
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const dup = (data.patients ?? []).find(
-            (p: { dni?: string }) => String(p.dni ?? "").replace(/\D/g, "") === dniNorm
-          ) as { nombre?: string; apellido?: string } | undefined
-          if (dup) {
-            setDupNombre(`${dup.nombre ?? ""} ${dup.apellido ?? ""}`.trim())
-            setConfirmDupOpen(true)
-            return
-          }
-        }
-      } catch {
-        // si el chequeo falla (sin conexión, etc.) no bloquear el alta
-      } finally {
-        setIsSaving(false)
+      // Chequeo contra la caché compartida de pacientes (sin red)
+      const dup = allPatients.find(
+        (p) => String(p.dni ?? "").replace(/\D/g, "") === dniNorm
+      )
+      if (dup) {
+        setDupNombre(`${dup.nombre ?? ""} ${dup.apellido ?? ""}`.trim())
+        setConfirmDupOpen(true)
+        return
       }
     }
     await doSubmit()

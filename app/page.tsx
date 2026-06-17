@@ -8,16 +8,16 @@ import { EditPatientModal } from "@/components/edit-patient-modal"
 import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
 import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users } from "lucide-react"
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, remove, update } from "firebase/database"
 import { fetchTurnosPorPaciente, writeLog } from "@/lib/helpers"
+import { usePatients, queryPatients } from "@/lib/patients-store"
 import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
-import debounce from "lodash/debounce"
 import { Patient } from "@/types"
-import { getUserDisplayName, isAdmin, canAccessLibroDiario, getAuthHeaders } from "@/lib/auth-helper"
+import { getUserDisplayName, isAdmin, canAccessLibroDiario } from "@/lib/auth-helper"
 import { AdminPanel } from "@/components/admin-panel"
 import { toast } from "sonner"
 
@@ -59,11 +59,9 @@ function getPaginationPages(current: number, total: number): (number | "...")[] 
 export default function Page() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
-  const [patients, setPatients] = useState<Patient[]>([])
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
   const [currentUser, setCurrentUser] = useState<string | null>(null)
   const [isAdminUser, setIsAdminUser] = useState(false)
   const [canSeeLibroDiario, setCanSeeLibroDiario] = useState(false)
@@ -71,50 +69,20 @@ export default function Page() {
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
   const [activeTab, setActiveTab] = useState("pacientes")
   const [calendarioRefreshTrigger, setCalendarioRefreshTrigger] = useState(0)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [totalItems, setTotalItems] = useState(0)
-  const router = useRouter()
-  const [libroDiarioUpdateTrigger, setLibroDiarioUpdateTrigger] = useState(0)
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
   const patientsPerPage = 10
-
-  const fetchPatients = useCallback(async (search: string, page: number) => {
-    const maxRetries = 3
-    let attempt = 0
-    setIsLoading(true)
-    setError(null)
-
-    while (attempt < maxRetries) {
-      try {
-        const response = await fetch(
-          `/api/patients?search=${encodeURIComponent(search)}&page=${page}&limit=${patientsPerPage}`,
-          { headers: await getAuthHeaders() }
-        )
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        const data = await response.json()
-        setPatients(data.patients)
-        setTotalPages(data.pagination.totalPages)
-        setTotalItems(data.pagination.totalItems)
-        setIsLoading(false)
-        return
-      } catch (error) {
-        attempt++
-        if (attempt === maxRetries) {
-          const errorMessage = error instanceof Error ? error.message : 'Error al cargar los pacientes'
-          setError(errorMessage)
-          toast.error(errorMessage)
-          setIsLoading(false)
-        } else {
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
-        }
-      }
-    }
-  }, [])
+  // Caché compartida (suscripción live a `pacientes`): búsqueda y paginación
+  // se resuelven en memoria, sin volver a pegarle a la base.
+  const { patients: allPatients, isLoading, error: storeError } = usePatients()
+  const { patients, pagination } = useMemo(
+    () => queryPatients(allPatients, { search: searchTerm, page: currentPage, limit: patientsPerPage }),
+    [allPatients, searchTerm, currentPage],
+  )
+  const { totalPages, totalItems } = pagination
+  const error = mutationError ?? storeError
+  const router = useRouter()
+  const [libroDiarioUpdateTrigger, setLibroDiarioUpdateTrigger] = useState(0)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
@@ -123,14 +91,18 @@ export default function Page() {
         setCurrentUser(displayName)
         setIsAdminUser(isAdmin(user))
         setCanSeeLibroDiario(canAccessLibroDiario(user))
-        fetchPatients("", 1)
       } else {
         router.push("/login")
       }
     })
 
     return () => unsubscribe()
-  }, [router, fetchPatients])
+  }, [router])
+
+  // Si una baja deja la página actual fuera de rango, retrocede a la última válida.
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const handleEdit = (patient: Patient) => {
     setSelectedPatient(patient)
@@ -151,14 +123,12 @@ export default function Page() {
         await remove(patientRef)
         toast.success('Paciente eliminado correctamente')
         await writeLog({ accion: "eliminar_paciente", detalle: `Eliminó paciente ${patientToDelete.nombre} ${patientToDelete.apellido}`, entidadId: patientToDelete.id })
-        const newPage = patients.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage
-        if (newPage !== currentPage) setCurrentPage(newPage)
-        fetchPatients(searchTerm, newPage)
+        // La caché live refleja la baja sola; el clamp de página corrige el rango.
         setIsDeleteDialogOpen(false)
         setPatientToDelete(null)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Error al eliminar el paciente'
-        setError(errorMessage)
+        setMutationError(errorMessage)
         toast.error(errorMessage)
       }
     }
@@ -170,39 +140,30 @@ export default function Page() {
       const cleanPatient = JSON.parse(JSON.stringify(updatedPatient))
       await update(patientRef, cleanPatient)
       toast.success('Paciente actualizado correctamente')
-      fetchPatients(searchTerm, currentPage)
       setEditModalOpen(false)
       setLibroDiarioUpdateTrigger((prev: number) => prev + 1)
       return true
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al guardar los cambios'
-      setError(errorMessage)
+      setMutationError(errorMessage)
       toast.error(errorMessage)
       return false
     }
   }
 
-  const debouncedSearch = useMemo(
-    () => debounce((value: string) => fetchPatients(value, 1), 300),
-    [fetchPatients]
-  )
-
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setSearchTerm(value)
+    // Búsqueda instantánea en memoria (sin debounce ni red).
+    setSearchTerm(e.target.value)
     setCurrentPage(1)
-    debouncedSearch(value)
   }
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    fetchPatients(searchTerm, page)
   }
 
   const clearSearch = () => {
     setSearchTerm("")
     setCurrentPage(1)
-    fetchPatients("", 1)
   }
 
   return (
@@ -522,12 +483,7 @@ export default function Page() {
 
             <NewPatientModal
               open={modalOpen}
-              onOpenChange={(open) => {
-                setModalOpen(open)
-                if (!open) {
-                  fetchPatients(searchTerm, currentPage)
-                }
-              }}
+              onOpenChange={setModalOpen}
             />
             <EditPatientModal
               open={editModalOpen}

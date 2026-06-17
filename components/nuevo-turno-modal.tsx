@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { writeLog, getSessionStats } from "@/lib/helpers"
-import { getAuthHeaders } from "@/lib/auth-helper"
+import { usePatients, queryPatients } from "@/lib/patients-store"
 import { Patient, Turno } from "@/types"
 import { toast } from "sonner"
 import { AlertTriangle } from "lucide-react"
@@ -132,16 +132,14 @@ export function NuevoTurnoModal({
   turnosPorFecha,
   feriados = {},
 }: NuevoTurnoModalProps) {
-  const [patients, setPatients] = useState<Patient[]>([])
+  // Caché compartida: la búsqueda de pacientes se resuelve en memoria
+  const { patients: allPatients } = usePatients()
   const [search, setSearch] = useState("")
-  const [isSearching, setIsSearching] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [hora, setHora] = useState(horaInicial)
   const [notas, setNotas] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
-  const searchAbortRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const searchSeqRef = useRef(0)
   const [conflictDates, setConflictDates] = useState<string[]>([])
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
 
@@ -155,34 +153,8 @@ export function NuevoTurnoModal({
   const [numTurnos, setNumTurnos] = useState(10)
 
   useEffect(() => {
-    if (!search.trim()) {
-      searchSeqRef.current++ // invalida respuestas en vuelo
-      setPatients([])
-      setIsSearching(false)
-      return
-    }
-    if (searchAbortRef.current) clearTimeout(searchAbortRef.current)
-    setIsSearching(true)
-    searchAbortRef.current = setTimeout(async () => {
-      const seq = ++searchSeqRef.current
-      try {
-        const res = await fetch(`/api/patients?search=${encodeURIComponent(search.trim())}&limit=10`, {
-          headers: await getAuthHeaders(),
-        })
-        if (!res.ok) return
-        const data = await res.json()
-        // Solo aplicar si sigue siendo la búsqueda más reciente (evita pisar con respuestas viejas)
-        if (seq === searchSeqRef.current) setPatients(data.patients ?? [])
-      } catch {}
-      finally { if (seq === searchSeqRef.current) setIsSearching(false) }
-    }, 250)
-    return () => { if (searchAbortRef.current) clearTimeout(searchAbortRef.current) }
-  }, [search])
-
-  useEffect(() => {
     if (open) {
       setSearch("")
-      setPatients([])
       setSelectedPatient(null)
       setHora(horaInicial)
       setNotas("")
@@ -237,7 +209,10 @@ export function NuevoTurnoModal({
     (repeticion !== "semanal" || diasSemana.length > 0) &&
     fechasPreview.length > 0
 
-  const filtered = patients
+  const filtered = useMemo(
+    () => (search.trim() ? queryPatients(allPatients, { search: search.trim(), limit: 10 }).patients : []),
+    [allPatients, search],
+  )
 
   const dateKey = format(fecha, "yyyy-MM-dd")
   const horaConflicts = (turnosPorFecha[dateKey] ?? []).filter(
@@ -400,9 +375,7 @@ export function NuevoTurnoModal({
                 />
                 {showDropdown && search && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-52 overflow-y-auto">
-                    {isSearching ? (
-                      <p className="px-3 py-2 text-sm text-gray-400">Buscando...</p>
-                    ) : filtered.length > 0 ? (
+                    {filtered.length > 0 ? (
                       filtered.map((p) => (
                         <button
                           key={p.id}

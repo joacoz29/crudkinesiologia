@@ -116,6 +116,7 @@ export default function Page() {
 
   const confirmDelete = async () => {
     if (patientToDelete) {
+      setMutationError(null)
       try {
         const turnos = await fetchTurnosPorPaciente(patientToDelete.id)
         await Promise.all(turnos.map(t => remove(ref(db, `turnos/${t.fecha}/${t.id}`))))
@@ -135,6 +136,7 @@ export default function Page() {
   }
 
   const handleSaveEdit = async (updatedPatient: Patient): Promise<boolean> => {
+    setMutationError(null)
     try {
       const patientRef = ref(db, `pacientes/${updatedPatient.id}`)
       const cleanPatient = JSON.parse(JSON.stringify(updatedPatient))

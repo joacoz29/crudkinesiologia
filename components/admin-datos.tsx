@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import { format, parseISO, startOfMonth, endOfMonth, getDay, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle } from "lucide-react"
 import { fetchTurnosPorRango, getSessionStats } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
+import { useCachedMonth } from "@/lib/monthly-cache"
 import { Patient, Turno } from "@/types"
 
 const DIAS_SEMANA = [
@@ -51,25 +52,23 @@ function StatCard({
 }
 
 export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
-  const [turnosPorDia, setTurnosPorDia] = useState<Record<string, Turno[]>>({})
-  const [isLoadingTurnos, setIsLoadingTurnos] = useState(true)
   // Caché compartida: reusa la suscripción live de pacientes (no baja la colección de nuevo)
   const { patients, isLoading: isLoadingPatients } = usePatients()
 
   const mesKey = format(currentMonth, "yyyy-MM")
+  const esMesActual = mesKey === format(new Date(), "yyyy-MM")
 
-  useEffect(() => {
-    let cancelado = false
-    setIsLoadingTurnos(true)
-    const start = format(startOfMonth(currentMonth), "yyyy-MM-dd")
-    const end = format(endOfMonth(currentMonth), "yyyy-MM-dd")
-    fetchTurnosPorRango(start, end)
-      .then((data) => { if (!cancelado) setTurnosPorDia(data) })
-      .catch(() => { if (!cancelado) setTurnosPorDia({}) })
-      .finally(() => { if (!cancelado) setIsLoadingTurnos(false) })
-    return () => { cancelado = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mesKey])
+  // Turnos del mes cacheados por sesión (revalida solo el mes actual). Así
+  // togglear de vista no re-baja los turnos de meses pasados.
+  const { data: turnosPorDia, isLoading: isLoadingTurnos } = useCachedMonth<Record<string, Turno[]>>(
+    `turnos-datos/${mesKey}`,
+    () =>
+      fetchTurnosPorRango(
+        format(startOfMonth(currentMonth), "yyyy-MM-dd"),
+        format(endOfMonth(currentMonth), "yyyy-MM-dd"),
+      ),
+    { revalidate: esMesActual, fallback: {} },
+  )
 
   const isLoading = isLoadingTurnos || isLoadingPatients
 

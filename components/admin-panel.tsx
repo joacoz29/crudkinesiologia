@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { ref, get } from "firebase/database"
 import { db } from "@/lib/firebase"
+import { useCachedMonth } from "@/lib/monthly-cache"
 import { format, parseISO, isValid, addMonths, subMonths } from "date-fns"
 import { es } from "date-fns/locale"
 import { ChevronLeft, ChevronRight, Shield, Star, Search, Inbox } from "lucide-react"
@@ -96,56 +97,47 @@ function AccionBadge({ accion }: { accion: string }) {
 
 export function AdminPanel() {
   const [currentMonth, setCurrentMonth] = useState(() => new Date())
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [filterUser, setFilterUser] = useState("todos")
   const [filterAccion, setFilterAccion] = useState("todas")
   const [searchPaciente, setSearchPaciente] = useState("")
   const [vista, setVista] = useState<"registro" | "opiniones" | "datos">("registro")
-  const [opiniones, setOpiniones] = useState<Opinion[]>([])
-  const [isLoadingOpiniones, setIsLoadingOpiniones] = useState(false)
 
   const mesKey = format(currentMonth, "yyyy-MM")
+  // El mes actual puede crecer (logs/opiniones nuevas) → revalidar; los pasados son inmutables
+  const esMesActual = mesKey === format(new Date(), "yyyy-MM")
 
+  // Logs del mes (caché de sesión; revalida solo el mes actual). Filtros en memoria.
+  const { data: logs, isLoading } = useCachedMonth<LogEntry[]>(
+    `logs/${mesKey}`,
+    async () => {
+      const snap = await get(ref(db, `logs/${mesKey}`))
+      if (!snap.exists()) return []
+      return Object.entries(snap.val() as Record<string, Omit<LogEntry, "id">>)
+        .map(([id, val]) => ({ id, ...val }))
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    },
+    { revalidate: esMesActual, fallback: [] },
+  )
+
+  // Opiniones: lazy (solo cuando la vista está activa) + caché por mes
+  const { data: opiniones, isLoading: isLoadingOpiniones } = useCachedMonth<Opinion[]>(
+    `opiniones/${mesKey}`,
+    async () => {
+      const snap = await get(ref(db, `opiniones/${mesKey}`))
+      if (!snap.exists()) return []
+      return Object.entries(snap.val() as Record<string, Omit<Opinion, "id">>)
+        .map(([id, val]) => ({ id, ...val }))
+        .sort((a, b) => b.fecha.localeCompare(a.fecha))
+    },
+    { enabled: vista === "opiniones", revalidate: esMesActual, fallback: [] },
+  )
+
+  // Reset de filtros al cambiar de mes (antes vivía dentro del fetch de logs)
   useEffect(() => {
-    // Flag de cancelación: si el usuario cambia de mes antes de que llegue la
-    // respuesta, el resultado viejo se descarta (evita pisar el mes actual)
-    let cancelado = false
     setFilterUser("todos")
     setFilterAccion("todas")
     setSearchPaciente("")
-    setIsLoading(true)
-    get(ref(db, `logs/${mesKey}`))
-      .then((snap) => {
-        if (cancelado) return
-        if (!snap.exists()) { setLogs([]); return }
-        const entries: LogEntry[] = Object.entries(snap.val() as Record<string, Omit<LogEntry, "id">>)
-          .map(([id, val]) => ({ id, ...val }))
-          .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-        setLogs(entries)
-      })
-      .catch(() => { if (!cancelado) setLogs([]) })
-      .finally(() => { if (!cancelado) setIsLoading(false) })
-    return () => { cancelado = true }
   }, [mesKey])
-
-  useEffect(() => {
-    if (vista !== "opiniones") return
-    let cancelado = false
-    setIsLoadingOpiniones(true)
-    get(ref(db, `opiniones/${mesKey}`))
-      .then((snap) => {
-        if (cancelado) return
-        if (!snap.exists()) { setOpiniones([]); return }
-        const entries: Opinion[] = Object.entries(snap.val() as Record<string, Omit<Opinion, "id">>)
-          .map(([id, val]) => ({ id, ...val }))
-          .sort((a, b) => b.fecha.localeCompare(a.fecha))
-        setOpiniones(entries)
-      })
-      .catch(() => { if (!cancelado) setOpiniones([]) })
-      .finally(() => { if (!cancelado) setIsLoadingOpiniones(false) })
-    return () => { cancelado = true }
-  }, [mesKey, vista])
 
   const promedio = opiniones.length
     ? opiniones.reduce((sum, o) => sum + o.rating, 0) / opiniones.length

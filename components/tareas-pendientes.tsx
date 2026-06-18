@@ -15,9 +15,19 @@ import {
 } from "@/lib/tareas"
 import { Turno } from "@/types"
 import { Button } from "@/components/ui/button"
-import { ClipboardList, UserCog, CalendarClock, CheckCircle2, ChevronRight, Loader2 } from "lucide-react"
+import {
+  ClipboardList,
+  UserCog,
+  CalendarClock,
+  CheckCircle2,
+  ChevronRight,
+  ChevronLeft,
+  ChevronDown,
+  Loader2,
+} from "lucide-react"
 
 const TZ = "America/Argentina/Buenos_Aires"
+const PAGE_SIZE = 8
 
 const CATEGORIA_META: Record<TareaCategoria, { label: string; Icon: typeof UserCog }> = {
   operativo: { label: "Turnos", Icon: CalendarClock },
@@ -33,6 +43,105 @@ const SEV_META: Record<TareaSeveridad, { dot: string }> = {
 
 // Orden de presentación de las secciones (lo más accionable primero)
 const ORDEN_CATEGORIAS: TareaCategoria[] = ["operativo", "clinico", "datos"]
+
+// Una sección colapsable por categoría, con su propia paginación. Cada sección
+// guarda su estado (abierta/cerrada y página) — la `key={cat}` lo mantiene
+// estable aunque cambien las tareas.
+function CategoriaSeccion({
+  cat,
+  items,
+  onAbrirFicha,
+}: {
+  cat: TareaCategoria
+  items: Tarea[]
+  onAbrirFicha: (patientId: string) => void
+}) {
+  const [expanded, setExpanded] = useState(true)
+  const [page, setPage] = useState(1)
+  const { label, Icon } = CATEGORIA_META[cat]
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
+  const pageClamped = Math.min(page, totalPages) // auto-corrige si bajó la cantidad
+  const start = (pageClamped - 1) * PAGE_SIZE
+  const visibles = items.slice(start, start + PAGE_SIZE)
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60 hover:bg-slate-100/70 transition-colors text-left"
+      >
+        <Icon className="h-4 w-4 text-[#001633] shrink-0" />
+        <h2 className="text-sm font-semibold text-[#001633]">{label}</h2>
+        <span className="text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">
+          {items.length}
+        </span>
+        <ChevronDown
+          className={`ml-auto h-4 w-4 text-slate-400 transition-transform ${expanded ? "" : "-rotate-90"}`}
+        />
+      </button>
+
+      {expanded && (
+        <>
+          <ul className="divide-y divide-slate-100">
+            {visibles.map((t) => (
+              <li key={t.id} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50/60 transition-colors">
+                <span
+                  className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${SEV_META[t.severidad].dot}`}
+                  title={`Prioridad ${t.severidad}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-800">{t.titulo}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 break-words">{t.descripcion}</p>
+                </div>
+                {t.patientId && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
+                    onClick={() => onAbrirFicha(t.patientId!)}
+                  >
+                    Abrir ficha
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100 text-xs text-slate-500">
+              <span>
+                {start + 1}–{Math.min(start + PAGE_SIZE, items.length)} de {items.length}
+              </span>
+              <div className="flex gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 w-7 p-0"
+                  disabled={pageClamped === 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 w-7 p-0"
+                  disabled={pageClamped === totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
 
 export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: string) => void }) {
   const { patients, isLoading: patientsLoading } = usePatients()
@@ -107,47 +216,11 @@ export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: s
           <p className="text-sm">No hay datos faltantes ni turnos sin marcar.</p>
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-4">
           {ORDEN_CATEGORIAS.map((cat) => {
             const items = porCategoria[cat]
             if (items.length === 0) return null
-            const { label, Icon } = CATEGORIA_META[cat]
-            return (
-              <section key={cat} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
-                  <Icon className="h-4 w-4 text-[#001633]" />
-                  <h2 className="text-sm font-semibold text-[#001633]">{label}</h2>
-                  <span className="ml-auto text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">
-                    {items.length}
-                  </span>
-                </div>
-                <ul className="divide-y divide-slate-100">
-                  {items.map((t) => (
-                    <li key={t.id} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50/60 transition-colors">
-                      <span
-                        className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${SEV_META[t.severidad].dot}`}
-                        title={`Prioridad ${t.severidad}`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-800">{t.titulo}</p>
-                        <p className="text-xs text-slate-500 mt-0.5 break-words">{t.descripcion}</p>
-                      </div>
-                      {t.patientId && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
-                          onClick={() => onAbrirFicha(t.patientId!)}
-                        >
-                          Abrir ficha
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )
+            return <CategoriaSeccion key={cat} cat={cat} items={items} onAbrirFicha={onAbrirFicha} />
           })}
         </div>
       )}

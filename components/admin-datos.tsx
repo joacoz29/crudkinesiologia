@@ -3,10 +3,13 @@
 import { useMemo } from "react"
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, getDay, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
-import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity } from "lucide-react"
+import { jsPDF } from "jspdf"
+import autoTable from "jspdf-autotable"
+import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity, Users, Stethoscope, Download } from "lucide-react"
 import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, type Opinion, type LibroResumen } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
+import { Button } from "@/components/ui/button"
 import { Patient, Turno } from "@/types"
 
 const EMPTY_LIBRO: LibroResumen = { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 }
@@ -242,6 +245,42 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     return { fuentes, max: Math.max(1, ...fuentes.map((f) => f.monto)) }
   }, [libro])
 
+  // Demografía y derivantes (sobre toda la base de pacientes, no depende del mes)
+  const perfil = useMemo(() => {
+    let masculino = 0
+    let femenino = 0
+    let otroSexo = 0
+    const edadBuckets = [
+      { rango: "0-17", min: 0, max: 17, count: 0 },
+      { rango: "18-30", min: 18, max: 30, count: 0 },
+      { rango: "31-45", min: 31, max: 45, count: 0 },
+      { rango: "46-60", min: 46, max: 60, count: 0 },
+      { rango: "60+", min: 61, max: Infinity, count: 0 },
+    ]
+    let sinEdad = 0
+    const derivantes = new Map<string, number>()
+    for (const p of patients) {
+      const s = (p.sexo ?? "").trim().toLowerCase()
+      if (s.startsWith("m")) masculino++
+      else if (s.startsWith("f")) femenino++
+      else if (s) otroSexo++
+
+      const edad = parseInt(p.edad, 10)
+      if (Number.isNaN(edad) || edad <= 0) sinEdad++
+      else (edadBuckets.find((b) => edad >= b.min && edad <= b.max) ?? edadBuckets[4]).count++
+
+      const doc = (p.doctor ?? "").trim()
+      if (doc) derivantes.set(doc, (derivantes.get(doc) ?? 0) + 1)
+    }
+    const maxEdad = Math.max(1, ...edadBuckets.map((b) => b.count))
+    const derivantesRank = Array.from(derivantes.entries())
+      .map(([nombre, count]) => ({ nombre, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6)
+    const conSexo = masculino + femenino + otroSexo
+    return { masculino, femenino, otroSexo, conSexo, edadBuckets, maxEdad, sinEdad, derivantesRank, total: patients.length }
+  }, [patients])
+
   const metrics = useMemo(() => {
     const patientById = new Map(patients.map((p) => [p.id, p]))
     const patientByName = new Map(
@@ -395,6 +434,73 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
   }, [turnosPorDia, libro, patients, currentMonth])
 
   const mesNombre = format(currentMonth, "MMMM", { locale: es })
+  const mesLabel = format(currentMonth, "MMMM yyyy", { locale: es })
+
+  const exportarPDF = () => {
+    try {
+      const doc = new jsPDF()
+      doc.setFontSize(15)
+      doc.text("Kinesiología Integral — Datos del consultorio", 14, 16)
+      doc.setFontSize(11)
+      doc.setTextColor(120)
+      doc.text(mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1), 14, 23)
+      doc.setTextColor(0)
+
+      const azul: [number, number, number] = [0, 22, 51]
+      autoTable(doc, {
+        startY: 30,
+        head: [["Resumen del mes", "Valor"]],
+        body: [
+          ["Atenciones", String(metrics.atenciones)],
+          ["Promedio por día", metrics.promedioPorDia.toFixed(1)],
+          ["Ausentismo", `${metrics.ausentismo.toFixed(0)}% (${metrics.ausencias} faltas, ${metrics.justificadas} justif.)`],
+          ["Atenciones particulares", `${metrics.pctParticular.toFixed(0)}%`],
+          ["Satisfacción", satisfaccion.count ? `${satisfaccion.promedio.toFixed(1)} / 5 (${satisfaccion.count} opiniones)` : "Sin opiniones"],
+          ["Pacientes nuevos", String(pacientesNuevos)],
+          ["Pacientes activos", String(metrics.pacientesActivos)],
+          ["Sesiones por paciente", metrics.sesionesPromedio.toFixed(1)],
+        ],
+        headStyles: { fillColor: azul },
+      })
+
+      type DocWithTable = jsPDF & { lastAutoTable: { finalY: number } }
+      let y = (doc as DocWithTable).lastAutoTable.finalY + 8
+
+      if (metrics.hayRecaudacion) {
+        autoTable(doc, {
+          startY: y,
+          head: [["Recaudación", "Monto"]],
+          body: [
+            ["Recaudado (Haber)", formatMoney(metrics.totalHaber)],
+            ["Egresos (Debe)", formatMoney(metrics.totalDebe)],
+            ["Saldo neto", formatMoney(metrics.saldoMes)],
+            ["— Particular", formatMoney(libro.haberParticular)],
+            ["— Obra Social", formatMoney(libro.haberObraSocial)],
+            ["— Ingresos varios", formatMoney(libro.haberIngreso)],
+          ],
+          headStyles: { fillColor: azul },
+        })
+        y = (doc as DocWithTable).lastAutoTable.finalY + 8
+      }
+
+      if (metrics.porAgotar.length > 0) {
+        autoTable(doc, {
+          startY: y,
+          head: [["Sesiones por agotar", "Usadas", "Restantes"]],
+          body: metrics.porAgotar.map((p) => [
+            p.nombre,
+            `${p.used}/${p.authorized}`,
+            p.restantes <= 0 ? "Agotadas" : String(p.restantes),
+          ]),
+          headStyles: { fillColor: azul },
+        })
+      }
+
+      doc.save(`Datos_${mesKey}.pdf`)
+    } catch {
+      // no romper la UI si falla la generación
+    }
+  }
 
   if (isLoading) {
     return (
@@ -415,6 +521,18 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={exportarPDF}
+          className="border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors flex items-center gap-1.5"
+        >
+          <Download className="h-4 w-4" />
+          Exportar PDF
+        </Button>
+      </div>
+
       {metrics.sinTurnos ? (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-16 text-center">
           <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-2" />
@@ -650,6 +768,71 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
           detail="promedio del mes"
         />
       </div>
+
+      {/* Demografía y derivantes (sobre toda la base de pacientes) */}
+      <div className="grid lg:grid-cols-2 gap-3 items-start">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 mb-3">
+            <Users className="h-4 w-4 text-[#001633]" />
+            Demografía <span className="font-normal text-slate-400">({perfil.total} pacientes)</span>
+          </p>
+          {/* Sexo */}
+          {perfil.conSexo > 0 && (
+            <div className="mb-4">
+              <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100">
+                <div className="bg-sky-500" style={{ width: `${(perfil.masculino / perfil.conSexo) * 100}%` }} />
+                <div className="bg-pink-400" style={{ width: `${(perfil.femenino / perfil.conSexo) * 100}%` }} />
+                <div className="bg-slate-300" style={{ width: `${(perfil.otroSexo / perfil.conSexo) * 100}%` }} />
+              </div>
+              <div className="flex gap-4 mt-2 text-xs text-slate-500">
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-sky-500" /> {perfil.masculino} M</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-pink-400" /> {perfil.femenino} F</span>
+                {perfil.otroSexo > 0 && <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> {perfil.otroSexo} otro</span>}
+              </div>
+            </div>
+          )}
+          {/* Edad */}
+          <p className="text-xs font-medium text-slate-500 mb-2">Por edad</p>
+          <div className="space-y-1.5">
+            {perfil.edadBuckets.map(({ rango, count }) => (
+              <div key={rango} className="flex items-center gap-2 text-xs">
+                <span className="w-12 text-slate-600 tabular-nums">{rango}</span>
+                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-[#001633]" style={{ width: `${(count / perfil.maxEdad) * 100}%` }} />
+                </div>
+                <span className="w-7 text-right text-slate-500 tabular-nums">{count}</span>
+              </div>
+            ))}
+          </div>
+          {perfil.sinEdad > 0 && (
+            <p className="text-[11px] text-slate-400 pt-2">{perfil.sinEdad} sin edad cargada</p>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+            <Stethoscope className="h-4 w-4 text-[#001633]" />
+            Derivantes
+          </p>
+          <p className="text-[11px] text-slate-400 mb-3">Médicos que más pacientes derivaron</p>
+          {perfil.derivantesRank.length === 0 ? (
+            <p className="text-xs text-slate-400">Sin médico derivante cargado en las fichas</p>
+          ) : (
+            <div className="space-y-2">
+              {perfil.derivantesRank.map(({ nombre, count }) => (
+                <div key={nombre} className="flex items-center gap-2 text-xs">
+                  <span className="w-36 truncate text-slate-600" title={nombre}>{nombre}</span>
+                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-[#001633]" style={{ width: `${(count / perfil.derivantesRank[0].count) * 100}%` }} />
+                  </div>
+                  <span className="w-7 text-right text-slate-500 tabular-nums">{count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid lg:grid-cols-2 gap-3 items-start">
         {/* Sesiones por agotar (estado actual, independiente del mes) */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">

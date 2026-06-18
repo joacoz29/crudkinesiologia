@@ -115,13 +115,13 @@ export default function Page() {
     setEditModalOpen(true)
   }
 
-  // Desde la pestaña Pendientes: salta a Pacientes y abre la ficha del paciente
-  // (el modal vive en el branch de "pacientes", por eso cambiamos de tab primero).
+  // Abre la ficha del paciente desde cualquier pestaña (el EditPatientModal está
+  // montado a nivel de página, no dentro del branch de Pacientes). NO cambia de
+  // pestaña: si lo abrís desde Pendientes, al cerrar/guardar seguís en Pendientes.
   const handleAbrirFicha = (patientId: string) => {
     const p = allPatients.find((x) => x.id === patientId)
     if (!p) return
     setSelectedPatient(p)
-    setActiveTab("pacientes")
     setEditModalOpen(true)
   }
 
@@ -516,13 +516,6 @@ export default function Page() {
               open={modalOpen}
               onOpenChange={setModalOpen}
             />
-            <EditPatientModal
-              open={editModalOpen}
-              onOpenChange={setEditModalOpen}
-              patient={selectedPatient}
-              onSave={handleSaveEdit}
-              setLibroDiarioUpdateTrigger={setLibroDiarioUpdateTrigger}
-            />
             <DeletePatientDialog
               isOpen={isDeleteDialogOpen}
               onClose={() => setIsDeleteDialogOpen(false)}
@@ -540,6 +533,17 @@ export default function Page() {
           isAdminUser ? <AdminPanel /> : null
         )}
       </main>
+
+      {/* Editar paciente: montado a nivel de página (no dentro del branch de
+          Pacientes) para poder abrir la ficha desde Pendientes sin cambiar de
+          pestaña. Es un overlay, así que se ve sobre cualquier vista. */}
+      <EditPatientModal
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        patient={selectedPatient}
+        onSave={handleSaveEdit}
+        setLibroDiarioUpdateTrigger={setLibroDiarioUpdateTrigger}
+      />
     </div>
   )
 }

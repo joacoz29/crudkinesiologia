@@ -217,7 +217,7 @@ export default function Page() {
               </Button>
             </div>
           </div>
-          <nav className="flex gap-1 border-b border-white/20">
+          <nav className="flex gap-1 border-b border-white/20 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {([
               "pacientes",
               ...(canSeeLibroDiario ? ["libroDiario"] : []),
@@ -235,7 +235,7 @@ export default function Page() {
                     }
                     setActiveTab(tab)
                   }}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                     activeTab === tab
                       ? "text-white border-white"
                       : "text-white/60 border-transparent hover:text-white/90 hover:border-white/40"

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado } from "@/types"
 import { fetchTurnosPorRango, confirmarAsistencia, desconfirmarAsistencia } from "@/lib/helpers"
 import { getCachedMonth, setCachedMonth, clearCachePrefix } from "@/lib/monthly-cache"
+import { fetchFeriados } from "@/lib/feriados"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { AgendaDia } from "@/components/agenda-dia"
@@ -83,7 +84,6 @@ export function Calendario({
   const [turnosPorFecha, setTurnosPorFecha] = useState<Record<string, Turno[]>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [feriados, setFeriados] = useState<Record<string, string>>({}) // { "2026-01-01": "Año Nuevo" }
-  const feriadosCacheRef = useRef<Record<number, boolean>>({})
 
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
   const [nuevoTurnoHora, setNuevoTurnoHora] = useState("09:00")
@@ -99,18 +99,8 @@ export function Calendario({
     currentMonth.getMonth() === today.getMonth()
 
   const loadFeriados = useCallback(async (year: number) => {
-    if (feriadosCacheRef.current[year]) return
-    feriadosCacheRef.current[year] = true
-    try {
-      const res = await fetch(`/api/feriados?year=${year}`)
-      if (!res.ok) return
-      const data: { fecha: string; nombre: string }[] = await res.json()
-      const map: Record<string, string> = {}
-      for (const f of data) map[f.fecha] = f.nombre
-      setFeriados((prev) => ({ ...prev, ...map }))
-    } catch {
-      // non-critical, fail silently
-    }
+    const map = await fetchFeriados([year])
+    if (Object.keys(map).length > 0) setFeriados((prev) => ({ ...prev, ...map }))
   }, [])
 
   // Caché de sesión por mes. Como la grilla de meses adyacentes se solapa, ante

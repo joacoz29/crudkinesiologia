@@ -5,6 +5,7 @@ import { addDays, subDays } from "date-fns"
 import { format } from "date-fns-tz"
 import { usePatients } from "@/lib/patients-store"
 import { fetchTurnosPorRango, horaToMin } from "@/lib/helpers"
+import { fetchFeriados } from "@/lib/feriados"
 import {
   computeTareasPacientes,
   computeTareasTurnos,
@@ -210,6 +211,7 @@ export function TareasPendientes({
   // Modal de nuevo turno (agendar desde la tarea "Sin próximo turno")
   const [pacienteAgenda, setPacienteAgenda] = useState<Patient | null>(null)
   const [agendaOpen, setAgendaOpen] = useState(false)
+  const [feriados, setFeriados] = useState<Record<string, string>>({})
   // Fecha base estable para abrir el modal; el usuario elige la real con el picker
   const hoyDate = useMemo(() => new Date(), [])
 
@@ -257,6 +259,9 @@ export function TareasPendientes({
       if (!p) return
       setPacienteAgenda(p)
       setAgendaOpen(true)
+      // Feriados para que la recurrencia los saltee (lazy, cacheado por año)
+      const y = new Date().getFullYear()
+      fetchFeriados([y, y + 1]).then(setFeriados).catch(() => {})
     },
     [patients],
   )
@@ -364,6 +369,7 @@ export function TareasPendientes({
           pacienteInicial={pacienteAgenda}
           permitirElegirFecha
           turnosPorFecha={turnos}
+          feriados={feriados}
           onSaved={refetchTurnos}
         />
       )}

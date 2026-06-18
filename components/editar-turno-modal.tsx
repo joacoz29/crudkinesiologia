@@ -38,6 +38,15 @@ import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
 import { confirmarAsistencia, desconfirmarAsistencia, writeLog, LogCambio } from "@/lib/helpers"
 
+function horaToMin(h: string): number {
+  const [hh, mm] = (h ?? "").split(":")
+  return (parseInt(hh, 10) || 0) * 60 + (parseInt(mm, 10) || 0)
+}
+function minToHora(m: number): string {
+  const c = Math.max(0, Math.min(24 * 60 - 1, m))
+  return `${String(Math.floor(c / 60)).padStart(2, "0")}:${String(c % 60).padStart(2, "0")}`
+}
+
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },
   { value: "asistio", label: "Asistió", color: "text-green-700" },
@@ -71,9 +80,38 @@ export function EditarTurnoModal({
   const [nuevaFecha, setNuevaFecha] = useState<Date | undefined>(undefined)
   const [isMoving, setIsMoving] = useState(false)
   const [reprogConflictOpen, setReprogConflictOpen] = useState(false)
+  const [turnosEseDia, setTurnosEseDia] = useState<Turno[]>([])
+  const [loadingTurnosDia, setLoadingTurnosDia] = useState(false)
 
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
+
+  // Al elegir la fecha destino, traer los turnos de ese día (para ver la carga
+  // alrededor de la hora). Excluye el turno actual y los cancelados.
+  useEffect(() => {
+    if (!nuevaFecha) {
+      setTurnosEseDia([])
+      return
+    }
+    let cancelado = false
+    setLoadingTurnosDia(true)
+    const key = format(nuevaFecha, "yyyy-MM-dd")
+    get(ref(db, `turnos/${key}`))
+      .then((snap) => {
+        if (cancelado) return
+        if (!snap.exists()) {
+          setTurnosEseDia([])
+          return
+        }
+        const list = Object.entries(snap.val() as Record<string, Omit<Turno, "id">>)
+          .map(([id, t]) => ({ id, ...t }))
+          .filter((t) => t.id !== turno.id && t.estado !== "cancelado")
+        setTurnosEseDia(list)
+      })
+      .catch(() => { if (!cancelado) setTurnosEseDia([]) })
+      .finally(() => { if (!cancelado) setLoadingTurnosDia(false) })
+    return () => { cancelado = true }
+  }, [nuevaFecha, turno.id])
 
   useEffect(() => {
     if (open) {
@@ -446,6 +484,48 @@ export function EditarTurnoModal({
                     <p className="text-xs text-gray-500">
                       Se mueve a esa fecha (queda pendiente) con la hora de arriba.
                     </p>
+
+                    {nuevaFecha && (() => {
+                      const baseMin = horaToMin(hora)
+                      const enVentana = turnosEseDia
+                        .filter((t) => Math.abs(horaToMin(t.hora) - baseMin) <= 120)
+                        .sort((a, b) => a.hora.localeCompare(b.hora))
+                      return (
+                        <div className="rounded-md border border-gray-200 bg-gray-50 p-2.5 space-y-1.5">
+                          <p className="text-xs font-medium text-gray-700">
+                            {loadingTurnosDia ? (
+                              "Buscando turnos…"
+                            ) : (
+                              <>
+                                Turnos ese día entre {minToHora(baseMin - 120)} y {minToHora(baseMin + 120)}{" "}
+                                <span className="text-gray-400">({enVentana.length})</span>
+                              </>
+                            )}
+                          </p>
+                          {!loadingTurnosDia && (enVentana.length === 0 ? (
+                            <p className="text-xs text-gray-400">No hay turnos en esa franja.</p>
+                          ) : (
+                            <ul className="space-y-0.5 max-h-28 overflow-y-auto">
+                              {enVentana.map((t) => {
+                                const mismaHora = t.hora === hora
+                                return (
+                                  <li
+                                    key={t.id}
+                                    className={`flex items-center gap-2 text-xs px-1.5 py-0.5 rounded ${
+                                      mismaHora ? "bg-amber-100 text-amber-800" : "text-gray-600"
+                                    }`}
+                                  >
+                                    <span className="font-mono tabular-nums font-medium shrink-0">{t.hora}</span>
+                                    <span className="truncate">{t.nombre} {t.apellido}</span>
+                                    {mismaHora && <span className="ml-auto text-[10px] shrink-0">misma hora</span>}
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
               </div>

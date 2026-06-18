@@ -37,3 +37,6 @@ next-env.d.ts
 .idea
 *.swp
 *.swo
+
+# claude code (settings locales por usuario; el skill kine-dev SÍ se versiona)
+.claude/settings.local.json

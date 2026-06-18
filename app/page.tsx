@@ -10,7 +10,7 @@ import { Calendario } from "@/components/calendario"
 import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
-import { ref, remove, update } from "firebase/database"
+import { ref, update } from "firebase/database"
 import { fetchTurnosPorPaciente, writeLog } from "@/lib/helpers"
 import { usePatients, queryPatients } from "@/lib/patients-store"
 import { useRouter } from "next/navigation"
@@ -119,9 +119,16 @@ export default function Page() {
       setMutationError(null)
       try {
         const turnos = await fetchTurnosPorPaciente(patientToDelete.id)
-        await Promise.all(turnos.map(t => remove(ref(db, `turnos/${t.fecha}/${t.id}`))))
-        const patientRef = ref(db, `pacientes/${patientToDelete.id}`)
-        await remove(patientRef)
+        // Borrado atómico: el paciente y todos sus turnos se nulifican en UNA
+        // sola escritura multi-path (o se aplica todo o nada). Antes se borraban
+        // por separado: si fallaba a mitad quedaban turnos huérfanos sin log.
+        const updates: Record<string, null> = {
+          [`pacientes/${patientToDelete.id}`]: null,
+        }
+        for (const t of turnos) {
+          updates[`turnos/${t.fecha}/${t.id}`] = null
+        }
+        await update(ref(db), updates)
         toast.success('Paciente eliminado correctamente')
         await writeLog({ accion: "eliminar_paciente", detalle: `Eliminó paciente ${patientToDelete.nombre} ${patientToDelete.apellido}`, entidadId: patientToDelete.id })
         // La caché live refleja la baja sola; el clamp de página corrige el rango.

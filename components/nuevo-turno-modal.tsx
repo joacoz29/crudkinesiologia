@@ -229,10 +229,11 @@ export function NuevoTurnoModal({
     (repeticion !== "semanal" || diasSemana.length > 0) &&
     fechasPreview.length > 0
 
-  const filtered = useMemo(
-    () => (search.trim() ? queryPatients(allPatients, { search: search.trim(), limit: 10 }).patients : []),
-    [allPatients, search],
-  )
+  const { patients: filtered, totalMatches } = useMemo(() => {
+    if (!search.trim()) return { patients: [] as Patient[], totalMatches: 0 }
+    const { patients, pagination } = queryPatients(allPatients, { search: search.trim(), limit: 10 })
+    return { patients, totalMatches: pagination.totalItems }
+  }, [allPatients, search])
 
   const dateKey = format(fecha, "yyyy-MM-dd")
   // Turnos del día base dentro de ±2h de la hora elegida (para ver la carga de la franja)
@@ -417,6 +418,11 @@ export function NuevoTurnoModal({
                       <p className="px-3 py-2 text-sm text-gray-400">Cargando pacientes…</p>
                     ) : (
                       <p className="px-3 py-2 text-sm text-gray-500">Sin resultados</p>
+                    )}
+                    {totalMatches > filtered.length && (
+                      <p className="sticky bottom-0 bg-white border-t border-gray-100 px-3 py-1.5 text-xs text-gray-400">
+                        +{totalMatches - filtered.length} más — refiná o buscá por DNI
+                      </p>
                     )}
                   </div>
                 )}

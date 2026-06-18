@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { CheckCircle2, Trash2, CalendarDays } from "lucide-react"
-import { ref, update, remove } from "firebase/database"
+import { ref, update, remove, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
@@ -70,6 +70,7 @@ export function EditarTurnoModal({
   const [reprogramando, setReprogramando] = useState(false)
   const [nuevaFecha, setNuevaFecha] = useState<Date | undefined>(undefined)
   const [isMoving, setIsMoving] = useState(false)
+  const [reprogConflictOpen, setReprogConflictOpen] = useState(false)
 
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
@@ -82,6 +83,7 @@ export function EditarTurnoModal({
       setJustificado(turno.justificado)
       setReprogramando(false)
       setNuevaFecha(undefined)
+      setReprogConflictOpen(false)
     }
   }, [open, turno])
 
@@ -122,6 +124,38 @@ export function EditarTurnoModal({
     }
   }
 
+  // Move atómico: crea el turno en la fecha nueva (como pendiente) y borra el viejo.
+  // Usa la hora/notas actuales del formulario; mantenemos el mismo id.
+  const doReprogramar = async () => {
+    if (!nuevaFecha) return
+    const nuevaKey = format(nuevaFecha, "yyyy-MM-dd")
+    const movido: Record<string, unknown> = {
+      nombre: turno.nombre,
+      apellido: turno.apellido,
+      hora,
+      estado: "pendiente",
+    }
+    if (turno.patientId) movido.patientId = turno.patientId
+    if (notas.trim()) movido.notas = notas.trim()
+
+    await update(ref(db), {
+      [`turnos/${nuevaKey}/${turno.id}`]: movido,
+      [`turnos/${fecha}/${turno.id}`]: null,
+    })
+
+    const desde = format(parseISO(fecha), "dd/MM/yyyy")
+    const hasta = format(nuevaFecha, "dd/MM/yyyy")
+    toast.success(`Turno reprogramado al ${format(nuevaFecha, "EEEE d 'de' MMMM", { locale: es })}`)
+    await writeLog({
+      accion: "editar_turno",
+      detalle: `Reprogramó el turno de ${turno.nombre} ${turno.apellido} (${hora}) del ${desde} al ${hasta}`,
+      entidadId: turno.id,
+      cambios: { Fecha: { antes: desde, despues: hasta } },
+    })
+    onSaved()
+    onOpenChange(false)
+  }
+
   const handleReprogramar = async () => {
     if (!nuevaFecha) return
     const nuevaKey = format(nuevaFecha, "yyyy-MM-dd")
@@ -131,33 +165,33 @@ export function EditarTurnoModal({
     }
     setIsMoving(true)
     try {
-      // Move atómico: crea el turno en la fecha nueva (como pendiente) y borra el viejo.
-      // Usa la hora/notas actuales del formulario; mantenemos el mismo id.
-      const movido: Record<string, unknown> = {
-        nombre: turno.nombre,
-        apellido: turno.apellido,
-        hora,
-        estado: "pendiente",
+      // Aviso si el paciente ya tiene un turno (no cancelado) ese día
+      if (turno.patientId) {
+        const snap = await get(ref(db, `turnos/${nuevaKey}`))
+        if (snap.exists()) {
+          const hayDup = Object.entries(snap.val() as Record<string, Turno>).some(
+            ([id, t]) => id !== turno.id && t.patientId === turno.patientId && t.estado !== "cancelado"
+          )
+          if (hayDup) {
+            setReprogConflictOpen(true)
+            return
+          }
+        }
       }
-      if (turno.patientId) movido.patientId = turno.patientId
-      if (notas.trim()) movido.notas = notas.trim()
+      await doReprogramar()
+    } catch (err) {
+      console.error("[EditarTurnoModal] reschedule error:", err)
+      toast.error(err instanceof Error ? err.message : "No se pudo reprogramar el turno")
+    } finally {
+      setIsMoving(false)
+    }
+  }
 
-      await update(ref(db), {
-        [`turnos/${nuevaKey}/${turno.id}`]: movido,
-        [`turnos/${fecha}/${turno.id}`]: null,
-      })
-
-      const desde = format(parseISO(fecha), "dd/MM/yyyy")
-      const hasta = format(nuevaFecha, "dd/MM/yyyy")
-      toast.success(`Turno reprogramado al ${format(nuevaFecha, "EEEE d 'de' MMMM", { locale: es })}`)
-      await writeLog({
-        accion: "editar_turno",
-        detalle: `Reprogramó el turno de ${turno.nombre} ${turno.apellido} (${hora}) del ${desde} al ${hasta}`,
-        entidadId: turno.id,
-        cambios: { Fecha: { antes: desde, despues: hasta } },
-      })
-      onSaved()
-      onOpenChange(false)
+  const handleConfirmReprogramar = async () => {
+    setReprogConflictOpen(false)
+    setIsMoving(true)
+    try {
+      await doReprogramar()
     } catch (err) {
       console.error("[EditarTurnoModal] reschedule error:", err)
       toast.error(err instanceof Error ? err.message : "No se pudo reprogramar el turno")
@@ -468,6 +502,27 @@ export function EditarTurnoModal({
               className="bg-red-600 hover:bg-red-700"
             >
               Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={reprogConflictOpen} onOpenChange={setReprogConflictOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Turno duplicado</AlertDialogTitle>
+            <AlertDialogDescription>
+              {turno.nombre} {turno.apellido} ya tiene un turno
+              {nuevaFecha && (
+                <> el <span className="font-medium capitalize">{format(nuevaFecha, "EEEE d 'de' MMMM", { locale: es })}</span></>
+              )}
+              . ¿Reprogramar de todos modos?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmReprogramar} className="bg-[#001633] hover:bg-[#002966]">
+              Reprogramar igual
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

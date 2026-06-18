@@ -353,7 +353,12 @@ export function EditPatientModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+          // No autoenfocar el primer input al abrir: en mobile dispara el teclado
+          // y tapa los datos. El teclado aparece recién al tocar un campo.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Editar — {editedPatient.nombre} {editedPatient.apellido}</DialogTitle>
           </DialogHeader>

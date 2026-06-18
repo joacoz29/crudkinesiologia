@@ -36,16 +36,7 @@ import { ref, update, remove, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
-import { confirmarAsistencia, desconfirmarAsistencia, writeLog, LogCambio } from "@/lib/helpers"
-
-function horaToMin(h: string): number {
-  const [hh, mm] = (h ?? "").split(":")
-  return (parseInt(hh, 10) || 0) * 60 + (parseInt(mm, 10) || 0)
-}
-function minToHora(m: number): string {
-  const c = Math.max(0, Math.min(24 * 60 - 1, m))
-  return `${String(Math.floor(c / 60)).padStart(2, "0")}:${String(c % 60).padStart(2, "0")}`
-}
+import { confirmarAsistencia, desconfirmarAsistencia, writeLog, LogCambio, horaToMin, minToHora } from "@/lib/helpers"
 
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },

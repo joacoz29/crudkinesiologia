@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
-import { writeLog, getSessionStats } from "@/lib/helpers"
+import { writeLog, getSessionStats, horaToMin, minToHora } from "@/lib/helpers"
 import { usePatients, queryPatients } from "@/lib/patients-store"
 import { Patient, Turno } from "@/types"
 import { toast } from "sonner"
@@ -235,9 +235,11 @@ export function NuevoTurnoModal({
   )
 
   const dateKey = format(fecha, "yyyy-MM-dd")
-  const horaConflicts = (turnosPorFecha[dateKey] ?? []).filter(
-    (t) => t.hora === hora && t.estado !== "cancelado"
-  )
+  // Turnos del día base dentro de ±2h de la hora elegida (para ver la carga de la franja)
+  const baseMin = horaToMin(hora)
+  const turnosFranja = (turnosPorFecha[dateKey] ?? [])
+    .filter((t) => t.estado !== "cancelado" && Math.abs(horaToMin(t.hora) - baseMin) <= 120)
+    .sort((a, b) => a.hora.localeCompare(b.hora))
 
   const doSave = async () => {
     const turnoBase: Record<string, unknown> = {
@@ -432,23 +434,33 @@ export function NuevoTurnoModal({
               onChange={(e) => setHora(e.target.value)}
               className="border-[#001633] w-36"
             />
-            {horaConflicts.length > 0 && (
-              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                <div className="text-xs text-amber-800">
-                  <p className="font-medium">
-                    {horaConflicts.length === 1
-                      ? "Ya hay 1 turno a esta hora:"
-                      : `Ya hay ${horaConflicts.length} turnos a esta hora:`}
-                  </p>
-                  <ul className="mt-0.5 space-y-0.5">
-                    {horaConflicts.map((t) => (
-                      <li key={t.id}>· {t.nombre} {t.apellido}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-2.5 space-y-1.5">
+              <p className="text-xs font-medium text-gray-700">
+                Turnos ese día entre {minToHora(baseMin - 120)} y {minToHora(baseMin + 120)}{" "}
+                <span className="text-gray-400">({turnosFranja.length})</span>
+              </p>
+              {turnosFranja.length === 0 ? (
+                <p className="text-xs text-gray-400">No hay turnos en esa franja.</p>
+              ) : (
+                <ul className="space-y-0.5 max-h-28 overflow-y-auto">
+                  {turnosFranja.map((t) => {
+                    const mismaHora = t.hora === hora
+                    return (
+                      <li
+                        key={t.id}
+                        className={`flex items-center gap-2 text-xs px-1.5 py-0.5 rounded ${
+                          mismaHora ? "bg-amber-100 text-amber-800" : "text-gray-600"
+                        }`}
+                      >
+                        <span className="font-mono tabular-nums font-medium shrink-0">{t.hora}</span>
+                        <span className="truncate">{t.nombre} {t.apellido}</span>
+                        {mismaHora && <span className="ml-auto text-[10px] shrink-0">misma hora</span>}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
           </div>
 
           {/* Notas */}

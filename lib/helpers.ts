@@ -6,6 +6,16 @@ import { getUserDisplayName } from "@/lib/auth-helper"
 
 const TZ = "America/Argentina/Buenos_Aires"
 
+// Hora "HH:MM" → minutos del día, y viceversa (para ventanas horarias)
+export function horaToMin(h: string): number {
+  const [hh, mm] = (h ?? "").split(":")
+  return (parseInt(hh, 10) || 0) * 60 + (parseInt(mm, 10) || 0)
+}
+export function minToHora(m: number): string {
+  const c = Math.max(0, Math.min(24 * 60 - 1, m))
+  return `${String(Math.floor(c / 60)).padStart(2, "0")}:${String(c % 60).padStart(2, "0")}`
+}
+
 export function parseTratamientosRaw(val: unknown): Tratamiento[] {
   if (!val) return []
   const items: unknown[] = Array.isArray(val) ? val : Object.values(val as object)

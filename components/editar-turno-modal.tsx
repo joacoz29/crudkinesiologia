@@ -300,6 +300,11 @@ export function EditarTurnoModal({
 
   const fechaLabel = format(parseISO(fecha), "EEEE d 'de' MMMM", { locale: es })
   const yaAsistio = turno.estado === "asistio"
+  // Turno futuro: todavía no pasó → no se puede marcar asistió/ausente ni confirmar
+  const esFuturo = fecha > format(hoy, "yyyy-MM-dd")
+  const estadoOptions = esFuturo
+    ? ESTADO_OPTIONS.filter((o) => o.value === "pendiente" || o.value === "cancelado")
+    : ESTADO_OPTIONS
 
   return (
     <>
@@ -314,8 +319,8 @@ export function EditarTurnoModal({
 
           <div className="space-y-4">
 
-            {/* Confirmar asistencia — only when patientId is linked */}
-            {turno.patientId && (
+            {/* Confirmar asistencia — solo si hay paciente vinculado y el turno no es futuro */}
+            {turno.patientId && !esFuturo && (
               <div className={[
                 "rounded-lg border px-4 py-3 flex items-center justify-between gap-3",
                 yaAsistio
@@ -370,16 +375,18 @@ export function EditarTurnoModal({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ESTADO_OPTIONS.map((opt) => (
+                  {estadoOptions.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       <span className={opt.color}>{opt.label}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {yaAsistio && (
+              {yaAsistio ? (
                 <p className="text-xs text-gray-400">La asistencia ya fue confirmada y registrada en el historial del paciente.</p>
-              )}
+              ) : esFuturo ? (
+                <p className="text-xs text-gray-400">Es un turno futuro: solo se puede dejar pendiente o cancelar. Asistió / ausente se marcan el día del turno.</p>
+              ) : null}
             </div>
 
             {/* Justificado — only when ausente */}

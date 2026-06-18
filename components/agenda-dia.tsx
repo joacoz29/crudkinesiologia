@@ -71,6 +71,13 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
 
   const hasFilter = filterEstado !== null || searchName.trim() !== ""
 
+  // Día futuro: no se puede confirmar asistencia (todavía no pasó)
+  const esFuturo = (() => {
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+    const f = new Date(fecha); f.setHours(0, 0, 0, 0)
+    return f > hoy
+  })()
+
   const filteredTurnos = turnos.filter((t) => {
     const matchesEstado = filterEstado === null || t.estado === filterEstado
     const matchesName =
@@ -266,7 +273,7 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
                 ) : (
                   horasTurnos.map((turno) => {
                     const isConfirming = confirmingIds.has(turno.id)
-                    const canQuickConfirm = turno.estado === "pendiente" && !!turno.patientId && !!onConfirmarAsistencia
+                    const canQuickConfirm = turno.estado === "pendiente" && !!turno.patientId && !!onConfirmarAsistencia && !esFuturo
                     return (
                       <div key={turno.id} className="flex items-stretch gap-1.5 w-full max-w-sm">
                         <button

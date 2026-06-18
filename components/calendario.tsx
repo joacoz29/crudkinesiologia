@@ -472,7 +472,7 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
         </div>
 
         {/* Count legend */}
-        <div className="flex items-center gap-3 text-[10px] text-gray-400">
+        <div className="flex flex-wrap items-center gap-3 text-[10px] text-gray-400">
           <span>Turnos:</span>
           <span className="flex items-center gap-1">
             <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold text-[9px]">9</span>

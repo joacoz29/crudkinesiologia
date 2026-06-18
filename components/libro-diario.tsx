@@ -820,18 +820,18 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           </Button>
         </div>
 
-        <div className="flex items-stretch rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
-          <div className="flex flex-col items-center justify-center px-4 py-2.5">
+        <div className="flex w-full sm:w-auto items-stretch rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+          <div className="flex flex-col items-center justify-center flex-1 sm:flex-none px-4 py-2.5">
             <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Haber</span>
             <span className="font-semibold text-green-600 text-lg leading-tight">${totalHaber.toFixed(2)}</span>
           </div>
           <div className="border-l border-gray-200" />
-          <div className="flex flex-col items-center justify-center px-4 py-2.5">
+          <div className="flex flex-col items-center justify-center flex-1 sm:flex-none px-4 py-2.5">
             <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Debe</span>
             <span className="font-semibold text-orange-600 text-lg leading-tight">${totalDebe.toFixed(2)}</span>
           </div>
           <div className="border-l border-gray-200" />
-          <div className="flex flex-col items-center justify-center px-4 py-2.5 bg-white">
+          <div className="flex flex-col items-center justify-center flex-1 sm:flex-none px-4 py-2.5 bg-white">
             <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Saldo</span>
             <span className={`font-bold text-xl leading-tight ${saldo >= 0 ? "text-green-700" : "text-red-600"}`}>
               ${saldo.toFixed(2)}

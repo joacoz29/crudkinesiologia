@@ -30,7 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { CheckCircle2, Trash2 } from "lucide-react"
+import { Calendar } from "@/components/ui/calendar"
+import { CheckCircle2, Trash2, CalendarDays } from "lucide-react"
 import { ref, update, remove } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
@@ -66,6 +67,12 @@ export function EditarTurnoModal({
   const [isSaving, setIsSaving] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [reprogramando, setReprogramando] = useState(false)
+  const [nuevaFecha, setNuevaFecha] = useState<Date | undefined>(undefined)
+  const [isMoving, setIsMoving] = useState(false)
+
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
 
   useEffect(() => {
     if (open) {
@@ -73,6 +80,8 @@ export function EditarTurnoModal({
       setEstado(turno.estado)
       setNotas(turno.notas ?? "")
       setJustificado(turno.justificado)
+      setReprogramando(false)
+      setNuevaFecha(undefined)
     }
   }, [open, turno])
 
@@ -110,6 +119,50 @@ export function EditarTurnoModal({
     } catch (err) {
       console.error("[EditarTurnoModal] delete error:", err)
       toast.error(err instanceof Error ? err.message : "Error al eliminar el turno")
+    }
+  }
+
+  const handleReprogramar = async () => {
+    if (!nuevaFecha) return
+    const nuevaKey = format(nuevaFecha, "yyyy-MM-dd")
+    if (nuevaKey === fecha) {
+      toast.error("Elegí una fecha distinta a la actual")
+      return
+    }
+    setIsMoving(true)
+    try {
+      // Move atómico: crea el turno en la fecha nueva (como pendiente) y borra el viejo.
+      // Usa la hora/notas actuales del formulario; mantenemos el mismo id.
+      const movido: Record<string, unknown> = {
+        nombre: turno.nombre,
+        apellido: turno.apellido,
+        hora,
+        estado: "pendiente",
+      }
+      if (turno.patientId) movido.patientId = turno.patientId
+      if (notas.trim()) movido.notas = notas.trim()
+
+      await update(ref(db), {
+        [`turnos/${nuevaKey}/${turno.id}`]: movido,
+        [`turnos/${fecha}/${turno.id}`]: null,
+      })
+
+      const desde = format(parseISO(fecha), "dd/MM/yyyy")
+      const hasta = format(nuevaFecha, "dd/MM/yyyy")
+      toast.success(`Turno reprogramado al ${format(nuevaFecha, "EEEE d 'de' MMMM", { locale: es })}`)
+      await writeLog({
+        accion: "editar_turno",
+        detalle: `Reprogramó el turno de ${turno.nombre} ${turno.apellido} (${hora}) del ${desde} al ${hasta}`,
+        entidadId: turno.id,
+        cambios: { Fecha: { antes: desde, despues: hasta } },
+      })
+      onSaved()
+      onOpenChange(false)
+    } catch (err) {
+      console.error("[EditarTurnoModal] reschedule error:", err)
+      toast.error(err instanceof Error ? err.message : "No se pudo reprogramar el turno")
+    } finally {
+      setIsMoving(false)
     }
   }
 
@@ -312,6 +365,66 @@ export function EditarTurnoModal({
                 className="min-h-[80px] border-[#001633]"
               />
             </div>
+
+            {/* Reprogramar a otra fecha (no disponible si ya asistió) */}
+            {!yaAsistio && (
+              <div className="border-t border-gray-100 pt-3">
+                {!reprogramando ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setReprogramando(true)}
+                    className="w-full border-[#001633]/30 text-[#001633] hover:bg-[#001633]/5 flex items-center gap-2"
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                    Reprogramar a otra fecha
+                  </Button>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Nueva fecha</Label>
+                    <p className="text-xs text-gray-500">
+                      El turno se mueve a la fecha elegida (queda pendiente) con la hora de arriba.
+                    </p>
+                    <div className="border border-gray-200 rounded-md flex justify-center">
+                      <Calendar
+                        mode="single"
+                        selected={nuevaFecha}
+                        onSelect={setNuevaFecha}
+                        disabled={{ before: hoy }}
+                        defaultMonth={nuevaFecha ?? parseISO(fecha)}
+                        locale={es}
+                        weekStartsOn={1}
+                        classNames={{
+                          day_selected:
+                            "!bg-[#001633] !text-white hover:!bg-[#001633] focus:!bg-[#001633]",
+                        }}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        onClick={handleReprogramar}
+                        disabled={isMoving || !nuevaFecha}
+                        className="flex-1 bg-[#001633] hover:bg-[#002966]"
+                      >
+                        {isMoving
+                          ? "Moviendo..."
+                          : nuevaFecha
+                          ? `Mover al ${format(nuevaFecha, "d 'de' MMM", { locale: es })}`
+                          : "Elegí una fecha"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => { setReprogramando(false); setNuevaFecha(undefined) }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-2 pt-1">

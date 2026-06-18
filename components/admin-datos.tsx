@@ -3,11 +3,13 @@
 import { useMemo } from "react"
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, getDay, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
-import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown } from "lucide-react"
-import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, getSessionStats, type Opinion } from "@/lib/helpers"
+import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity } from "lucide-react"
+import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, type Opinion, type LibroResumen } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { Patient, Turno } from "@/types"
+
+const EMPTY_LIBRO: LibroResumen = { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 }
 
 // Variación porcentual vs mes anterior (null si no hay base de comparación)
 function pctCambio(actual: number, anterior: number): number | null {
@@ -41,17 +43,20 @@ function formatMoney(n: number): string {
   return `$${n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-// Escalares de un mes para comparar tendencias (atenciones, ausentismo, recaudación)
+// Escalares de un mes para comparar tendencias
 function resumenMes(
   turnosPorDia: Record<string, Turno[]>,
   libroPorDia: Record<string, { haber: number; debe: number }>,
-): { atenciones: number; ausentismo: number; recaudado: number } {
+): { atenciones: number; ausentismo: number; recaudado: number; activos: number } {
   let asistidos = 0
   let ausentes = 0
+  const activos = new Set<string>()
   for (const turnos of Object.values(turnosPorDia)) {
     for (const t of turnos) {
-      if (t.estado === "asistio") asistidos++
-      else if (t.estado === "ausente") ausentes++
+      if (t.estado === "asistio") {
+        asistidos++
+        activos.add(t.patientId ?? `${t.nombre} ${t.apellido}`.toLowerCase().trim())
+      } else if (t.estado === "ausente") ausentes++
     }
   }
   const concluidos = asistidos + ausentes
@@ -61,6 +66,7 @@ function resumenMes(
     atenciones: asistidos,
     ausentismo: concluidos ? (ausentes / concluidos) * 100 : 0,
     recaudado: haber,
+    activos: activos.size,
   }
 }
 
@@ -177,11 +183,11 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     { revalidate: esMesActual, fallback: {} },
   )
 
-  // Recaudación del mes desde el libro diario (haber/debe por día), cacheada por sesión
-  const { data: libroPorDia, isLoading: isLoadingLibro } = useCachedMonth<Record<string, { haber: number; debe: number }>>(
+  // Recaudación del mes desde el libro diario (haber/debe por día + desglose), cacheada
+  const { data: libro, isLoading: isLoadingLibro } = useCachedMonth<LibroResumen>(
     `libro-datos/${mesKey}`,
     () => fetchLibroDiarioPorRango(...rango(currentMonth)),
-    { revalidate: esMesActual, fallback: {} },
+    { revalidate: esMesActual, fallback: EMPTY_LIBRO },
   )
 
   // Mes anterior (para tendencias). Misma key/forma que arriba → comparten caché.
@@ -190,10 +196,10 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     () => fetchTurnosPorRango(...rango(prevMonth)),
     { revalidate: prevEsMesActual, fallback: {} },
   )
-  const { data: libroPrev } = useCachedMonth<Record<string, { haber: number; debe: number }>>(
+  const { data: libroPrev } = useCachedMonth<LibroResumen>(
     `libro-datos/${prevMesKey}`,
     () => fetchLibroDiarioPorRango(...rango(prevMonth)),
-    { revalidate: prevEsMesActual, fallback: {} },
+    { revalidate: prevEsMesActual, fallback: EMPTY_LIBRO },
   )
 
   // Opiniones del mes (satisfacción). Misma key que la vista Opiniones → caché compartida.
@@ -203,14 +209,38 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     { revalidate: esMesActual, fallback: [] },
   )
 
+  // Logs del mes (pacientes nuevos). Misma key que la vista Registro → caché compartida.
+  const { data: logs } = useCachedMonth(
+    `logs/${mesKey}`,
+    () => fetchLogsMes(mesKey),
+    { revalidate: esMesActual, fallback: [] },
+  )
+  const { data: logsPrev } = useCachedMonth(
+    `logs/${prevMesKey}`,
+    () => fetchLogsMes(prevMesKey),
+    { revalidate: prevEsMesActual, fallback: [] },
+  )
+
   const isLoading = isLoadingTurnos || isLoadingPatients || isLoadingLibro
 
-  // Resumen del mes anterior (tendencias) y satisfacción del mes
-  const prev = useMemo(() => resumenMes(turnosPrev, libroPrev), [turnosPrev, libroPrev])
+  // Resumen del mes anterior (tendencias), satisfacción y pacientes nuevos
+  const prev = useMemo(() => resumenMes(turnosPrev, libroPrev.porDia), [turnosPrev, libroPrev])
   const satisfaccion = useMemo(() => {
     if (!opiniones.length) return { promedio: 0, count: 0 }
     return { promedio: opiniones.reduce((s, o) => s + o.rating, 0) / opiniones.length, count: opiniones.length }
   }, [opiniones])
+  const pacientesNuevos = useMemo(() => logs.filter((l) => l.accion === "crear_paciente").length, [logs])
+  const pacientesNuevosPrev = useMemo(() => logsPrev.filter((l) => l.accion === "crear_paciente").length, [logsPrev])
+
+  // Origen de la recaudación (haber) por cobertura/tipo
+  const fuentesRecaud = useMemo(() => {
+    const fuentes = [
+      { label: "Particular", monto: libro.haberParticular, color: "bg-emerald-500" },
+      { label: "Obra Social", monto: libro.haberObraSocial, color: "bg-[#001633]" },
+      { label: "Ingresos varios", monto: libro.haberIngreso, color: "bg-sky-500" },
+    ].filter((f) => f.monto > 0)
+    return { fuentes, max: Math.max(1, ...fuentes.map((f) => f.monto)) }
+  }, [libro])
 
   const metrics = useMemo(() => {
     const patientById = new Map(patients.map((p) => [p.id, p]))
@@ -231,6 +261,13 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     const justificadas = ausentes.filter((t) => t.justificado).length
     const concluidos = asistidos.length + ausentes.length
     const ausentismo = concluidos ? (ausentes.length / concluidos) * 100 : 0
+
+    // Pacientes activos (distintos atendidos) y sesiones promedio por paciente
+    const activosSet = new Set(
+      asistidos.map((t) => t.patientId ?? `${t.nombre} ${t.apellido}`.toLowerCase().trim())
+    )
+    const pacientesActivos = activosSet.size
+    const sesionesPromedio = pacientesActivos ? asistidos.length / pacientesActivos : 0
 
     // Atenciones por día del mes (incluye días en 0)
     const diasDelMes = getDaysInMonth(currentMonth)
@@ -309,7 +346,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
 
     // Recaudación del mes (libro diario): saldo diario = haber - debe
     const recaudPorDia = porDia.map(({ dia, fecha, weekday }) => {
-      const l = libroPorDia[fecha]
+      const l = libro.porDia[fecha]
       const haber = l?.haber ?? 0
       const debe = l?.debe ?? 0
       return { dia, fecha, weekday, haber, debe, saldo: haber - debe }
@@ -331,6 +368,8 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       ausencias: ausentes.length,
       justificadas,
       ausentismo,
+      pacientesActivos,
+      sesionesPromedio,
       porDia,
       maxDia,
       diasConAtencion,
@@ -353,7 +392,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       hayRecaudacion,
       sinTurnos: todos.length === 0,
     }
-  }, [turnosPorDia, libroPorDia, patients, currentMonth])
+  }, [turnosPorDia, libro, patients, currentMonth])
 
   const mesNombre = format(currentMonth, "MMMM", { locale: es })
 
@@ -567,11 +606,50 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
                 )
               })}
             </div>
+
+            {fuentesRecaud.fuentes.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-xs font-medium text-slate-500 mb-2">Origen de la recaudación</p>
+                <div className="space-y-2">
+                  {fuentesRecaud.fuentes.map(({ label, monto, color }) => (
+                    <div key={label} className="flex items-center gap-2 text-xs">
+                      <span className="w-28 truncate text-slate-600">{label}</span>
+                      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${color}`} style={{ width: `${(monto / fuentesRecaud.max) * 100}%` }} />
+                      </div>
+                      <span className="w-24 text-right text-slate-500 tabular-nums">{formatMoney(monto)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
 
       <SectionTitle>Pacientes</SectionTitle>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <StatCard
+          icon={UserPlus}
+          label="Pacientes nuevos"
+          value={String(pacientesNuevos)}
+          detail={`altas en ${mesNombre}`}
+          trend={<Trend pct={pctCambio(pacientesNuevos, pacientesNuevosPrev)} />}
+        />
+        <StatCard
+          icon={Activity}
+          label="Pacientes activos"
+          value={String(metrics.pacientesActivos)}
+          detail="distintos atendidos"
+          trend={<Trend pct={pctCambio(metrics.pacientesActivos, prev.activos)} />}
+        />
+        <StatCard
+          icon={CalendarCheck}
+          label="Sesiones por paciente"
+          value={metrics.sesionesPromedio.toFixed(1)}
+          detail="promedio del mes"
+        />
+      </div>
       <div className="grid lg:grid-cols-2 gap-3 items-start">
         {/* Sesiones por agotar (estado actual, independiente del mes) */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">

@@ -169,29 +169,73 @@ export async function fetchOpinionesMes(mesKey: string): Promise<Opinion[]> {
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
 }
 
-// Recaudación por día del libro diario en un rango (claves yyyy-MM-dd).
-// Computa haber/debe sumando las entradas (los totales denormalizados se dropearon).
+export interface LogEntry {
+  id: string
+  timestamp: string
+  email: string
+  displayName: string
+  accion: string
+  detalle: string
+  entidadId?: string
+  cambios?: LogCambio
+}
+
+// Logs de un mes (clave yyyy-MM), ordenados por timestamp desc.
+// Compartido entre la vista Registro y la pestaña Datos (misma caché por mes).
+export async function fetchLogsMes(mesKey: string): Promise<LogEntry[]> {
+  const snap = await get(ref(db, `logs/${mesKey}`))
+  if (!snap.exists()) return []
+  return Object.entries(snap.val() as Record<string, Omit<LogEntry, "id">>)
+    .map(([id, val]) => ({ id, ...val }))
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+}
+
+export interface LibroResumen {
+  porDia: Record<string, { haber: number; debe: number }>
+  // Desglose de la recaudación (haber) y egresos (debe) del rango
+  haberParticular: number // pacientes Particular
+  haberObraSocial: number // pacientes con Obra Social
+  haberIngreso: number    // entradas tipo Ingreso
+  debeGasto: number       // entradas tipo Gasto
+}
+
+// Resumen del libro diario en un rango (claves yyyy-MM-dd): haber/debe por día
+// + desglose por cobertura/tipo. Computa todo en una sola lectura sumando las
+// entradas (los totales denormalizados se dropearon).
 export async function fetchLibroDiarioPorRango(
   start: string,
   end: string
-): Promise<Record<string, { haber: number; debe: number }>> {
+): Promise<LibroResumen> {
   const q = query(ref(db, "libroDiario"), orderByKey(), startAt(start), endAt(end))
   const snapshot = await get(q)
-  if (!snapshot.exists()) return {}
 
-  const result: Record<string, { haber: number; debe: number }> = {}
-  snapshot.forEach((daySnap) => {
-    const fecha = daySnap.key!
-    const entradas = normalizeLibroEntradas((daySnap.val() as { entradas?: unknown })?.entradas)
-    let haber = 0
-    let debe = 0
-    for (const e of entradas) {
-      haber += Number(e.haber) || 0
-      debe += Number(e.debe) || 0
-    }
-    result[fecha] = { haber, debe }
-  })
-  return result
+  const porDia: Record<string, { haber: number; debe: number }> = {}
+  let haberParticular = 0
+  let haberObraSocial = 0
+  let haberIngreso = 0
+  let debeGasto = 0
+
+  if (snapshot.exists()) {
+    snapshot.forEach((daySnap) => {
+      const fecha = daySnap.key!
+      const entradas = normalizeLibroEntradas((daySnap.val() as { entradas?: unknown })?.entradas)
+      let haber = 0
+      let debe = 0
+      for (const e of entradas) {
+        const h = Number(e.haber) || 0
+        const d = Number(e.debe) || 0
+        haber += h
+        debe += d
+        const tipo = e.tipo ?? "Paciente"
+        if (tipo === "Ingreso") haberIngreso += h
+        else if (tipo === "Gasto") debeGasto += d
+        else if (e.cobertura === "Obra Social") haberObraSocial += h
+        else haberParticular += h
+      }
+      porDia[fecha] = { haber, debe }
+    })
+  }
+  return { porDia, haberParticular, haberObraSocial, haberIngreso, debeGasto }
 }
 
 export async function saveTurno(

@@ -1,10 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ref, get } from "firebase/database"
-import { db } from "@/lib/firebase"
 import { useCachedMonth } from "@/lib/monthly-cache"
-import { fetchOpinionesMes, type Opinion } from "@/lib/helpers"
+import { fetchOpinionesMes, fetchLogsMes, type Opinion, type LogEntry } from "@/lib/helpers"
 import { format, parseISO, isValid, addMonths, subMonths } from "date-fns"
 import { formatInTimeZone } from "date-fns-tz"
 import { es } from "date-fns/locale"
@@ -14,22 +12,6 @@ import { Input } from "@/components/ui/input"
 import { AdminDatos } from "@/components/admin-datos"
 
 const TZ = "America/Argentina/Buenos_Aires"
-
-interface LogCambio {
-  antes: string
-  despues: string
-}
-
-interface LogEntry {
-  id: string
-  timestamp: string
-  email: string
-  displayName: string
-  accion: string
-  detalle: string
-  entidadId?: string
-  cambios?: Record<string, LogCambio>
-}
 
 function Estrellas({ rating, size = "h-4 w-4" }: { rating: number; size?: string }) {
   return (
@@ -102,15 +84,10 @@ export function AdminPanel() {
   const esMesActual = mesKey === format(new Date(), "yyyy-MM")
 
   // Logs del mes (caché de sesión; revalida solo el mes actual). Filtros en memoria.
+  // Misma key que la pestaña Datos (pacientes nuevos) → caché compartida.
   const { data: logs, isLoading } = useCachedMonth<LogEntry[]>(
     `logs/${mesKey}`,
-    async () => {
-      const snap = await get(ref(db, `logs/${mesKey}`))
-      if (!snap.exists()) return []
-      return Object.entries(snap.val() as Record<string, Omit<LogEntry, "id">>)
-        .map(([id, val]) => ({ id, ...val }))
-        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-    },
+    () => fetchLogsMes(mesKey),
     { revalidate: esMesActual, fallback: [] },
   )
 

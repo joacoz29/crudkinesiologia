@@ -7,7 +7,8 @@ import { NewPatientModal } from "@/components/new-patient-modal"
 import { EditPatientModal } from "@/components/edit-patient-modal"
 import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
-import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users } from "lucide-react"
+import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
+import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users, CalendarPlus } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, update } from "firebase/database"
@@ -16,11 +17,12 @@ import { usePatients, queryPatients } from "@/lib/patients-store"
 import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
-import { Patient } from "@/types"
+import { Patient, Turno } from "@/types"
 import { getUserDisplayName, isAdmin, canAccessLibroDiario } from "@/lib/auth-helper"
 import { AdminPanel } from "@/components/admin-panel"
 import { TareasPendientes } from "@/components/tareas-pendientes"
 import { computeTareasPacientes } from "@/lib/tareas"
+import { fetchFeriados } from "@/lib/feriados"
 import { toast } from "sonner"
 
 const AVATAR_COLORS = [
@@ -73,6 +75,12 @@ export default function Page() {
   const [calendarioRefreshTrigger, setCalendarioRefreshTrigger] = useState(0)
   // Deep-link al calendario (fecha + nonce para re-disparar la misma fecha)
   const [calTarget, setCalTarget] = useState<{ fecha: string; nonce: number } | null>(null)
+  // Agendar turno desde la grilla de pacientes (paciente preseleccionado)
+  const [agendaPatient, setAgendaPatient] = useState<Patient | null>(null)
+  const [agendaOpen, setAgendaOpen] = useState(false)
+  const [agendaFeriados, setAgendaFeriados] = useState<Record<string, string>>({})
+  const hoyDate = useMemo(() => new Date(), [])
+  const sinTurnos = useMemo<Record<string, Turno[]>>(() => ({}), [])
   const [mutationError, setMutationError] = useState<string | null>(null)
 
   const patientsPerPage = 10
@@ -132,6 +140,14 @@ export default function Page() {
     setCalTarget({ fecha, nonce: Date.now() })
     setCalendarioRefreshTrigger((t) => t + 1)
     setActiveTab("calendario")
+  }
+
+  // Agendar un turno para un paciente directo desde la grilla (sin ir al calendario).
+  const handleAgendarTurno = (patient: Patient) => {
+    setAgendaPatient(patient)
+    setAgendaOpen(true)
+    const y = new Date().getFullYear()
+    fetchFeriados([y, y + 1]).then(setAgendaFeriados).catch(() => {})
   }
 
   const handleDelete = (patient: Patient) => {
@@ -347,6 +363,9 @@ export default function Page() {
                         <p className="text-xs text-slate-500 truncate">{patient.obraSocial}{patient.telefono ? ` · ${patient.telefono}` : ""}</p>
                       </div>
                       <div className="flex gap-1 shrink-0">
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-emerald-600 transition-colors rounded-lg" title="Agendar turno" onClick={() => handleAgendarTurno(patient)}>
+                          <CalendarPlus className="h-3.5 w-3.5" />
+                        </Button>
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-[#001633] transition-colors rounded-lg" onClick={() => handleEdit(patient)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -461,6 +480,15 @@ export default function Page() {
                                   <Button
                                     size="sm"
                                     variant="ghost"
+                                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-emerald-600 transition-colors rounded-lg"
+                                    title="Agendar turno"
+                                    onClick={() => handleAgendarTurno(patient)}
+                                  >
+                                    <CalendarPlus className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
                                     className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-[#001633] transition-colors rounded-lg"
                                     onClick={() => handleEdit(patient)}
                                   >
@@ -562,6 +590,23 @@ export default function Page() {
         onSave={handleSaveEdit}
         setLibroDiarioUpdateTrigger={setLibroDiarioUpdateTrigger}
       />
+
+      {/* Agendar turno desde la grilla de pacientes (paciente preseleccionado) */}
+      {agendaPatient && (
+        <NuevoTurnoModal
+          open={agendaOpen}
+          onOpenChange={(o) => {
+            setAgendaOpen(o)
+            if (!o) setAgendaPatient(null)
+          }}
+          fecha={hoyDate}
+          pacienteInicial={agendaPatient}
+          permitirElegirFecha
+          turnosPorFecha={sinTurnos}
+          feriados={agendaFeriados}
+          onSaved={() => setCalendarioRefreshTrigger((t) => t + 1)}
+        />
+      )}
     </div>
   )
 }

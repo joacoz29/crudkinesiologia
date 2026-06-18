@@ -71,6 +71,8 @@ export default function Page() {
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
   const [activeTab, setActiveTab] = useState("pacientes")
   const [calendarioRefreshTrigger, setCalendarioRefreshTrigger] = useState(0)
+  // Deep-link al calendario (fecha + nonce para re-disparar la misma fecha)
+  const [calTarget, setCalTarget] = useState<{ fecha: string; nonce: number } | null>(null)
   const [mutationError, setMutationError] = useState<string | null>(null)
 
   const patientsPerPage = 10
@@ -123,6 +125,13 @@ export default function Page() {
     if (!p) return
     setSelectedPatient(p)
     setEditModalOpen(true)
+  }
+
+  // Deep-link desde Pendientes: ir al calendario posicionado en una fecha puntual.
+  const handleIrCalendario = (fecha: string) => {
+    setCalTarget({ fecha, nonce: Date.now() })
+    setCalendarioRefreshTrigger((t) => t + 1)
+    setActiveTab("calendario")
   }
 
   const handleDelete = (patient: Patient) => {
@@ -526,9 +535,15 @@ export default function Page() {
         ) : activeTab === "libroDiario" ? (
           canSeeLibroDiario ? <LibroDiario updateTrigger={libroDiarioUpdateTrigger} /> : null
         ) : activeTab === "calendario" ? (
-          <Calendario refreshTrigger={calendarioRefreshTrigger} />
+          <Calendario
+            refreshTrigger={calendarioRefreshTrigger}
+            irAFecha={calTarget?.fecha}
+            irAFechaNonce={calTarget?.nonce}
+          />
         ) : activeTab === "pendientes" ? (
-          (isAdminUser || canSeeLibroDiario) ? <TareasPendientes onAbrirFicha={handleAbrirFicha} /> : null
+          (isAdminUser || canSeeLibroDiario)
+            ? <TareasPendientes onAbrirFicha={handleAbrirFicha} onIrCalendario={handleIrCalendario} />
+            : null
         ) : (
           isAdminUser ? <AdminPanel /> : null
         )}

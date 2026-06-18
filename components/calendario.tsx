@@ -68,7 +68,17 @@ function getCalendarDays(month: Date): Date[] {
   return [...paddedStart, ...days, ...paddedEnd]
 }
 
-export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
+export function Calendario({
+  refreshTrigger = 0,
+  irAFecha,
+  irAFechaNonce = 0,
+}: {
+  refreshTrigger?: number
+  /** Fecha (yyyy-MM-dd) a la que saltar (deep-link desde Pendientes) */
+  irAFecha?: string
+  /** Cambia cada vez que se pide saltar, para re-disparar aunque sea la misma fecha */
+  irAFechaNonce?: number
+}) {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()))
   const [turnosPorFecha, setTurnosPorFecha] = useState<Record<string, Turno[]>>({})
   const [isLoading, setIsLoading] = useState(false)
@@ -189,6 +199,17 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
     loadFeriados(year)
     loadFeriados(year + 1) // preload siguiente año (visible en diciembre)
   }, [currentMonth, loadFeriados])
+
+  // Deep-link desde Pendientes: posiciona el día seleccionado y el mes visible en
+  // `irAFecha`. Depende del nonce para re-disparar aunque sea la misma fecha.
+  useEffect(() => {
+    if (!irAFecha) return
+    const [y, m, d] = irAFecha.split("-").map(Number)
+    const target = new Date(y, m - 1, d)
+    setSelectedDate(target)
+    setCurrentMonth(startOfMonth(target))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [irAFechaNonce])
 
   const openNuevoTurno = (day: Date, hora = "09:00") => {
     setSelectedDate(day)

@@ -22,6 +22,7 @@ import {
   ClipboardList,
   UserCog,
   CalendarClock,
+  CalendarDays,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
@@ -66,12 +67,14 @@ function CategoriaSeccion({
   onAbrirFicha,
   onAbrirTurno,
   onAgendar,
+  onIrCalendario,
 }: {
   cat: TareaCategoria
   items: Tarea[]
   onAbrirFicha: (patientId: string) => void
   onAbrirTurno: (ref: { fecha: string; turnoId: string }) => void
   onAgendar: (patientId: string) => void
+  onIrCalendario: (fecha: string) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const [page, setPage] = useState(1)
@@ -113,15 +116,26 @@ function CategoriaSeccion({
                   <p className="text-xs text-slate-500 mt-0.5 break-words">{t.descripcion}</p>
                 </div>
                 {t.turnoRef ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
-                    onClick={() => onAbrirTurno(t.turnoRef!)}
-                  >
-                    Marcar asistencia
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-[#001633] hover:bg-slate-100"
+                      title="Ver en el calendario"
+                      onClick={() => onIrCalendario(t.turnoRef!.fecha)}
+                    >
+                      <CalendarDays className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
+                      onClick={() => onAbrirTurno(t.turnoRef!)}
+                    >
+                      Marcar asistencia
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 ) : tareaKind(t) === "sin_proximo_turno" && t.patientId ? (
                   <Button
                     size="sm"
@@ -180,7 +194,13 @@ function CategoriaSeccion({
   )
 }
 
-export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: string) => void }) {
+export function TareasPendientes({
+  onAbrirFicha,
+  onIrCalendario,
+}: {
+  onAbrirFicha: (patientId: string) => void
+  onIrCalendario: (fecha: string) => void
+}) {
   const { patients, isLoading: patientsLoading } = usePatients()
   const [turnos, setTurnos] = useState<Record<string, Turno[]>>({})
   const [turnosLoading, setTurnosLoading] = useState(true)
@@ -313,6 +333,7 @@ export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: s
                 onAbrirFicha={onAbrirFicha}
                 onAbrirTurno={abrirTurno}
                 onAgendar={agendarTurno}
+                onIrCalendario={onIrCalendario}
               />
             )
           })}

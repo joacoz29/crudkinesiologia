@@ -67,6 +67,10 @@ export interface LibroDiarioEntry {
   detalle?: string
   debe: number
   haber: number
+  // Sello de creación (epoch ms) para ordenar la lista por orden de carga. Las
+  // claves bajo `entradas/` son uuids aleatorios, así que sin esto Firebase las
+  // devuelve ordenadas por uuid (azaroso), no por cuándo se agregaron.
+  createdAt?: number
 }
 
 // Normaliza las entradas del libro diario soportando ambos formatos:
@@ -77,18 +81,27 @@ export function normalizeLibroEntradas(raw: unknown): (LibroDiarioEntry & { id: 
   if (!raw) return []
   const entries: (LibroDiarioEntry & { id: string })[] = []
   if (Array.isArray(raw)) {
-    for (const e of raw) {
-      if (!e) continue
+    raw.forEach((e, i) => {
+      if (!e) return
       const v = e as LibroDiarioEntry
-      entries.push({ ...v, id: v.id || (typeof crypto !== "undefined" ? crypto.randomUUID() : String(Math.random())), tipo: v.tipo ?? "Paciente" })
-    }
+      entries.push({
+        ...v,
+        id: v.id || (typeof crypto !== "undefined" ? crypto.randomUUID() : String(Math.random())),
+        tipo: v.tipo ?? "Paciente",
+        // Formato legacy sin sello: el índice del array ES el orden de carga
+        createdAt: typeof v.createdAt === "number" ? v.createdAt : i,
+      })
+    })
   } else if (typeof raw === "object") {
     for (const [key, val] of Object.entries(raw as Record<string, LibroDiarioEntry>)) {
       if (!val) continue
       entries.push({ ...val, id: key, tipo: val.tipo ?? "Paciente" })
     }
   }
-  return entries
+  // Orden estable por sello de creación. Las entradas sin `createdAt` (datos viejos
+  // en formato mapa, cuyo orden real ya se había perdido) quedan primero conservando
+  // su orden relativo previo; las nuevas se ordenan por cuándo se agregaron.
+  return entries.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
 }
 
 // Prepara UNA entrada de paciente para el libro diario del día, o null si el
@@ -115,6 +128,7 @@ async function buildLibroDiarioEntry(
     obraSocial,
     debe: 0,
     haber: 0,
+    createdAt: Date.now(),
   }
   return { entryId, entry }
 }

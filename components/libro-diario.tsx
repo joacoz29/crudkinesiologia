@@ -37,6 +37,7 @@ interface EntradaLibroDiario {
   detalle: string // texto libre, sobre todo para Gasto/Ingreso
   debe: number
   haber: number
+  createdAt: number // epoch ms — ordena la lista por orden de carga
 }
 
 interface LibroDiarioProps {
@@ -91,6 +92,7 @@ function sanitizeEntry(e: Partial<EntradaLibroDiario>): EntradaLibroDiario {
     detalle: e.detalle ?? "",
     debe: Number(e?.debe) || 0,
     haber: Number(e?.haber) || 0,
+    createdAt: Number(e?.createdAt) || 0,
   }
 }
 
@@ -368,6 +370,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
       detalle: "",
       debe: 0,
       haber: 0,
+      createdAt: Date.now(),
     })
   }
 
@@ -398,9 +401,12 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         return
       }
 
-      const prevEntradas: EntradaLibroDiario[] = prevList.map((e) => ({
+      // Sellos frescos crecientes: las copiadas van al final, en su mismo orden
+      const base = Date.now()
+      const prevEntradas: EntradaLibroDiario[] = prevList.map((e, i) => ({
         ...sanitizeEntry(e),
         id: crypto.randomUUID(),
+        createdAt: base + i,
         debe: 0,
         haber: 0,
       }))

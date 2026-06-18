@@ -391,7 +391,7 @@ export function NuevoTurnoModal({
             ) : (
               <div className="relative">
                 <Input
-                  placeholder="Buscar por nombre o apellido..."
+                  placeholder="Buscar por nombre, apellido o DNI..."
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setShowDropdown(true) }}
                   onFocus={() => setShowDropdown(true)}

@@ -115,12 +115,20 @@ export function queryPatients(
   let filtered = all
   if (search) {
     const s = search.toLowerCase()
-    filtered = all.filter(
-      (p) =>
+    const sDigits = s.replace(/\D/g, "")
+    filtered = all.filter((p) => {
+      // `dni` puede venir como número en registros legacy: normalizar a string
+      // antes de comparar. Un `p.dni?.toLowerCase()` directo tira TypeError sobre
+      // un number (el `?.` solo corta null/undefined) y rompía toda la búsqueda.
+      const dni = String(p.dni ?? "").toLowerCase()
+      return (
         p.nombre?.toLowerCase().includes(s) ||
         p.apellido?.toLowerCase().includes(s) ||
-        p.dni?.toLowerCase().includes(s),
-    )
+        dni.includes(s) ||
+        // Permite buscar "12.345.678" contra un DNI guardado como "12345678"
+        (sDigits !== "" && dni.replace(/\D/g, "").includes(sDigits))
+      )
+    })
   }
 
   const sorted = [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre))

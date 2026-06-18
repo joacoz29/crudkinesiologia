@@ -192,21 +192,15 @@ export function EditarTurnoModal({
       toast.error("Elegí una fecha distinta a la actual")
       return
     }
+    // Aviso de duplicado reutilizando los turnos del día ya cargados por el panel de
+    // la franja (turnosEseDia ya excluye el turno actual y los cancelados) — sin re-fetch.
+    // El botón Mover está deshabilitado mientras cargan, así que acá ya están frescos.
+    if (turno.patientId && turnosEseDia.some((t) => t.patientId === turno.patientId)) {
+      setReprogConflictOpen(true)
+      return
+    }
     setIsMoving(true)
     try {
-      // Aviso si el paciente ya tiene un turno (no cancelado) ese día
-      if (turno.patientId) {
-        const snap = await get(ref(db, `turnos/${nuevaKey}`))
-        if (snap.exists()) {
-          const hayDup = Object.entries(snap.val() as Record<string, Turno>).some(
-            ([id, t]) => id !== turno.id && t.patientId === turno.patientId && t.estado !== "cancelado"
-          )
-          if (hayDup) {
-            setReprogConflictOpen(true)
-            return
-          }
-        }
-      }
       await doReprogramar()
     } catch (err) {
       console.error("[EditarTurnoModal] reschedule error:", err)
@@ -466,7 +460,7 @@ export function EditarTurnoModal({
                       <Button
                         type="button"
                         onClick={handleReprogramar}
-                        disabled={isMoving || !nuevaFecha}
+                        disabled={isMoving || !nuevaFecha || loadingTurnosDia}
                         className="bg-[#001633] hover:bg-[#002966]"
                       >
                         {isMoving ? "Moviendo..." : "Mover"}

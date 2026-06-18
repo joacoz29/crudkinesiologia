@@ -49,7 +49,7 @@ const CAMPOS_BASICOS: {
 ]
 
 const esVacio = (v: unknown): boolean => String(v ?? "").trim() === ""
-const soloDigitos = (v: unknown): string => String(v ?? "").replace(/\D/g, "")
+export const soloDigitos = (v: unknown): string => String(v ?? "").replace(/\D/g, "")
 const nombreCompleto = (p: Pick<Patient, "nombre" | "apellido">): string =>
   `${p.nombre ?? ""} ${p.apellido ?? ""}`.trim()
 
@@ -57,7 +57,7 @@ const nombreCompleto = (p: Pick<Patient, "nombre" | "apellido">): string =>
 // y no es un valor de relleno conocido. Los DNIs compartidos pero INVÁLIDOS son
 // relleno (cargar el real), no duplicados reales. (Sincronizar con scripts/dni-audit.mjs)
 const DNI_RELLENO = new Set(["12345678", "1234567", "87654321", "123456789"])
-const dniEsValido = (d: string): boolean =>
+export const dniEsValido = (d: string): boolean =>
   d.length >= 6 && d.length <= 9 && !/^(\d)\1+$/.test(d) && !DNI_RELLENO.has(d)
 
 const SEV_ORDEN: Record<TareaSeveridad, number> = { alta: 0, media: 1, baja: 2 }

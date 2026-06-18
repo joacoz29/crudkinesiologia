@@ -10,6 +10,7 @@ import { ChevronLeft, ChevronRight, ChevronDown, Shield, Star, Search, Inbox, Ca
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AdminDatos } from "@/components/admin-datos"
+import { AdminDuplicados } from "@/components/admin-duplicados"
 
 const TZ = "America/Argentina/Buenos_Aires"
 
@@ -30,6 +31,8 @@ const ACCION_LABEL: Record<string, string> = {
   crear_paciente: "Crear paciente",
   editar_paciente: "Editar paciente",
   eliminar_paciente: "Eliminar paciente",
+  fusionar_pacientes: "Fusionar pacientes",
+  deshacer_fusion: "Deshacer fusión",
   confirmar_asistencia: "Confirmar asistencia",
   deshacer_asistencia: "Deshacer asistencia",
   crear_turno: "Crear turno",
@@ -61,6 +64,8 @@ function accionTheme(accion: string): { badge: string; dot: string } {
     return { badge: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500" }
   if (accion === "confirmar_asistencia")
     return { badge: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" }
+  if (accion === "fusionar_pacientes")
+    return { badge: "bg-indigo-50 text-indigo-700 border-indigo-200", dot: "bg-indigo-500" }
   return { badge: "bg-gray-50 text-gray-600 border-gray-200", dot: "bg-gray-400" }
 }
 
@@ -95,7 +100,7 @@ export function AdminPanel() {
   const [filterUser, setFilterUser] = useState("todos")
   const [filterAccion, setFilterAccion] = useState("todas")
   const [searchPaciente, setSearchPaciente] = useState("")
-  const [vista, setVista] = useState<"registro" | "opiniones" | "datos">("registro")
+  const [vista, setVista] = useState<"registro" | "opiniones" | "datos" | "duplicados">("registro")
   const [diaIndex, setDiaIndex] = useState(0) // paginación por día del registro (0 = día más reciente)
   const [usuariosOpen, setUsuariosOpen] = useState(false) // resumen por usuario colapsable
 
@@ -239,6 +244,7 @@ export function AdminPanel() {
               ["registro", "Registro de actividad", "Registro"],
               ["opiniones", "Opiniones", "Opiniones"],
               ["datos", "Datos", "Datos"],
+              ["duplicados", "Duplicados", "Duplic."],
             ] as const).map(([value, label, short]) => (
               <button
                 key={value}
@@ -280,7 +286,9 @@ export function AdminPanel() {
         </div>
       </div>
 
-      {vista === "datos" ? (
+      {vista === "duplicados" ? (
+        <AdminDuplicados />
+      ) : vista === "datos" ? (
         <AdminDatos currentMonth={currentMonth} />
       ) : vista === "opiniones" ? (
         <>

@@ -411,6 +411,8 @@ export type LogAccion =
   | "crear_paciente"
   | "editar_paciente"
   | "eliminar_paciente"
+  | "fusionar_pacientes"
+  | "deshacer_fusion"
   | "confirmar_asistencia"
   | "deshacer_asistencia"
   | "crear_turno"

@@ -92,3 +92,12 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Toast (sonner): botón X de cerrar a la DERECHA. Sonner lo pone a la izquierda
+   en LTR vía variables con selector :where() (especificidad 0); este selector las
+   sobreescribe. */
+[data-sonner-toaster] {
+  --toast-close-button-start: unset;
+  --toast-close-button-end: 0;
+  --toast-close-button-transform: translate(35%, -35%);
+}

@@ -92,6 +92,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
         ...(latestTrat?.nroAutorizacion && { nroAutorizacion: latestTrat.nroAutorizacion }),
         ...(latestTrat?.diagnostico && { diagnostico: latestTrat.diagnostico }),
         ...(latestTrat?.doctor && { doctor: latestTrat.doctor }),
+        createdAt: Date.now(), // para ordenar la grilla por recién ingresados
         ultima_actualizacion: {
           fecha: new Date().toISOString(),
           usuario: currentUser ? currentUser.displayName || currentUser.email : "Unknown",

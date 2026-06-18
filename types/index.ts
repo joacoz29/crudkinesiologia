@@ -44,6 +44,7 @@ export interface Patient {
   sesionesAutorizadas?: number
   nroAutorizacion?: string
   tratamientos?: Tratamiento[]
+  createdAt?: number // epoch ms del alta; ordena la grilla por recién ingresados
   ultima_actualizacion?: {
     fecha: string
     usuario: string

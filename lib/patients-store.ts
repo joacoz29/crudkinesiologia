@@ -102,9 +102,30 @@ export function usePatients(): State {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
+// Las keys de Firebase push() (20 chars) codifican el ms de creación en sus
+// primeros 8 chars (alfabeto propio, ordenable lexicográficamente por tiempo).
+// Lo usamos como fecha de alta para los pacientes legacy sin `createdAt`.
+const PUSH_CHARS = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+function pushKeyTime(id: string): number {
+  if (!id || id.length !== 20) return 0
+  let ms = 0
+  for (let i = 0; i < 8; i++) {
+    const c = PUSH_CHARS.indexOf(id[i])
+    if (c === -1) return 0 // no es una push key válida → al fondo
+    ms = ms * 64 + c
+  }
+  return ms
+}
+// Momento de alta del paciente (epoch ms): el sello explícito si existe, si no
+// el derivado de la push key. Ambos en la misma escala (ms desde epoch).
+function pacienteTime(p: Patient): number {
+  return typeof p.createdAt === "number" ? p.createdAt : pushKeyTime(p.id)
+}
+
 /**
- * Filtra, ordena y pagina en memoria. Replica exactamente lo que hacía
- * /api/patients (búsqueda por nombre/apellido/dni, orden por nombre).
+ * Filtra, ordena y pagina en memoria. Orden: pacientes recién ingresados primero
+ * (por `createdAt` / push key), con desempate alfabético. Búsqueda por
+ * nombre/apellido/dni.
  */
 export function queryPatients(
   all: Patient[],
@@ -134,7 +155,10 @@ export function queryPatients(
     })
   }
 
-  const sorted = [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre))
+  const sorted = [...filtered].sort((a, b) => {
+    const diff = pacienteTime(b) - pacienteTime(a) // más reciente primero
+    return diff !== 0 ? diff : a.nombre.localeCompare(b.nombre)
+  })
   const totalItems = sorted.length
   const totalPages = Math.ceil(totalItems / limit)
   const startIndex = (page - 1) * limit

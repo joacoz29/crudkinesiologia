@@ -71,6 +71,22 @@ function AccionBadge({ accion }: { accion: string }) {
   )
 }
 
+function CambiosList({ cambios }: { cambios?: LogEntry["cambios"] }) {
+  if (!cambios || Object.keys(cambios).length === 0) return null
+  return (
+    <div className="mt-2 space-y-1 border-l-2 border-slate-200 pl-3">
+      {Object.entries(cambios).map(([campo, { antes, despues }]) => (
+        <p key={campo} className="text-xs leading-relaxed break-words">
+          <span className="font-medium text-slate-500">{campo}:</span>{" "}
+          <span className="line-through text-slate-400 decoration-slate-300">{antes || "—"}</span>
+          <span className="mx-1.5 text-slate-300">→</span>
+          <span className="text-slate-700">{despues || "—"}</span>
+        </p>
+      ))}
+    </div>
+  )
+}
+
 export function AdminPanel() {
   const [currentMonth, setCurrentMonth] = useState(() => new Date())
   const [filterUser, setFilterUser] = useState("todos")
@@ -190,7 +206,7 @@ export function AdminPanel() {
   const mesLabel = format(currentMonth, "MMMM yyyy", { locale: es })
 
   const selectClass =
-    "h-8 text-sm border border-slate-200 rounded-lg px-2 bg-white text-slate-700 focus:outline-none focus:border-[#001633] transition-colors"
+    "h-9 sm:h-8 text-sm border border-slate-200 rounded-lg px-2 bg-white text-slate-700 focus:outline-none focus:border-[#001633] transition-colors"
 
   return (
     <div className="space-y-5">
@@ -212,24 +228,25 @@ export function AdminPanel() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Toggle registro / opiniones */}
-          <div className="inline-flex rounded-lg bg-slate-100 p-1">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          {/* Toggle registro / opiniones / datos — segmentado full-width en mobile */}
+          <div className="flex w-full sm:inline-flex sm:w-auto rounded-lg bg-slate-100 p-1">
             {([
-              ["registro", "Registro de actividad"],
-              ["opiniones", "Opiniones"],
-              ["datos", "Datos"],
-            ] as const).map(([value, label]) => (
+              ["registro", "Registro de actividad", "Registro"],
+              ["opiniones", "Opiniones", "Opiniones"],
+              ["datos", "Datos", "Datos"],
+            ] as const).map(([value, label, short]) => (
               <button
                 key={value}
                 onClick={() => setVista(value)}
-                className={`px-3.5 py-1.5 text-sm rounded-md transition-all ${
+                className={`flex-1 sm:flex-none px-3 sm:px-3.5 py-1.5 text-sm rounded-md transition-all whitespace-nowrap ${
                   vista === value
                     ? "bg-white text-[#001633] font-semibold shadow-sm"
                     : "text-slate-500 hover:text-slate-700"
                 }`}
               >
-                {label}
+                <span className="sm:hidden">{short}</span>
+                <span className="hidden sm:inline">{label}</span>
               </button>
             ))}
           </div>
@@ -359,20 +376,20 @@ export function AdminPanel() {
 
           {/* Tabla con barra de filtros */}
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-              <div className="relative">
+            <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+              <div className="relative w-full sm:w-48">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                 <Input
                   placeholder="Buscar paciente..."
                   value={searchPaciente}
                   onChange={(e) => setSearchPaciente(e.target.value)}
-                  className="h-8 pl-8 text-sm w-48 bg-white border-slate-200 focus:border-[#001633] rounded-lg"
+                  className="h-9 sm:h-8 pl-8 text-sm w-full bg-white border-slate-200 focus:border-[#001633] rounded-lg"
                 />
               </div>
               <select
                 value={filterUser}
                 onChange={(e) => setFilterUser(e.target.value)}
-                className={selectClass}
+                className={`${selectClass} flex-1 min-w-0 sm:flex-none`}
               >
                 <option value="todos">Todos los usuarios</option>
                 {usuarios.map(([email, nombre]) => (
@@ -382,13 +399,13 @@ export function AdminPanel() {
               <select
                 value={filterAccion}
                 onChange={(e) => setFilterAccion(e.target.value)}
-                className={selectClass}
+                className={`${selectClass} flex-1 min-w-0 sm:flex-none`}
               >
                 {acciones.map((a) => (
                   <option key={a} value={a}>{a === "todas" ? "Todas las acciones" : (ACCION_LABEL[a] ?? a)}</option>
                 ))}
               </select>
-              <span className="ml-auto text-xs text-slate-400 tabular-nums">
+              <span className="w-full text-right sm:w-auto sm:ml-auto text-xs text-slate-400 tabular-nums">
                 {isLoading
                   ? "Cargando..."
                   : `${filtered.length} registro${filtered.length !== 1 ? "s" : ""}${logs.length !== filtered.length ? ` (de ${logs.length})` : ""}`}
@@ -396,19 +413,16 @@ export function AdminPanel() {
             </div>
 
             {isLoading ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <tbody className="divide-y divide-slate-100">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <tr key={i}>
-                        <td className="px-4 py-3.5"><div className="h-4 w-16 bg-slate-200 rounded animate-pulse" /></td>
-                        <td className="px-4 py-3.5"><div className="h-4 w-32 bg-slate-200 rounded animate-pulse" /></td>
-                        <td className="px-4 py-3.5"><div className="h-5 w-32 bg-slate-200 rounded-full animate-pulse" /></td>
-                        <td className="px-4 py-3.5"><div className="h-4 w-64 bg-slate-200 rounded animate-pulse" /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="divide-y divide-slate-100">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="px-4 py-3.5 flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-slate-200 animate-pulse shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-32 bg-slate-200 rounded animate-pulse" />
+                      <div className="h-3 w-48 max-w-full bg-slate-200 rounded animate-pulse" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : dias.length === 0 ? (
               <div className="px-4 py-16 text-center">
@@ -450,7 +464,32 @@ export function AdminPanel() {
                   </Button>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* Mobile: cards */}
+                <div className="sm:hidden divide-y divide-slate-100">
+                  {diaActual.logs.map((log) => {
+                    const d = parseISO(log.timestamp)
+                    const esCritico = ACCION_CRITICA.has(log.accion)
+                    return (
+                      <div key={log.id} className={`px-4 py-3 ${esCritico ? "bg-red-50/40" : ""}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="h-7 w-7 rounded-full bg-[#001633]/90 flex items-center justify-center text-white text-[11px] font-semibold shrink-0">
+                            {log.displayName.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-medium text-slate-800 text-sm truncate flex-1 min-w-0">{log.displayName}</span>
+                          <span className="text-[11px] text-slate-400 tabular-nums shrink-0">
+                            {isValid(d) ? `${formatInTimeZone(d, TZ, "HH:mm")} hs` : log.timestamp}
+                          </span>
+                        </div>
+                        <AccionBadge accion={log.accion} />
+                        <p className="text-sm text-slate-600 leading-relaxed mt-1.5 break-words">{log.detalle}</p>
+                        <CambiosList cambios={log.cambios} />
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Desktop: tabla */}
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-[#001633]">
@@ -488,18 +527,7 @@ export function AdminPanel() {
                             </td>
                             <td className="px-4 py-3.5 text-slate-600 align-top">
                               <p className="leading-relaxed">{log.detalle}</p>
-                              {log.cambios && Object.keys(log.cambios).length > 0 && (
-                                <div className="mt-2 space-y-1 border-l-2 border-slate-200 pl-3">
-                                  {Object.entries(log.cambios).map(([campo, { antes, despues }]) => (
-                                    <p key={campo} className="text-xs leading-relaxed">
-                                      <span className="font-medium text-slate-500">{campo}:</span>{" "}
-                                      <span className="line-through text-slate-400 decoration-slate-300">{antes || "—"}</span>
-                                      <span className="mx-1.5 text-slate-300">→</span>
-                                      <span className="text-slate-700">{despues || "—"}</span>
-                                    </p>
-                                  ))}
-                                </div>
-                              )}
+                              <CambiosList cambios={log.cambios} />
                             </td>
                           </tr>
                         )

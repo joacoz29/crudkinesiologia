@@ -1,4 +1,4 @@
-import { ref, get, push, remove, update, query, orderByKey, startAt, endAt } from "firebase/database"
+import { ref, get, push, update, query, orderByKey, startAt, endAt } from "firebase/database"
 import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
 import { Patient, Tratamiento, Turno, TurnoConFecha } from "@/types"
@@ -249,39 +249,6 @@ export async function fetchLibroDiarioPorRango(
   return { porDia, haberParticular, haberObraSocial, haberIngreso, debeGasto }
 }
 
-export async function saveTurno(
-  fecha: string,
-  turno: Omit<Turno, "id">
-): Promise<string> {
-  // Strip undefined fields — Firebase rejects them
-  const clean = Object.fromEntries(
-    Object.entries(turno).filter(([, v]) => v !== undefined)
-  )
-  try {
-    const newRef = await push(ref(db, `turnos/${fecha}`), clean)
-    return newRef.key!
-  } catch (err) {
-    console.error("[helpers.saveTurno] Firebase error:", err)
-    throw err
-  }
-}
-
-export async function updateTurno(
-  fecha: string,
-  id: string,
-  data: Partial<Omit<Turno, "id">>
-): Promise<void> {
-  const clean = Object.fromEntries(
-    Object.entries(data).filter(([, v]) => v !== undefined)
-  )
-  try {
-    await update(ref(db, `turnos/${fecha}/${id}`), clean)
-  } catch (err) {
-    console.error("[helpers.updateTurno] Firebase error:", err)
-    throw err
-  }
-}
-
 export async function fetchTurnosPorPaciente(patientId: string): Promise<TurnoConFecha[]> {
   const pad = (n: number) => String(n).padStart(2, "0")
   const from = new Date(); from.setFullYear(from.getFullYear() - 2)
@@ -302,15 +269,6 @@ export async function fetchTurnosPorPaciente(patientId: string): Promise<TurnoCo
     })
   })
   return result.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora))
-}
-
-export async function deleteTurno(fecha: string, id: string): Promise<void> {
-  try {
-    await remove(ref(db, `turnos/${fecha}/${id}`))
-  } catch (err) {
-    console.error("[helpers.deleteTurno] Firebase error:", err)
-    throw err
-  }
 }
 
 // Agrega una entrada "N- dd/mm/yyyy HH:mm" al historial libre, con numeración

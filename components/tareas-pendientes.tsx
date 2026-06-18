@@ -1,0 +1,156 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import { addDays, subDays } from "date-fns"
+import { format } from "date-fns-tz"
+import { usePatients } from "@/lib/patients-store"
+import { fetchTurnosPorRango } from "@/lib/helpers"
+import {
+  computeTareasPacientes,
+  computeTareasTurnos,
+  ordenarTareas,
+  type Tarea,
+  type TareaCategoria,
+  type TareaSeveridad,
+} from "@/lib/tareas"
+import { Turno } from "@/types"
+import { Button } from "@/components/ui/button"
+import { ClipboardList, UserCog, CalendarClock, CheckCircle2, ChevronRight, Loader2 } from "lucide-react"
+
+const TZ = "America/Argentina/Buenos_Aires"
+
+const CATEGORIA_META: Record<TareaCategoria, { label: string; Icon: typeof UserCog }> = {
+  operativo: { label: "Turnos", Icon: CalendarClock },
+  clinico: { label: "Seguimiento clínico", Icon: ClipboardList },
+  datos: { label: "Datos de pacientes", Icon: UserCog },
+}
+
+const SEV_META: Record<TareaSeveridad, { dot: string }> = {
+  alta: { dot: "bg-red-500" },
+  media: { dot: "bg-amber-500" },
+  baja: { dot: "bg-slate-400" },
+}
+
+// Orden de presentación de las secciones (lo más accionable primero)
+const ORDEN_CATEGORIAS: TareaCategoria[] = ["operativo", "clinico", "datos"]
+
+export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: string) => void }) {
+  const { patients, isLoading: patientsLoading } = usePatients()
+  const [turnos, setTurnos] = useState<Record<string, Turno[]>>({})
+  const [turnosLoading, setTurnosLoading] = useState(true)
+
+  // Una sola lectura por rango: -45 días (turnos pendientes pasados) a +120 días
+  // (próximos turnos). Se baja al montar la pestaña; al cambiar de pestaña el
+  // componente se desmonta, así que reabrir trae datos frescos (sin caché stale).
+  useEffect(() => {
+    const hoy = new Date()
+    const start = format(subDays(hoy, 45), "yyyy-MM-dd", { timeZone: TZ })
+    const end = format(addDays(hoy, 120), "yyyy-MM-dd", { timeZone: TZ })
+    let cancel = false
+    setTurnosLoading(true)
+    fetchTurnosPorRango(start, end)
+      .then((t) => { if (!cancel) setTurnos(t) })
+      .catch(() => { /* la vista sigue sirviendo las tareas de pacientes */ })
+      .finally(() => { if (!cancel) setTurnosLoading(false) })
+    return () => { cancel = true }
+  }, [])
+
+  const tareas = useMemo(() => {
+    const hoyKey = format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
+    return ordenarTareas([
+      ...computeTareasPacientes(patients),
+      ...computeTareasTurnos(patients, turnos, hoyKey),
+    ])
+  }, [patients, turnos])
+
+  const porCategoria = useMemo(() => {
+    const map: Record<TareaCategoria, Tarea[]> = { datos: [], clinico: [], operativo: [] }
+    for (const t of tareas) map[t.categoria].push(t)
+    return map
+  }, [tareas])
+
+  if (patientsLoading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 animate-pulse">
+            <div className="h-4 w-40 bg-slate-200 rounded mb-3" />
+            <div className="h-3 w-64 bg-slate-100 rounded" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-[#001633]">Tareas pendientes</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {tareas.length === 0
+              ? "Sin pendientes detectados"
+              : `${tareas.length} pendiente${tareas.length !== 1 ? "s" : ""} para revisar`}
+            {turnosLoading && (
+              <span className="inline-flex items-center gap-1 ml-2 text-slate-400">
+                <Loader2 className="h-3 w-3 animate-spin" /> actualizando turnos…
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+
+      {!turnosLoading && tareas.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-20 text-slate-400 bg-white rounded-xl border border-slate-200">
+          <CheckCircle2 className="h-12 w-12 text-emerald-400" />
+          <p className="font-medium text-slate-600">¡Todo al día!</p>
+          <p className="text-sm">No hay datos faltantes ni turnos sin marcar.</p>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {ORDEN_CATEGORIAS.map((cat) => {
+            const items = porCategoria[cat]
+            if (items.length === 0) return null
+            const { label, Icon } = CATEGORIA_META[cat]
+            return (
+              <section key={cat} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+                  <Icon className="h-4 w-4 text-[#001633]" />
+                  <h2 className="text-sm font-semibold text-[#001633]">{label}</h2>
+                  <span className="ml-auto text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">
+                    {items.length}
+                  </span>
+                </div>
+                <ul className="divide-y divide-slate-100">
+                  {items.map((t) => (
+                    <li key={t.id} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50/60 transition-colors">
+                      <span
+                        className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${SEV_META[t.severidad].dot}`}
+                        title={`Prioridad ${t.severidad}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-800">{t.titulo}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 break-words">{t.descripcion}</p>
+                      </div>
+                      {t.patientId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
+                          onClick={() => onAbrirFicha(t.patientId!)}
+                        >
+                          Abrir ficha
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}

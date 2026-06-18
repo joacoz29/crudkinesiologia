@@ -19,6 +19,7 @@ import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import { Patient } from "@/types"
 import { getUserDisplayName, isAdmin, canAccessLibroDiario } from "@/lib/auth-helper"
 import { AdminPanel } from "@/components/admin-panel"
+import { TareasPendientes } from "@/components/tareas-pendientes"
 import { toast } from "sonner"
 
 const AVATAR_COLORS = [
@@ -106,6 +107,16 @@ export default function Page() {
 
   const handleEdit = (patient: Patient) => {
     setSelectedPatient(patient)
+    setEditModalOpen(true)
+  }
+
+  // Desde la pestaña Pendientes: salta a Pacientes y abre la ficha del paciente
+  // (el modal vive en el branch de "pacientes", por eso cambiamos de tab primero).
+  const handleAbrirFicha = (patientId: string) => {
+    const p = allPatients.find((x) => x.id === patientId)
+    if (!p) return
+    setSelectedPatient(p)
+    setActiveTab("pacientes")
     setEditModalOpen(true)
   }
 
@@ -211,9 +222,10 @@ export default function Page() {
               "pacientes",
               ...(canSeeLibroDiario ? ["libroDiario"] : []),
               "calendario",
+              ...(isAdminUser || canSeeLibroDiario ? ["pendientes"] : []),
               ...(isAdminUser ? ["admin"] : []),
             ] as const).map((tab) => {
-              const labels: Record<string, string> = { pacientes: "Pacientes", libroDiario: "Libro Diario", calendario: "Calendario", admin: "Admin" }
+              const labels: Record<string, string> = { pacientes: "Pacientes", libroDiario: "Libro Diario", calendario: "Calendario", pendientes: "Pendientes", admin: "Admin" }
               return (
                 <button
                   key={tab}
@@ -512,6 +524,8 @@ export default function Page() {
           canSeeLibroDiario ? <LibroDiario updateTrigger={libroDiarioUpdateTrigger} /> : null
         ) : activeTab === "calendario" ? (
           <Calendario refreshTrigger={calendarioRefreshTrigger} />
+        ) : activeTab === "pendientes" ? (
+          (isAdminUser || canSeeLibroDiario) ? <TareasPendientes onAbrirFicha={handleAbrirFicha} /> : null
         ) : (
           isAdminUser ? <AdminPanel /> : null
         )}

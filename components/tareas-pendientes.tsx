@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { addDays, subDays } from "date-fns"
 import { format } from "date-fns-tz"
 import { usePatients } from "@/lib/patients-store"
@@ -15,6 +15,7 @@ import {
 } from "@/lib/tareas"
 import { Turno } from "@/types"
 import { Button } from "@/components/ui/button"
+import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import {
   ClipboardList,
   UserCog,
@@ -44,6 +45,16 @@ const SEV_META: Record<TareaSeveridad, { dot: string }> = {
 // Orden de presentación de las secciones (lo más accionable primero)
 const ORDEN_CATEGORIAS: TareaCategoria[] = ["operativo", "clinico", "datos"]
 
+// Rango de turnos a leer: -45 días (turnos pendientes pasados) a +120 días
+// (próximos turnos). Hora AR.
+function rangoTurnos() {
+  const hoy = new Date()
+  return {
+    start: format(subDays(hoy, 45), "yyyy-MM-dd", { timeZone: TZ }),
+    end: format(addDays(hoy, 120), "yyyy-MM-dd", { timeZone: TZ }),
+  }
+}
+
 // Una sección colapsable por categoría, con su propia paginación. Cada sección
 // guarda su estado (abierta/cerrada y página) — la `key={cat}` lo mantiene
 // estable aunque cambien las tareas.
@@ -51,10 +62,12 @@ function CategoriaSeccion({
   cat,
   items,
   onAbrirFicha,
+  onAbrirTurno,
 }: {
   cat: TareaCategoria
   items: Tarea[]
   onAbrirFicha: (patientId: string) => void
+  onAbrirTurno: (ref: { fecha: string; turnoId: string }) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const [page, setPage] = useState(1)
@@ -95,7 +108,17 @@ function CategoriaSeccion({
                   <p className="text-sm font-medium text-slate-800">{t.titulo}</p>
                   <p className="text-xs text-slate-500 mt-0.5 break-words">{t.descripcion}</p>
                 </div>
-                {t.patientId && (
+                {t.turnoRef ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
+                    onClick={() => onAbrirTurno(t.turnoRef!)}
+                  >
+                    Marcar asistencia
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                ) : t.patientId ? (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -105,7 +128,7 @@ function CategoriaSeccion({
                     Abrir ficha
                     <ChevronRight className="h-3.5 w-3.5" />
                   </Button>
-                )}
+                ) : null}
               </li>
             ))}
           </ul>
@@ -147,22 +170,47 @@ export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: s
   const { patients, isLoading: patientsLoading } = usePatients()
   const [turnos, setTurnos] = useState<Record<string, Turno[]>>({})
   const [turnosLoading, setTurnosLoading] = useState(true)
+  // Modal de edición de turno (para marcar asistió/ausente desde una tarea)
+  const [turnoSel, setTurnoSel] = useState<{ fecha: string; turno: Turno } | null>(null)
+  const [turnoModalOpen, setTurnoModalOpen] = useState(false)
 
-  // Una sola lectura por rango: -45 días (turnos pendientes pasados) a +120 días
-  // (próximos turnos). Se baja al montar la pestaña; al cambiar de pestaña el
-  // componente se desmonta, así que reabrir trae datos frescos (sin caché stale).
+  // Re-lectura del rango de turnos (también se llama tras marcar un turno: la
+  // tarea correspondiente desaparece sola al dejar de estar "pendiente").
+  const refetchTurnos = useCallback(() => {
+    const { start, end } = rangoTurnos()
+    setTurnosLoading(true)
+    return fetchTurnosPorRango(start, end)
+      .then((t) => setTurnos(t))
+      .catch(() => { /* la vista sigue sirviendo las tareas de pacientes */ })
+      .finally(() => setTurnosLoading(false))
+  }, [])
+
+  // Una sola lectura al montar. Al cambiar de pestaña el componente se desmonta,
+  // así que reabrir trae datos frescos (sin caché stale).
   useEffect(() => {
-    const hoy = new Date()
-    const start = format(subDays(hoy, 45), "yyyy-MM-dd", { timeZone: TZ })
-    const end = format(addDays(hoy, 120), "yyyy-MM-dd", { timeZone: TZ })
+    const { start, end } = rangoTurnos()
     let cancel = false
     setTurnosLoading(true)
     fetchTurnosPorRango(start, end)
       .then((t) => { if (!cancel) setTurnos(t) })
-      .catch(() => { /* la vista sigue sirviendo las tareas de pacientes */ })
+      .catch(() => {})
       .finally(() => { if (!cancel) setTurnosLoading(false) })
     return () => { cancel = true }
   }, [])
+
+  const abrirTurno = useCallback(
+    (ref: { fecha: string; turnoId: string }) => {
+      const turno = turnos[ref.fecha]?.find((t) => t.id === ref.turnoId)
+      if (!turno) {
+        // El turno ya no está en memoria (cambió la base): refrescá y no abras.
+        refetchTurnos()
+        return
+      }
+      setTurnoSel({ fecha: ref.fecha, turno })
+      setTurnoModalOpen(true)
+    },
+    [turnos, refetchTurnos],
+  )
 
   const tareas = useMemo(() => {
     const hoyKey = format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
@@ -220,9 +268,30 @@ export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: s
           {ORDEN_CATEGORIAS.map((cat) => {
             const items = porCategoria[cat]
             if (items.length === 0) return null
-            return <CategoriaSeccion key={cat} cat={cat} items={items} onAbrirFicha={onAbrirFicha} />
+            return (
+              <CategoriaSeccion
+                key={cat}
+                cat={cat}
+                items={items}
+                onAbrirFicha={onAbrirFicha}
+                onAbrirTurno={abrirTurno}
+              />
+            )
           })}
         </div>
+      )}
+
+      {turnoSel && (
+        <EditarTurnoModal
+          open={turnoModalOpen}
+          onOpenChange={(o) => {
+            setTurnoModalOpen(o)
+            if (!o) setTurnoSel(null)
+          }}
+          fecha={turnoSel.fecha}
+          turno={turnoSel.turno}
+          onSaved={refetchTurnos}
+        />
       )}
     </div>
   )

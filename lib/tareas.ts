@@ -27,6 +27,8 @@ export interface Tarea {
   descripcion: string
   /** Para el CTA "Abrir ficha" (cuando la tarea es de un paciente) */
   patientId?: string
+  /** Para el CTA "Marcar asistencia": abre el modal de edición de ese turno */
+  turnoRef?: { fecha: string; turnoId: string }
 }
 
 // Campos de la ficha que consideramos "básicos". Editable acá para sumar/quitar
@@ -185,6 +187,7 @@ export function computeTareasTurnos(
         titulo: "Turno sin marcar",
         descripcion: `El turno de ${nombreCompleto(t)} del ${d}/${m}/${y} ${t.hora} quedó pendiente (¿asistió o faltó?).`,
         patientId: t.patientId,
+        turnoRef: { fecha, turnoId: t.id },
       })
     }
   }

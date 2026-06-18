@@ -24,7 +24,7 @@ import { db } from "@/lib/firebase"
 import { writeLog, LogCambio, normalizeLibroEntradas } from "@/lib/helpers"
 import { toast } from "sonner"
 import { format } from "date-fns-tz"
-import { ChevronLeft, ChevronRight, ClipboardCopy, Loader2, Trash2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronsDown, ClipboardCopy, Loader2, Trash2 } from "lucide-react"
 
 type TipoEntrada = "Paciente" | "Gasto" | "Ingreso"
 
@@ -107,6 +107,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const [lastSavedData, setLastSavedData] = useState("[]")
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
   const [confirmCopyOpen, setConfirmCopyOpen] = useState(false)
+  const [showGoBottom, setShowGoBottom] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSave = useRef<{ dateKey: string; entradas: EntradaLibroDiario[] } | null>(null)
   // Lost-update: en vez de pisar el nodo entero, se escribe por-entrada (`entradas/{id}`).
@@ -359,6 +360,24 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
       fetchEntriesForDate(fecha)
     }
   }, [updateTrigger, fecha, fetchEntriesForDate])
+
+  // Botón flotante "ir al final": el libro se hace largo con muchas entradas.
+  // Solo aparece si la página tiene scroll suficiente y todavía no estás abajo.
+  useEffect(() => {
+    const onScroll = () => {
+      const doc = document.documentElement
+      const scrollable = doc.scrollHeight - window.innerHeight > 240
+      const atBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 80
+      setShowGoBottom(scrollable && !atBottom)
+    }
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    window.addEventListener("resize", onScroll)
+    return () => {
+      window.removeEventListener("scroll", onScroll)
+      window.removeEventListener("resize", onScroll)
+    }
+  }, [fields.length])
 
   const agregarFila = (tipo: TipoEntrada = "Paciente") => {
     append({
@@ -892,6 +911,19 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* FAB "ir al final" (mobile + desktop): salta al fondo del libro */}
+      {showGoBottom && (
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" })}
+          title="Ir al final"
+          aria-label="Ir al final del libro"
+          className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 h-11 w-11 rounded-full bg-[#001633] text-white shadow-lg flex items-center justify-center hover:bg-[#002966] active:scale-95 transition-all"
+        >
+          <ChevronsDown className="h-5 w-5" />
+        </button>
+      )}
     </div>
   )
 }

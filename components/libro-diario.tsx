@@ -34,6 +34,7 @@ interface EntradaLibroDiario {
   nombreApellido: string
   cobertura: "Particular" | "Obra Social"
   obraSocial: string
+  detalle: string // texto libre, sobre todo para Gasto/Ingreso
   debe: number
   haber: number
 }
@@ -87,6 +88,7 @@ function sanitizeEntry(e: Partial<EntradaLibroDiario>): EntradaLibroDiario {
     nombreApellido: e.nombreApellido ?? "",
     cobertura: (e.cobertura as "Particular" | "Obra Social") ?? "Particular",
     obraSocial: e.obraSocial ?? "-",
+    detalle: e.detalle ?? "",
     debe: Number(e?.debe) || 0,
     haber: Number(e?.haber) || 0,
   }
@@ -363,6 +365,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
       nombreApellido: "",
       cobertura: "Particular",
       obraSocial: "-",
+      detalle: "",
       debe: 0,
       haber: 0,
     })
@@ -439,7 +442,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
 
       autoTable(doc, {
         startY: 24,
-        head: [["N°", "Tipo", "Nombre / Descripción", "Cobertura", "Obra Social", "Debe", "Haber"]],
+        head: [["N°", "Tipo", "Nombre / Descripción", "Cobertura", "Obra Social / Detalle", "Debe", "Haber"]],
         body: (watchEntradas as EntradaLibroDiario[]).map((e, i) => {
           const tipo = e.tipo ?? "Paciente"
           const esPaciente = tipo === "Paciente"
@@ -448,7 +451,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
             tipo,
             e.nombreApellido,
             esPaciente ? e.cobertura : "—",
-            esPaciente ? e.obraSocial : "—",
+            esPaciente ? e.obraSocial : (e.detalle || "—"),
             `$${(Number(e.debe) || 0).toFixed(2)}`,
             `$${(Number(e.haber) || 0).toFixed(2)}`,
           ]
@@ -598,6 +601,13 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                     />
                   </div>
                 )}
+                {!esPaciente && (
+                  <Input
+                    {...register(`entradas.${index}.detalle`)}
+                    placeholder="Detalle (opcional)..."
+                    className="border-gray-300 focus:border-[#001633] h-8 text-sm"
+                  />
+                )}
                 <div className="flex gap-3">
                   <div className="flex-1 space-y-1">
                     <label className="text-xs text-gray-500">Debe</label>
@@ -683,40 +693,44 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                           className="border-gray-300 focus:border-[#001633]"
                         />
                       </TableCell>
-                      <TableCell>
-                        {esPaciente ? (
-                          <Select
-                            value={watchEntradas?.[index]?.cobertura ?? "Particular"}
-                            onValueChange={(value) => {
-                              setValue(`entradas.${index}.cobertura`, value as "Particular" | "Obra Social")
-                              if (value === "Particular") {
-                                setValue(`entradas.${index}.obraSocial`, "-")
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="border-gray-300 focus:border-[#001633]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Particular">Particular</SelectItem>
-                              <SelectItem value="Obra Social">Obra Social</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <span className="text-gray-400 text-sm px-2">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {esPaciente ? (
+                      {esPaciente ? (
+                        <>
+                          <TableCell>
+                            <Select
+                              value={watchEntradas?.[index]?.cobertura ?? "Particular"}
+                              onValueChange={(value) => {
+                                setValue(`entradas.${index}.cobertura`, value as "Particular" | "Obra Social")
+                                if (value === "Particular") {
+                                  setValue(`entradas.${index}.obraSocial`, "-")
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="border-gray-300 focus:border-[#001633]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Particular">Particular</SelectItem>
+                                <SelectItem value="Obra Social">Obra Social</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              {...register(`entradas.${index}.obraSocial`)}
+                              disabled={watchEntradas?.[index]?.cobertura === "Particular"}
+                              className={`border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400 ${obraSocialVacia ? "border-red-400 bg-red-50" : ""}`}
+                            />
+                          </TableCell>
+                        </>
+                      ) : (
+                        <TableCell colSpan={2}>
                           <Input
-                            {...register(`entradas.${index}.obraSocial`)}
-                            disabled={watchEntradas?.[index]?.cobertura === "Particular"}
-                            className={`border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400 ${obraSocialVacia ? "border-red-400 bg-red-50" : ""}`}
+                            {...register(`entradas.${index}.detalle`)}
+                            placeholder="Detalle (opcional)..."
+                            className="border-gray-300 focus:border-[#001633]"
                           />
-                        ) : (
-                          <span className="text-gray-400 text-sm px-2">—</span>
-                        )}
-                      </TableCell>
+                        </TableCell>
+                      )}
                       <TableCell>
                         <Input
                           {...register(`entradas.${index}.debe`, { valueAsNumber: true })}

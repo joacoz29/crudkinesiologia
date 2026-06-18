@@ -54,6 +54,7 @@ export interface LibroDiarioEntry {
   nombreApellido: string
   cobertura: "Particular" | "Obra Social"
   obraSocial: string
+  detalle?: string
   debe: number
   haber: number
 }

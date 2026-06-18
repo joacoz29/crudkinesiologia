@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Calendar } from "@/components/ui/calendar"
 import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { writeLog, getSessionStats } from "@/lib/helpers"
@@ -26,7 +27,7 @@ import { Patient, Turno } from "@/types"
 import { toast } from "sonner"
 import { AlertTriangle } from "lucide-react"
 
-type Repeticion = "ninguna" | "intervalo" | "semanal"
+type Repeticion = "ninguna" | "intervalo" | "semanal" | "calendario"
 
 // Only weekdays L-V
 const DIAS_SEMANA = [
@@ -151,6 +152,14 @@ export function NuevoTurnoModal({
   const [tipoLimite, setTipoLimite] = useState<"semanas" | "turnos">("semanas")
   const [numSemanas, setNumSemanas] = useState(4)
   const [numTurnos, setNumTurnos] = useState(10)
+  const [fechasManuales, setFechasManuales] = useState<Date[]>([]) // modo "calendario"
+
+  // Hoy a medianoche, para deshabilitar días pasados en el calendario manual
+  const hoy = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
 
   useEffect(() => {
     if (open) {
@@ -168,10 +177,13 @@ export function NuevoTurnoModal({
       setTipoLimite("semanas")
       setNumSemanas(4)
       setNumTurnos(10)
+      // Pre-seleccionar el día de origen en el modo calendario (si no es pasado)
+      const fechaNorm = new Date(fecha); fechaNorm.setHours(0, 0, 0, 0)
+      setFechasManuales(fechaNorm >= hoy ? [fechaNorm] : [])
       setConflictDates([])
       setConflictDialogOpen(false)
     }
-  }, [open, horaInicial, fecha])
+  }, [open, horaInicial, fecha, hoy])
 
   const toggleDia = (dia: number) => {
     setDiasSemana((prev) =>
@@ -186,23 +198,31 @@ export function NuevoTurnoModal({
     [selectedPatient]
   )
 
+  const fechasManualesOrdenadas = useMemo(
+    () => [...fechasManuales].sort((a, b) => a.getTime() - b.getTime()),
+    [fechasManuales]
+  )
+
   // Raw candidates before holiday filter — used only for preview display (shows strikethrough on skipped days)
   const fechasTodasCandidatas = useMemo(() => {
     if (repeticion === "ninguna") return [fecha]
+    if (repeticion === "calendario") return fechasManualesOrdenadas
     if (repeticion === "intervalo") return generarFechasIntervalo(fecha, intervalo, vecesTotal)
     if (tipoLimite === "turnos") return [] // por-turnos derives its own list internally
     return generarFechasSemanal(fecha, diasSemana, numSemanas)
-  }, [repeticion, fecha, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas])
+  }, [repeticion, fecha, fechasManualesOrdenadas, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas])
 
-  // Dates that will actually be saved (holidays excluded)
+  // Dates that will actually be saved (holidays excluded). El modo calendario respeta
+  // la elección manual: no filtra feriados (el usuario eligió esos días a propósito).
   const fechasPreview = useMemo(() => {
     if (repeticion === "ninguna") return [fecha]
+    if (repeticion === "calendario") return fechasManualesOrdenadas
     if (repeticion === "intervalo")
       return filtrarFeriados(generarFechasIntervalo(fecha, intervalo, vecesTotal), feriadosSet)
     if (tipoLimite === "turnos")
       return generarFechasSemanalPorTurnos(fecha, diasSemana, numTurnos, feriadosSet)
     return filtrarFeriados(generarFechasSemanal(fecha, diasSemana, numSemanas), feriadosSet)
-  }, [repeticion, fecha, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas, numTurnos, feriadosSet])
+  }, [repeticion, fecha, fechasManualesOrdenadas, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas, numTurnos, feriadosSet])
 
   const canSave =
     !!selectedPatient &&
@@ -260,6 +280,10 @@ export function NuevoTurnoModal({
     }
     if (repeticion === "semanal" && diasSemana.length === 0) {
       toast.error("Seleccioná al menos un día de la semana")
+      return
+    }
+    if (repeticion === "calendario" && fechasManuales.length === 0) {
+      toast.error("Seleccioná al menos un día en el calendario")
       return
     }
 
@@ -444,8 +468,8 @@ export function NuevoTurnoModal({
           {/* Repetición */}
           <div className="space-y-3 border-t border-gray-100 pt-3">
             <Label>Repetición</Label>
-            <div className="flex gap-2">
-              {(["ninguna", "intervalo", "semanal"] as Repeticion[]).map((opt) => (
+            <div className="flex gap-2 flex-wrap">
+              {(["ninguna", "intervalo", "semanal", "calendario"] as Repeticion[]).map((opt) => (
                 <button
                   key={opt}
                   type="button"
@@ -457,7 +481,7 @@ export function NuevoTurnoModal({
                       : "border-gray-200 text-gray-600 hover:border-[#001633]",
                   ].join(" ")}
                 >
-                  {opt === "ninguna" ? "Una vez" : opt === "intervalo" ? "Cada N días" : "Semanal"}
+                  {opt === "ninguna" ? "Una vez" : opt === "intervalo" ? "Cada N días" : opt === "semanal" ? "Semanal" : "Calendario"}
                 </button>
               ))}
             </div>
@@ -568,11 +592,42 @@ export function NuevoTurnoModal({
               </div>
             )}
 
+            {/* Calendario manual: tocá los días a agendar */}
+            {repeticion === "calendario" && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500">Tocá en el calendario los días en los que querés agendar el turno.</p>
+                <div className="border border-gray-200 rounded-md flex justify-center">
+                  <Calendar
+                    mode="multiple"
+                    selected={fechasManuales}
+                    onSelect={(dates) => setFechasManuales(dates ?? [])}
+                    disabled={{ before: hoy }}
+                    defaultMonth={fecha}
+                    locale={es}
+                    weekStartsOn={1}
+                    modifiers={{ feriado: (d) => feriadosSet.has(format(d, "yyyy-MM-dd")) }}
+                    modifiersClassNames={{ feriado: "text-amber-600 font-semibold" }}
+                    classNames={{
+                      day_selected:
+                        "bg-[#001633] text-white hover:bg-[#001633] hover:text-white focus:bg-[#001633] focus:text-white",
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-gray-600">
+                  {fechasManuales.length === 0
+                    ? "Ningún día seleccionado"
+                    : `${fechasManuales.length} día${fechasManuales.length !== 1 ? "s" : ""} seleccionado${fechasManuales.length !== 1 ? "s" : ""}`}
+                  <span className="text-amber-600"> · los feriados se agendan igual</span>
+                </p>
+              </div>
+            )}
+
             {/* Preview */}
             {repeticion !== "ninguna" && (() => {
+              const esCalendario = repeticion === "calendario"
               const byTurnos = repeticion === "semanal" && tipoLimite === "turnos"
               const displayDates = byTurnos ? fechasPreview : fechasTodasCandidatas
-              const feriadosOmitidos = byTurnos
+              const feriadosOmitidos = (byTurnos || esCalendario)
                 ? 0
                 : displayDates.filter((d) => feriadosSet.has(format(d, "yyyy-MM-dd"))).length
               if (displayDates.length === 0) return null
@@ -590,7 +645,8 @@ export function NuevoTurnoModal({
                   <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
                     {displayDates.map((f, i) => {
                       const fKey = format(f, "yyyy-MM-dd")
-                      const esFeriado = feriadosSet.has(fKey)
+                      // En modo calendario no se tachan los feriados (se agendan igual)
+                      const esFeriado = !esCalendario && feriadosSet.has(fKey)
                       const hasConflict =
                         !esFeriado &&
                         (turnosPorFecha[fKey] ?? []).some(

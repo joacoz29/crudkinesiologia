@@ -919,7 +919,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" })}
           title="Ir al final"
           aria-label="Ir al final del libro"
-          className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 h-11 w-11 rounded-full bg-[#001633] text-white shadow-lg flex items-center justify-center hover:bg-[#002966] active:scale-95 transition-all"
+          className="fixed bottom-5 left-5 sm:bottom-6 sm:left-6 z-40 h-11 w-11 rounded-full bg-[#001633] text-white shadow-lg flex items-center justify-center hover:bg-[#002966] active:scale-95 transition-all"
         >
           <ChevronsDown className="h-5 w-5" />
         </button>

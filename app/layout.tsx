@@ -16,10 +16,10 @@ export default function RootLayout({
     <html lang="es">
       <body>
         {children}
-        {/* Toasts de sonner (toast.success/error/...): no estaban montados, así que
-            no se mostraba ningún aviso. En top-center para no pisar el FAB "ir al
-            final" del libro ni los controles de abajo en mobile. */}
-        <Toaster position="top-center" />
+        {/* Toasts de sonner (toast.success/error/...): esquina inferior derecha,
+            con colores por tipo (richColors) y la animación fluida de sonner.
+            El FAB "ir al final" del libro se movió a la izquierda para no pisarse. */}
+        <Toaster position="bottom-right" richColors closeButton />
       </body>
     </html>
   )

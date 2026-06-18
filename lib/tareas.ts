@@ -53,6 +53,13 @@ const soloDigitos = (v: unknown): string => String(v ?? "").replace(/\D/g, "")
 const nombreCompleto = (p: Pick<Patient, "nombre" | "apellido">): string =>
   `${p.nombre ?? ""} ${p.apellido ?? ""}`.trim()
 
+// Un DNI "válido" tiene 6-9 dígitos, no son todos iguales (00000000, 11111111…)
+// y no es un valor de relleno conocido. Los DNIs compartidos pero INVÁLIDOS son
+// relleno (cargar el real), no duplicados reales. (Sincronizar con scripts/dni-audit.mjs)
+const DNI_RELLENO = new Set(["12345678", "1234567", "87654321", "123456789"])
+const dniEsValido = (d: string): boolean =>
+  d.length >= 6 && d.length <= 9 && !/^(\d)\1+$/.test(d) && !DNI_RELLENO.has(d)
+
 const SEV_ORDEN: Record<TareaSeveridad, number> = { alta: 0, media: 1, baja: 2 }
 
 /** "Tipo" de tarea = prefijo del id (antes del primer ':'). Para CTAs/dedup. */
@@ -122,17 +129,34 @@ export function computeTareasPacientes(patients: Patient[]): Tarea[] {
     }
   }
 
-  // 4) DNI duplicado entre pacientes distintos (rompe la opinión por DNI y confunde)
+  // 4) DNIs compartidos por 2+ pacientes. Se distingue:
+  //    - DNI inválido/relleno (ej. "0", "00000000"): NO es duplicado real → cargar
+  //      el DNI verdadero. Severidad baja (es higiene de datos, no urgente).
+  //    - DNI válido compartido: duplicado real (rompe la opinión por DNI y la
+  //      identificación) → revisar/mergear. Severidad alta.
   const porDni = new Map<string, Patient[]>()
   for (const p of patients) {
     const dni = soloDigitos(p.dni)
-    if (!dni) continue
+    if (!dni) continue // los vacíos ya se marcan como "Falta DNI" más arriba
     const arr = porDni.get(dni)
     if (arr) arr.push(p)
     else porDni.set(dni, [p])
   }
   for (const [dni, grupo] of porDni) {
-    if (grupo.length > 1) {
+    if (grupo.length <= 1) continue // un solo paciente con ese DNI: no es duplicado
+    if (!dniEsValido(dni)) {
+      tareas.push({
+        id: `dni_invalido:${dni}`,
+        categoria: "datos",
+        severidad: "baja",
+        titulo: "DNI de relleno",
+        descripcion: `El DNI "${dni}" (de relleno) está en ${grupo.length} pacientes — cargar el real. Ej.: ${grupo
+          .slice(0, 5)
+          .map(nombreCompleto)
+          .join(", ")}${grupo.length > 5 ? "…" : ""}`,
+        patientId: grupo[0].id,
+      })
+    } else {
       tareas.push({
         id: `dni_duplicado:${dni}`,
         categoria: "datos",

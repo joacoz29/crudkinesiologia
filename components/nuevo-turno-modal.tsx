@@ -608,8 +608,9 @@ export function NuevoTurnoModal({
                     modifiers={{ feriado: (d) => feriadosSet.has(format(d, "yyyy-MM-dd")) }}
                     modifiersClassNames={{ feriado: "text-amber-600 font-semibold" }}
                     classNames={{
+                      // `!` para que el estado seleccionado gane sobre el modifier de feriado
                       day_selected:
-                        "bg-[#001633] text-white hover:bg-[#001633] hover:text-white focus:bg-[#001633] focus:text-white",
+                        "!bg-[#001633] !text-white hover:!bg-[#001633] focus:!bg-[#001633]",
                     }}
                   />
                 </div>

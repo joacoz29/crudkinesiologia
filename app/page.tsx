@@ -20,6 +20,7 @@ import { Patient } from "@/types"
 import { getUserDisplayName, isAdmin, canAccessLibroDiario } from "@/lib/auth-helper"
 import { AdminPanel } from "@/components/admin-panel"
 import { TareasPendientes } from "@/components/tareas-pendientes"
+import { computeTareasPacientes } from "@/lib/tareas"
 import { toast } from "sonner"
 
 const AVATAR_COLORS = [
@@ -81,6 +82,10 @@ export default function Page() {
     [allPatients, searchTerm, currentPage],
   )
   const { totalPages, totalItems } = pagination
+  // Conteo para el badge de la pestaña Pendientes. Solo tareas de paciente
+  // (gratis desde la caché live); las de turno no se cuentan acá para no
+  // disparar una lectura de turnos a nivel page.
+  const pendientesCount = useMemo(() => computeTareasPacientes(allPatients).length, [allPatients])
   const error = mutationError ?? storeError
   const router = useRouter()
   const [libroDiarioUpdateTrigger, setLibroDiarioUpdateTrigger] = useState(0)
@@ -242,6 +247,11 @@ export default function Page() {
                   }`}
                 >
                   {labels[tab]}
+                  {tab === "pendientes" && pendientesCount > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 text-[10px] font-bold rounded-full bg-amber-400 text-[#001633] align-middle">
+                      {pendientesCount}
+                    </span>
+                  )}
                 </button>
               )
             })}

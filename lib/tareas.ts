@@ -1,5 +1,5 @@
 import { Patient, Turno } from "@/types"
-import { getSessionStats, parseTratamientosRaw } from "@/lib/helpers"
+import { getSessionStats, parseTratamientosRaw, horaToMin } from "@/lib/helpers"
 
 // ───────────────────────────────────────────────────────────────────────────
 // Pestaña "Pendientes" (v1) — tareas DERIVADAS de datos ya cacheados.
@@ -148,7 +148,8 @@ export function computeTareasPacientes(patients: Patient[]): Tarea[] {
 
 /**
  * Tareas que dependen de los turnos. `turnosPorFecha` viene de una sola lectura
- * por rango (fetchTurnosPorRango). `hoyKey` en formato yyyy-MM-dd (hora AR).
+ * por rango (fetchTurnosPorRango). `hoyKey` en formato yyyy-MM-dd y `nowMin` en
+ * minutos del día (ambos en hora AR; los calcula la vista).
  *
  * Nota: "sin próximo turno" depende de que el rango cubra el futuro razonable
  * (la vista baja +120 días). Un paciente con turno más allá de esa ventana se
@@ -158,21 +159,30 @@ export function computeTareasTurnos(
   patients: Patient[],
   turnosPorFecha: Record<string, Turno[]>,
   hoyKey: string,
+  nowMin: number,
 ): Tarea[] {
   const tareas: Tarea[] = []
 
-  // Pacientes con algún turno futuro no cancelado (por id y por nombre, para
-  // tolerar turnos legacy sin patientId — mismo fallback que usa la pestaña Datos)
-  const conFuturoId = new Set<string>()
-  const conFuturoNombre = new Set<string>()
+  // Próximo turno futuro (>= hoy, no cancelado) por paciente — por id y por nombre,
+  // para tolerar turnos legacy sin patientId (mismo fallback que la pestaña Datos).
+  // Guardamos la fecha más temprana para poder mostrarla en la tarea.
+  const proximoPorId = new Map<string, string>()
+  const proximoPorNombre = new Map<string, string>()
   for (const [fecha, turnos] of Object.entries(turnosPorFecha)) {
     if (fecha < hoyKey) continue
     for (const t of turnos) {
       if (t.estado === "cancelado") continue
-      if (t.patientId) conFuturoId.add(t.patientId)
-      conFuturoNombre.add(nombreCompleto(t).toLowerCase())
+      if (t.patientId) {
+        const cur = proximoPorId.get(t.patientId)
+        if (!cur || fecha < cur) proximoPorId.set(t.patientId, fecha)
+      }
+      const nk = nombreCompleto(t).toLowerCase()
+      const curN = proximoPorNombre.get(nk)
+      if (!curN || fecha < curN) proximoPorNombre.set(nk, fecha)
     }
   }
+  const proximoDe = (p: Patient): string | undefined =>
+    proximoPorId.get(p.id) ?? proximoPorNombre.get(nombreCompleto(p).toLowerCase())
 
   // 5) Turnos pasados que quedaron en "pendiente" (no se marcó asistió/ausente)
   for (const [fecha, turnos] of Object.entries(turnosPorFecha)) {
@@ -192,23 +202,51 @@ export function computeTareasTurnos(
     }
   }
 
-  // 6) Pacientes con sesiones por usar pero sin próximo turno agendado
+  // 6) Turnos de HOY cuya hora ya pasó y siguen pendientes (recordatorio de marcar)
+  for (const t of turnosPorFecha[hoyKey] ?? []) {
+    if (t.estado !== "pendiente") continue
+    if (horaToMin(t.hora) >= nowMin) continue // todavía no pasó la hora
+    tareas.push({
+      id: `turno_hoy:${hoyKey}:${t.id}`,
+      categoria: "operativo",
+      severidad: "media",
+      titulo: "Turno de hoy sin marcar",
+      descripcion: `El turno de ${nombreCompleto(t)} de las ${t.hora} ya pasó y sigue sin marcar.`,
+      patientId: t.patientId,
+      turnoRef: { fecha: hoyKey, turnoId: t.id },
+    })
+  }
+
+  // 7) Sesiones: sin próximo turno (quedan sesiones) o reautorizar (agotó + tiene turno)
   for (const p of patients) {
     const stats = getSessionStats(p)
     if (!stats) continue
     const restantes = stats.authorized - stats.used
-    if (restantes <= 0) continue
-    const tieneFuturo =
-      conFuturoId.has(p.id) || conFuturoNombre.has(nombreCompleto(p).toLowerCase())
-    if (!tieneFuturo) {
+    const prox = proximoDe(p)
+    if (restantes > 0) {
+      if (!prox) {
+        tareas.push({
+          id: `sin_proximo_turno:${p.id}`,
+          categoria: "operativo",
+          severidad: "media",
+          titulo: "Sin próximo turno",
+          descripcion: `${nombreCompleto(p)} tiene ${restantes} sesión${
+            restantes === 1 ? "" : "es"
+          } por usar y no tiene turno agendado.`,
+          patientId: p.id,
+        })
+      }
+    } else if (prox) {
+      // Agotó (o excedió) las sesiones autorizadas y TIENE un turno próximo →
+      // urgente: hay que reautorizar antes de que venga. (Si no tuviera turno
+      // próximo, queda la tarea clínica "Sesiones agotadas" de computeTareasPacientes.)
+      const [, mm, dd] = prox.split("-")
       tareas.push({
-        id: `sin_proximo_turno:${p.id}`,
-        categoria: "operativo",
-        severidad: "media",
-        titulo: "Sin próximo turno",
-        descripcion: `${nombreCompleto(p)} tiene ${restantes} sesión${
-          restantes === 1 ? "" : "es"
-        } por usar y no tiene turno agendado.`,
+        id: `reautorizar:${p.id}`,
+        categoria: "clinico",
+        severidad: "alta",
+        titulo: "Reautorizar antes del turno",
+        descripcion: `${nombreCompleto(p)} agotó sus sesiones (${stats.used}/${stats.authorized}) y tiene turno el ${dd}/${mm} — gestionar la nueva orden.`,
         patientId: p.id,
       })
     }

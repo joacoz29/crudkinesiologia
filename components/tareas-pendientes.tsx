@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { addDays, subDays } from "date-fns"
 import { format } from "date-fns-tz"
 import { usePatients } from "@/lib/patients-store"
-import { fetchTurnosPorRango } from "@/lib/helpers"
+import { fetchTurnosPorRango, horaToMin } from "@/lib/helpers"
 import {
   computeTareasPacientes,
   computeTareasTurnos,
@@ -214,10 +214,18 @@ export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: s
 
   const tareas = useMemo(() => {
     const hoyKey = format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
-    return ordenarTareas([
-      ...computeTareasPacientes(patients),
-      ...computeTareasTurnos(patients, turnos, hoyKey),
-    ])
+    const nowMin = horaToMin(format(new Date(), "HH:mm", { timeZone: TZ }))
+    const dePacientes = computeTareasPacientes(patients)
+    const deTurnos = computeTareasTurnos(patients, turnos, hoyKey, nowMin)
+    // Si un paciente tiene "Reautorizar antes del turno", no mostramos además la
+    // tarea clínica de "Sesiones agotadas" (sería redundante).
+    const reautorizar = new Set(
+      deTurnos.filter((t) => t.id.startsWith("reautorizar:")).map((t) => t.patientId),
+    )
+    const dePacientesFiltradas = dePacientes.filter(
+      (t) => !(t.id.startsWith("sesiones_por_agotar:") && t.patientId && reautorizar.has(t.patientId)),
+    )
+    return ordenarTareas([...dePacientesFiltradas, ...deTurnos])
   }, [patients, turnos])
 
   const porCategoria = useMemo(() => {

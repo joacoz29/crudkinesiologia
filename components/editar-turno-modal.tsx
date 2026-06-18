@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Calendar } from "@/components/ui/calendar"
+import { DatePicker } from "@/components/ui/date-picker"
 import { CheckCircle2, Trash2, CalendarDays } from "lucide-react"
 import { ref, update, remove, get } from "firebase/database"
 import { db } from "@/lib/firebase"
@@ -281,7 +281,7 @@ export function EditarTurnoModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="capitalize">{fechaLabel}</DialogTitle>
             <p className="text-sm text-gray-500">
@@ -415,46 +415,37 @@ export function EditarTurnoModal({
                   </Button>
                 ) : (
                   <div className="space-y-2">
-                    <Label>Nueva fecha</Label>
-                    <p className="text-xs text-gray-500">
-                      El turno se mueve a la fecha elegida (queda pendiente) con la hora de arriba.
-                    </p>
-                    <div className="border border-gray-200 rounded-md flex justify-center">
-                      <Calendar
-                        mode="single"
-                        selected={nuevaFecha}
-                        onSelect={setNuevaFecha}
+                    <div className="flex items-center justify-between">
+                      <Label>Reprogramar</Label>
+                      <button
+                        type="button"
+                        onClick={() => { setReprogramando(false); setNuevaFecha(undefined) }}
+                        className="text-xs text-gray-400 hover:text-gray-600"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <DatePicker
+                        date={nuevaFecha}
+                        setDate={setNuevaFecha}
                         disabled={{ before: hoy }}
                         defaultMonth={nuevaFecha ?? parseISO(fecha)}
-                        locale={es}
-                        weekStartsOn={1}
-                        classNames={{
-                          day_selected:
-                            "!bg-[#001633] !text-white hover:!bg-[#001633] focus:!bg-[#001633]",
-                        }}
+                        placeholder="Elegí la nueva fecha"
+                        className="flex-1 min-w-0 sm:w-[200px] sm:flex-none border-[#001633]"
                       />
-                    </div>
-                    <div className="flex gap-2">
                       <Button
                         type="button"
                         onClick={handleReprogramar}
                         disabled={isMoving || !nuevaFecha}
-                        className="flex-1 bg-[#001633] hover:bg-[#002966]"
+                        className="bg-[#001633] hover:bg-[#002966]"
                       >
-                        {isMoving
-                          ? "Moviendo..."
-                          : nuevaFecha
-                          ? `Mover al ${format(nuevaFecha, "d 'de' MMM", { locale: es })}`
-                          : "Elegí una fecha"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => { setReprogramando(false); setNuevaFecha(undefined) }}
-                      >
-                        Cancelar
+                        {isMoving ? "Moviendo..." : "Mover"}
                       </Button>
                     </div>
+                    <p className="text-xs text-gray-500">
+                      Se mueve a esa fecha (queda pendiente) con la hora de arriba.
+                    </p>
                   </div>
                 )}
               </div>

@@ -244,8 +244,11 @@ export default function Page() {
                 <button
                   key={tab}
                   onClick={() => {
-                    if (tab === "calendario" && activeTab !== "calendario") {
-                      setCalendarioRefreshTrigger((t) => t + 1)
+                    if (tab === "calendario") {
+                      if (activeTab !== "calendario") setCalendarioRefreshTrigger((t) => t + 1)
+                      // Navegación manual al calendario: descartar un deep-link viejo
+                      // para no re-saltar a esa fecha al re-entrar a la pestaña.
+                      setCalTarget(null)
                     }
                     setActiveTab(tab)
                   }}

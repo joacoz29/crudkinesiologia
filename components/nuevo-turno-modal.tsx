@@ -153,6 +153,9 @@ export function NuevoTurnoModal({
   const [showDropdown, setShowDropdown] = useState(false)
   const [conflictDates, setConflictDates] = useState<string[]>([])
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
+  // Turnos del día elegido (solo en modo elegir-fecha: los baja el propio modal)
+  const [turnosDia, setTurnosDia] = useState<Turno[]>([])
+  const [loadingTurnosDia, setLoadingTurnosDia] = useState(false)
 
   // Repetición
   const [repeticion, setRepeticion] = useState<Repeticion>("ninguna")
@@ -247,11 +250,31 @@ export function NuevoTurnoModal({
   }, [allPatients, search])
 
   const dateKey = format(fechaBase, "yyyy-MM-dd")
+  // En modo elegir-fecha (Agendar desde grilla/Pendientes) los turnos del día los
+  // baja el modal; desde el calendario vienen por prop.
+  const turnosDelDia = permitirElegirFecha ? turnosDia : (turnosPorFecha[dateKey] ?? [])
   // Turnos del día base dentro de ±2h de la hora elegida (para ver la carga de la franja)
   const baseMin = horaToMin(hora)
-  const turnosFranja = (turnosPorFecha[dateKey] ?? [])
+  const turnosFranja = turnosDelDia
     .filter((t) => t.estado !== "cancelado" && Math.abs(horaToMin(t.hora) - baseMin) <= 120)
     .sort((a, b) => a.hora.localeCompare(b.hora))
+
+  // Self-fetch de los turnos del día elegido (solo en modo elegir-fecha; desde el
+  // calendario ya vienen por prop). Refetchea al cambiar la fecha.
+  useEffect(() => {
+    if (!open || !permitirElegirFecha) return
+    let cancel = false
+    setLoadingTurnosDia(true)
+    get(ref(db, `turnos/${dateKey}`))
+      .then((snap) => {
+        if (cancel) return
+        const val = snap.val() as Record<string, Omit<Turno, "id">> | null
+        setTurnosDia(val ? Object.entries(val).map(([id, t]) => ({ id, ...t } as Turno)) : [])
+      })
+      .catch(() => { if (!cancel) setTurnosDia([]) })
+      .finally(() => { if (!cancel) setLoadingTurnosDia(false) })
+    return () => { cancel = true }
+  }, [open, permitirElegirFecha, dateKey])
 
   const doSave = async () => {
     const turnoBase: Record<string, unknown> = {
@@ -468,9 +491,11 @@ export function NuevoTurnoModal({
             <div className="rounded-md border border-gray-200 bg-gray-50 p-2.5 space-y-1.5">
               <p className="text-xs font-medium text-gray-700">
                 Turnos ese día entre {minToHora(baseMin - 120)} y {minToHora(baseMin + 120)}{" "}
-                <span className="text-gray-400">({turnosFranja.length})</span>
+                {!loadingTurnosDia && <span className="text-gray-400">({turnosFranja.length})</span>}
               </p>
-              {turnosFranja.length === 0 ? (
+              {loadingTurnosDia ? (
+                <p className="text-xs text-gray-400">Buscando turnos…</p>
+              ) : turnosFranja.length === 0 ? (
                 <p className="text-xs text-gray-400">No hay turnos en esa franja.</p>
               ) : (
                 <ul className="space-y-0.5 max-h-28 overflow-y-auto">

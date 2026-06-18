@@ -1,17 +1,67 @@
 "use client"
 
 import { useMemo } from "react"
-import { format, parseISO, startOfMonth, endOfMonth, getDay, getDaysInMonth } from "date-fns"
+import { format, parseISO, startOfMonth, endOfMonth, subMonths, getDay, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
-import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins } from "lucide-react"
-import { fetchTurnosPorRango, fetchLibroDiarioPorRango, getSessionStats } from "@/lib/helpers"
+import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown } from "lucide-react"
+import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, getSessionStats, type Opinion } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { Patient, Turno } from "@/types"
 
+// Variación porcentual vs mes anterior (null si no hay base de comparación)
+function pctCambio(actual: number, anterior: number): number | null {
+  if (!anterior) return null
+  return ((actual - anterior) / anterior) * 100
+}
+
+function Trend({ pct, higherIsBetter = true }: { pct: number | null; higherIsBetter?: boolean }) {
+  if (pct === null || !isFinite(pct)) return null
+  if (Math.abs(pct) < 0.5) return <span className="text-[10px] text-slate-400 whitespace-nowrap">≈ mes ant.</span>
+  const sube = pct > 0
+  const bueno = higherIsBetter ? sube : !sube
+  const Icon = sube ? ArrowUp : ArrowDown
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 text-[10px] font-semibold whitespace-nowrap ${bueno ? "text-emerald-600" : "text-red-500"}`}
+      title="vs mes anterior"
+    >
+      <Icon className="h-3 w-3" />
+      {Math.abs(pct).toFixed(0)}%
+    </span>
+  )
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 pt-1">{children}</h3>
+}
+
 // Formato de moneda argentino: $1.234,56
 function formatMoney(n: number): string {
   return `$${n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+// Escalares de un mes para comparar tendencias (atenciones, ausentismo, recaudación)
+function resumenMes(
+  turnosPorDia: Record<string, Turno[]>,
+  libroPorDia: Record<string, { haber: number; debe: number }>,
+): { atenciones: number; ausentismo: number; recaudado: number } {
+  let asistidos = 0
+  let ausentes = 0
+  for (const turnos of Object.values(turnosPorDia)) {
+    for (const t of turnos) {
+      if (t.estado === "asistio") asistidos++
+      else if (t.estado === "ausente") ausentes++
+    }
+  }
+  const concluidos = asistidos + ausentes
+  let haber = 0
+  for (const l of Object.values(libroPorDia)) haber += l.haber
+  return {
+    atenciones: asistidos,
+    ausentismo: concluidos ? (ausentes / concluidos) * 100 : 0,
+    recaudado: haber,
+  }
 }
 
 const DIAS_SEMANA = [
@@ -35,11 +85,13 @@ function StatCard({
   label,
   value,
   detail,
+  trend,
 }: {
   icon: typeof CalendarCheck
   label: string
   value: string
   detail: string
+  trend?: React.ReactNode
 }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
@@ -47,7 +99,10 @@ function StatCard({
         <Icon className="h-5 w-5 text-[#001633]" />
       </div>
       <div className="min-w-0">
-        <p className="text-xl font-semibold text-slate-800 leading-tight tabular-nums">{value}</p>
+        <div className="flex items-baseline gap-2">
+          <p className="text-xl font-semibold text-slate-800 leading-tight tabular-nums">{value}</p>
+          {trend}
+        </div>
         <p className="text-xs text-slate-400 truncate">
           <span className="font-medium text-slate-500">{label}</span> · {detail}
         </p>
@@ -69,12 +124,14 @@ function MoneyCard({
   value,
   detail,
   tone,
+  trend,
 }: {
   icon: typeof CalendarCheck
   label: string
   value: string
   detail: string
   tone: keyof typeof MONEY_TONES
+  trend?: React.ReactNode
 }) {
   const t = MONEY_TONES[tone]
   return (
@@ -83,7 +140,10 @@ function MoneyCard({
         <Icon className={`h-5 w-5 ${t.icon}`} />
       </div>
       <div className="min-w-0">
-        <p className={`text-lg font-semibold leading-tight tabular-nums truncate ${t.value}`}>{value}</p>
+        <div className="flex items-baseline gap-2">
+          <p className={`text-lg font-semibold leading-tight tabular-nums truncate ${t.value}`}>{value}</p>
+          {trend}
+        </div>
         <p className="text-xs text-slate-400 truncate">
           <span className="font-medium text-slate-500">{label}</span> · {detail}
         </p>
@@ -97,32 +157,60 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
   const { patients, isLoading: isLoadingPatients } = usePatients()
 
   const mesKey = format(currentMonth, "yyyy-MM")
-  const esMesActual = mesKey === format(new Date(), "yyyy-MM")
+  const hoyMesKey = format(new Date(), "yyyy-MM")
+  const esMesActual = mesKey === hoyMesKey
+
+  const prevMonth = subMonths(currentMonth, 1)
+  const prevMesKey = format(prevMonth, "yyyy-MM")
+  const prevEsMesActual = prevMesKey === hoyMesKey
+
+  const rango = (m: Date): [string, string] => [
+    format(startOfMonth(m), "yyyy-MM-dd"),
+    format(endOfMonth(m), "yyyy-MM-dd"),
+  ]
 
   // Turnos del mes cacheados por sesión (revalida solo el mes actual). Así
   // togglear de vista no re-baja los turnos de meses pasados.
   const { data: turnosPorDia, isLoading: isLoadingTurnos } = useCachedMonth<Record<string, Turno[]>>(
     `turnos-datos/${mesKey}`,
-    () =>
-      fetchTurnosPorRango(
-        format(startOfMonth(currentMonth), "yyyy-MM-dd"),
-        format(endOfMonth(currentMonth), "yyyy-MM-dd"),
-      ),
+    () => fetchTurnosPorRango(...rango(currentMonth)),
     { revalidate: esMesActual, fallback: {} },
   )
 
   // Recaudación del mes desde el libro diario (haber/debe por día), cacheada por sesión
   const { data: libroPorDia, isLoading: isLoadingLibro } = useCachedMonth<Record<string, { haber: number; debe: number }>>(
     `libro-datos/${mesKey}`,
-    () =>
-      fetchLibroDiarioPorRango(
-        format(startOfMonth(currentMonth), "yyyy-MM-dd"),
-        format(endOfMonth(currentMonth), "yyyy-MM-dd"),
-      ),
+    () => fetchLibroDiarioPorRango(...rango(currentMonth)),
     { revalidate: esMesActual, fallback: {} },
   )
 
+  // Mes anterior (para tendencias). Misma key/forma que arriba → comparten caché.
+  const { data: turnosPrev } = useCachedMonth<Record<string, Turno[]>>(
+    `turnos-datos/${prevMesKey}`,
+    () => fetchTurnosPorRango(...rango(prevMonth)),
+    { revalidate: prevEsMesActual, fallback: {} },
+  )
+  const { data: libroPrev } = useCachedMonth<Record<string, { haber: number; debe: number }>>(
+    `libro-datos/${prevMesKey}`,
+    () => fetchLibroDiarioPorRango(...rango(prevMonth)),
+    { revalidate: prevEsMesActual, fallback: {} },
+  )
+
+  // Opiniones del mes (satisfacción). Misma key que la vista Opiniones → caché compartida.
+  const { data: opiniones } = useCachedMonth<Opinion[]>(
+    `opiniones/${mesKey}`,
+    () => fetchOpinionesMes(mesKey),
+    { revalidate: esMesActual, fallback: [] },
+  )
+
   const isLoading = isLoadingTurnos || isLoadingPatients || isLoadingLibro
+
+  // Resumen del mes anterior (tendencias) y satisfacción del mes
+  const prev = useMemo(() => resumenMes(turnosPrev, libroPrev), [turnosPrev, libroPrev])
+  const satisfaccion = useMemo(() => {
+    if (!opiniones.length) return { promedio: 0, count: 0 }
+    return { promedio: opiniones.reduce((s, o) => s + o.rating, 0) / opiniones.length, count: opiniones.length }
+  }, [opiniones])
 
   const metrics = useMemo(() => {
     const patientById = new Map(patients.map((p) => [p.id, p]))
@@ -272,8 +360,8 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-16 bg-white rounded-2xl border border-slate-200 shadow-sm animate-pulse" />
           ))}
         </div>
@@ -295,13 +383,15 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
         </div>
       ) : (
         <>
-          {/* Tarjetas resumen */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Resumen del mes */}
+          <SectionTitle>Resumen del mes</SectionTitle>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <StatCard
               icon={CalendarCheck}
               label="Atenciones"
               value={String(metrics.atenciones)}
               detail={`en ${mesNombre}`}
+              trend={<Trend pct={pctCambio(metrics.atenciones, prev.atenciones)} />}
             />
             <StatCard
               icon={TrendingUp}
@@ -314,6 +404,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
               label="Ausentismo"
               value={`${metrics.ausentismo.toFixed(0)}%`}
               detail={`${metrics.ausencias} falta${metrics.ausencias !== 1 ? "s" : ""}, ${metrics.justificadas} justif.`}
+              trend={<Trend pct={pctCambio(metrics.ausentismo, prev.ausentismo)} higherIsBetter={false} />}
             />
             <StatCard
               icon={Wallet}
@@ -321,8 +412,16 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
               value={`${metrics.pctParticular.toFixed(0)}%`}
               detail="de las atenciones"
             />
+            <StatCard
+              icon={Star}
+              label="Satisfacción"
+              value={satisfaccion.count ? satisfaccion.promedio.toFixed(1) : "—"}
+              detail={satisfaccion.count ? `${satisfaccion.count} opinión${satisfaccion.count !== 1 ? "es" : ""}` : "sin opiniones"}
+            />
           </div>
 
+          {/* Actividad */}
+          <SectionTitle>Actividad</SectionTitle>
           {/* Atenciones por día */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">
             <p className="text-sm font-semibold text-slate-700 mb-3">Atenciones por día</p>
@@ -421,18 +520,15 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       )}
 
       {/* Recaudación (libro diario) */}
+      <SectionTitle>Recaudación</SectionTitle>
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-            <Coins className="h-4 w-4 text-emerald-500" />
-            Recaudación de {mesNombre}
-          </p>
-          {metrics.mejorDia && (
+        {metrics.mejorDia && (
+          <div className="flex justify-end mb-3">
             <p className="text-[11px] text-slate-400 truncate">
               Mejor día: {format(parseISO(metrics.mejorDia.fecha), "d 'de' MMM", { locale: es })} · {formatMoney(metrics.mejorDia.saldo)}
             </p>
-          )}
-        </div>
+          </div>
+        )}
 
         {!metrics.hayRecaudacion ? (
           <div className="py-8 text-center">
@@ -443,7 +539,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
         ) : (
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-              <MoneyCard icon={Banknote} label="Recaudado" value={formatMoney(metrics.totalHaber)} detail="ingresos (Haber)" tone="green" />
+              <MoneyCard icon={Banknote} label="Recaudado" value={formatMoney(metrics.totalHaber)} detail="ingresos (Haber)" tone="green" trend={<Trend pct={pctCambio(metrics.totalHaber, prev.recaudado)} />} />
               <MoneyCard icon={ArrowDownCircle} label="Egresos" value={formatMoney(metrics.totalDebe)} detail="gastos (Debe)" tone="orange" />
               <MoneyCard icon={Coins} label="Saldo neto" value={formatMoney(metrics.saldoMes)} detail={`en ${mesNombre}`} tone={metrics.saldoMes >= 0 ? "green" : "red"} />
               <MoneyCard icon={TrendingUp} label="Promedio diario" value={formatMoney(metrics.promedioRecaud)} detail={`${metrics.diasConMovimiento} día${metrics.diasConMovimiento !== 1 ? "s" : ""} con caja`} tone="slate" />
@@ -475,6 +571,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
         )}
       </div>
 
+      <SectionTitle>Pacientes</SectionTitle>
       <div className="grid lg:grid-cols-2 gap-3 items-start">
         {/* Sesiones por agotar (estado actual, independiente del mes) */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">

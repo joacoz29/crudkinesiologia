@@ -149,6 +149,26 @@ export async function fetchTurnosPorRango(
   return result
 }
 
+export interface Opinion {
+  id: string
+  patientId: string
+  nombre: string
+  rating: number
+  comentario?: string
+  atendidoPor?: string
+  fecha: string
+}
+
+// Opiniones de un mes (clave yyyy-MM), ordenadas por fecha desc.
+// Compartido entre la vista Opiniones y la pestaña Datos (misma caché por mes).
+export async function fetchOpinionesMes(mesKey: string): Promise<Opinion[]> {
+  const snap = await get(ref(db, `opiniones/${mesKey}`))
+  if (!snap.exists()) return []
+  return Object.entries(snap.val() as Record<string, Omit<Opinion, "id">>)
+    .map(([id, val]) => ({ id, ...val }))
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))
+}
+
 // Recaudación por día del libro diario en un rango (claves yyyy-MM-dd).
 // Computa haber/debe sumando las entradas (los totales denormalizados se dropearon).
 export async function fetchLibroDiarioPorRango(

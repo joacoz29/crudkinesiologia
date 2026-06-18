@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { ref, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { useCachedMonth } from "@/lib/monthly-cache"
+import { fetchOpinionesMes, type Opinion } from "@/lib/helpers"
 import { format, parseISO, isValid, addMonths, subMonths } from "date-fns"
 import { formatInTimeZone } from "date-fns-tz"
 import { es } from "date-fns/locale"
@@ -28,16 +29,6 @@ interface LogEntry {
   detalle: string
   entidadId?: string
   cambios?: Record<string, LogCambio>
-}
-
-interface Opinion {
-  id: string
-  patientId: string
-  nombre: string
-  rating: number
-  comentario?: string
-  atendidoPor?: string
-  fecha: string
 }
 
 function Estrellas({ rating, size = "h-4 w-4" }: { rating: number; size?: string }) {
@@ -123,16 +114,10 @@ export function AdminPanel() {
     { revalidate: esMesActual, fallback: [] },
   )
 
-  // Opiniones: lazy (solo cuando la vista está activa) + caché por mes
+  // Opiniones: lazy (solo cuando la vista está activa) + caché por mes (compartida con Datos)
   const { data: opiniones, isLoading: isLoadingOpiniones } = useCachedMonth<Opinion[]>(
     `opiniones/${mesKey}`,
-    async () => {
-      const snap = await get(ref(db, `opiniones/${mesKey}`))
-      if (!snap.exists()) return []
-      return Object.entries(snap.val() as Record<string, Omit<Opinion, "id">>)
-        .map(([id, val]) => ({ id, ...val }))
-        .sort((a, b) => b.fecha.localeCompare(a.fecha))
-    },
+    () => fetchOpinionesMes(mesKey),
     { enabled: vista === "opiniones", revalidate: esMesActual, fallback: [] },
   )
 

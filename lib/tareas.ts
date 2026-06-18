@@ -55,6 +55,9 @@ const nombreCompleto = (p: Pick<Patient, "nombre" | "apellido">): string =>
 
 const SEV_ORDEN: Record<TareaSeveridad, number> = { alta: 0, media: 1, baja: 2 }
 
+/** "Tipo" de tarea = prefijo del id (antes del primer ':'). Para CTAs/dedup. */
+export const tareaKind = (t: Tarea): string => t.id.split(":")[0]
+
 /** Ordena por severidad (alta → baja); estable para el resto. */
 export function ordenarTareas(tareas: Tarea[]): Tarea[] {
   return [...tareas].sort((a, b) => SEV_ORDEN[a.severidad] - SEV_ORDEN[b.severidad])

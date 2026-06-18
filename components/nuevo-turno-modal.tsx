@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
+import { DatePicker } from "@/components/ui/date-picker"
 import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { writeLog, getSessionStats, horaToMin, minToHora } from "@/lib/helpers"
@@ -122,6 +123,10 @@ interface NuevoTurnoModalProps {
   onSaved: () => void
   turnosPorFecha: Record<string, Turno[]>
   feriados?: Record<string, string>
+  /** Paciente preseleccionado (p. ej. al agendar desde la pestaña Pendientes) */
+  pacienteInicial?: Patient | null
+  /** Mostrar un selector de fecha dentro del modal (cuando no se abre desde un día del calendario) */
+  permitirElegirFecha?: boolean
 }
 
 export function NuevoTurnoModal({
@@ -132,11 +137,16 @@ export function NuevoTurnoModal({
   onSaved,
   turnosPorFecha,
   feriados = {},
+  pacienteInicial = null,
+  permitirElegirFecha = false,
 }: NuevoTurnoModalProps) {
   // Caché compartida: la búsqueda de pacientes se resuelve en memoria
   const { patients: allPatients, isLoading: isLoadingPatients } = usePatients()
   const [search, setSearch] = useState("")
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+  // Fecha base editable (cuando permitirElegirFecha). En el uso desde el calendario
+  // arranca en la fecha del día clickeado y no se muestra el selector.
+  const [fechaBase, setFechaBase] = useState(fecha)
   const [hora, setHora] = useState(horaInicial)
   const [notas, setNotas] = useState("")
   const [isSaving, setIsSaving] = useState(false)
@@ -164,7 +174,8 @@ export function NuevoTurnoModal({
   useEffect(() => {
     if (open) {
       setSearch("")
-      setSelectedPatient(null)
+      setSelectedPatient(pacienteInicial ?? null)
+      setFechaBase(fecha)
       setHora(horaInicial)
       setNotas("")
       setShowDropdown(false)
@@ -183,7 +194,7 @@ export function NuevoTurnoModal({
       setConflictDates([])
       setConflictDialogOpen(false)
     }
-  }, [open, horaInicial, fecha, hoy])
+  }, [open, horaInicial, fecha, hoy, pacienteInicial])
 
   const toggleDia = (dia: number) => {
     setDiasSemana((prev) =>
@@ -205,24 +216,24 @@ export function NuevoTurnoModal({
 
   // Raw candidates before holiday filter — used only for preview display (shows strikethrough on skipped days)
   const fechasTodasCandidatas = useMemo(() => {
-    if (repeticion === "ninguna") return [fecha]
+    if (repeticion === "ninguna") return [fechaBase]
     if (repeticion === "calendario") return fechasManualesOrdenadas
-    if (repeticion === "intervalo") return generarFechasIntervalo(fecha, intervalo, vecesTotal)
+    if (repeticion === "intervalo") return generarFechasIntervalo(fechaBase, intervalo, vecesTotal)
     if (tipoLimite === "turnos") return [] // por-turnos derives its own list internally
-    return generarFechasSemanal(fecha, diasSemana, numSemanas)
-  }, [repeticion, fecha, fechasManualesOrdenadas, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas])
+    return generarFechasSemanal(fechaBase, diasSemana, numSemanas)
+  }, [repeticion, fechaBase, fechasManualesOrdenadas, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas])
 
   // Dates that will actually be saved (holidays excluded). El modo calendario respeta
   // la elección manual: no filtra feriados (el usuario eligió esos días a propósito).
   const fechasPreview = useMemo(() => {
-    if (repeticion === "ninguna") return [fecha]
+    if (repeticion === "ninguna") return [fechaBase]
     if (repeticion === "calendario") return fechasManualesOrdenadas
     if (repeticion === "intervalo")
-      return filtrarFeriados(generarFechasIntervalo(fecha, intervalo, vecesTotal), feriadosSet)
+      return filtrarFeriados(generarFechasIntervalo(fechaBase, intervalo, vecesTotal), feriadosSet)
     if (tipoLimite === "turnos")
-      return generarFechasSemanalPorTurnos(fecha, diasSemana, numTurnos, feriadosSet)
-    return filtrarFeriados(generarFechasSemanal(fecha, diasSemana, numSemanas), feriadosSet)
-  }, [repeticion, fecha, fechasManualesOrdenadas, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas, numTurnos, feriadosSet])
+      return generarFechasSemanalPorTurnos(fechaBase, diasSemana, numTurnos, feriadosSet)
+    return filtrarFeriados(generarFechasSemanal(fechaBase, diasSemana, numSemanas), feriadosSet)
+  }, [repeticion, fechaBase, fechasManualesOrdenadas, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas, numTurnos, feriadosSet])
 
   const canSave =
     !!selectedPatient &&
@@ -235,7 +246,7 @@ export function NuevoTurnoModal({
     return { patients, totalMatches: pagination.totalItems }
   }, [allPatients, search])
 
-  const dateKey = format(fecha, "yyyy-MM-dd")
+  const dateKey = format(fechaBase, "yyyy-MM-dd")
   // Turnos del día base dentro de ±2h de la hora elegida (para ver la carga de la franja)
   const baseMin = horaToMin(hora)
   const turnosFranja = (turnosPorFecha[dateKey] ?? [])
@@ -338,11 +349,25 @@ export function NuevoTurnoModal({
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="capitalize">
-            Nuevo turno — {format(fecha, "EEEE d 'de' MMMM", { locale: es })}
+            Nuevo turno — {format(fechaBase, "EEEE d 'de' MMMM", { locale: es })}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Fecha (solo cuando se abre fuera del calendario, p. ej. desde Pendientes) */}
+          {permitirElegirFecha && (
+            <div className="space-y-2">
+              <Label>Fecha</Label>
+              <DatePicker
+                date={fechaBase}
+                setDate={(d) => { if (d) setFechaBase(d) }}
+                disabled={{ before: hoy }}
+                defaultMonth={fechaBase}
+                className="border-[#001633] w-full"
+              />
+            </div>
+          )}
+
           {/* Paciente */}
           <div className="space-y-2">
             <Label>Paciente</Label>

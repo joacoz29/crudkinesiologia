@@ -9,13 +9,15 @@ import {
   computeTareasPacientes,
   computeTareasTurnos,
   ordenarTareas,
+  tareaKind,
   type Tarea,
   type TareaCategoria,
   type TareaSeveridad,
 } from "@/lib/tareas"
-import { Turno } from "@/types"
+import { Patient, Turno } from "@/types"
 import { Button } from "@/components/ui/button"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
+import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import {
   ClipboardList,
   UserCog,
@@ -63,11 +65,13 @@ function CategoriaSeccion({
   items,
   onAbrirFicha,
   onAbrirTurno,
+  onAgendar,
 }: {
   cat: TareaCategoria
   items: Tarea[]
   onAbrirFicha: (patientId: string) => void
   onAbrirTurno: (ref: { fecha: string; turnoId: string }) => void
+  onAgendar: (patientId: string) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const [page, setPage] = useState(1)
@@ -116,6 +120,16 @@ function CategoriaSeccion({
                     onClick={() => onAbrirTurno(t.turnoRef!)}
                   >
                     Marcar asistencia
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                ) : tareaKind(t) === "sin_proximo_turno" && t.patientId ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
+                    onClick={() => onAgendar(t.patientId!)}
+                  >
+                    Agendar turno
                     <ChevronRight className="h-3.5 w-3.5" />
                   </Button>
                 ) : t.patientId ? (
@@ -173,6 +187,11 @@ export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: s
   // Modal de edición de turno (para marcar asistió/ausente desde una tarea)
   const [turnoSel, setTurnoSel] = useState<{ fecha: string; turno: Turno } | null>(null)
   const [turnoModalOpen, setTurnoModalOpen] = useState(false)
+  // Modal de nuevo turno (agendar desde la tarea "Sin próximo turno")
+  const [pacienteAgenda, setPacienteAgenda] = useState<Patient | null>(null)
+  const [agendaOpen, setAgendaOpen] = useState(false)
+  // Fecha base estable para abrir el modal; el usuario elige la real con el picker
+  const hoyDate = useMemo(() => new Date(), [])
 
   // Re-lectura del rango de turnos (también se llama tras marcar un turno: la
   // tarea correspondiente desaparece sola al dejar de estar "pendiente").
@@ -210,6 +229,16 @@ export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: s
       setTurnoModalOpen(true)
     },
     [turnos, refetchTurnos],
+  )
+
+  const agendarTurno = useCallback(
+    (patientId: string) => {
+      const p = patients.find((x) => x.id === patientId)
+      if (!p) return
+      setPacienteAgenda(p)
+      setAgendaOpen(true)
+    },
+    [patients],
   )
 
   const tareas = useMemo(() => {
@@ -283,6 +312,7 @@ export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: s
                 items={items}
                 onAbrirFicha={onAbrirFicha}
                 onAbrirTurno={abrirTurno}
+                onAgendar={agendarTurno}
               />
             )
           })}
@@ -298,6 +328,21 @@ export function TareasPendientes({ onAbrirFicha }: { onAbrirFicha: (patientId: s
           }}
           fecha={turnoSel.fecha}
           turno={turnoSel.turno}
+          onSaved={refetchTurnos}
+        />
+      )}
+
+      {pacienteAgenda && (
+        <NuevoTurnoModal
+          open={agendaOpen}
+          onOpenChange={(o) => {
+            setAgendaOpen(o)
+            if (!o) setPacienteAgenda(null)
+          }}
+          fecha={hoyDate}
+          pacienteInicial={pacienteAgenda}
+          permitirElegirFecha
+          turnosPorFecha={turnos}
           onSaved={refetchTurnos}
         />
       )}

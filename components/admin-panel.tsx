@@ -6,7 +6,7 @@ import { fetchOpinionesMes, fetchLogsMes, type Opinion, type LogEntry } from "@/
 import { format, parseISO, isValid, addMonths, subMonths } from "date-fns"
 import { formatInTimeZone } from "date-fns-tz"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Shield, Star, Search, Inbox, CalendarDays } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronDown, Shield, Star, Search, Inbox, CalendarDays, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AdminDatos } from "@/components/admin-datos"
@@ -94,6 +94,7 @@ export function AdminPanel() {
   const [searchPaciente, setSearchPaciente] = useState("")
   const [vista, setVista] = useState<"registro" | "opiniones" | "datos">("registro")
   const [diaIndex, setDiaIndex] = useState(0) // paginación por día del registro (0 = día más reciente)
+  const [usuariosOpen, setUsuariosOpen] = useState(false) // resumen por usuario colapsable
 
   const mesKey = format(currentMonth, "yyyy-MM")
   // El mes actual puede crecer (logs/opiniones nuevas) → revalidar; los pasados son inmutables
@@ -357,20 +358,57 @@ export function AdminPanel() {
         </>
       ) : (
         <>
-          {/* Resumen del mes por usuario */}
+          {/* Resumen del mes por usuario — colapsable */}
           {!isLoading && resumenUsuarios.length > 0 && (
-            <div className="flex flex-wrap gap-3">
-              {resumenUsuarios.map(({ key, nombre, count }) => (
-                <div key={key} title={key} className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-[#001633] flex items-center justify-center text-white text-sm font-semibold shrink-0">
-                    {nombre.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{nombre}</p>
-                    <p className="text-xs text-slate-400">{count} acción{count !== 1 ? "es" : ""} este mes</p>
-                  </div>
+            <div>
+              <button
+                type="button"
+                onClick={() => setUsuariosOpen((o) => !o)}
+                aria-expanded={usuariosOpen}
+                className="w-full flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50/70 transition-colors"
+              >
+                <Users className="h-4 w-4 text-[#001633] shrink-0" />
+                <span className="text-sm font-semibold text-slate-700">Actividad por usuario</span>
+                <span className="text-xs text-slate-400 tabular-nums">
+                  {resumenUsuarios.length} usuario{resumenUsuarios.length !== 1 ? "s" : ""}
+                </span>
+                <div className="ml-auto flex items-center gap-2">
+                  {!usuariosOpen && (
+                    <div className="hidden sm:flex -space-x-2">
+                      {resumenUsuarios.slice(0, 5).map(({ key, nombre }) => (
+                        <div
+                          key={key}
+                          className="h-6 w-6 rounded-full bg-[#001633] border-2 border-white flex items-center justify-center text-white text-[10px] font-semibold"
+                        >
+                          {nombre.charAt(0).toUpperCase()}
+                        </div>
+                      ))}
+                      {resumenUsuarios.length > 5 && (
+                        <div className="h-6 w-6 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-slate-500 text-[9px] font-semibold">
+                          +{resumenUsuarios.length - 5}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${usuariosOpen ? "rotate-180" : ""}`} />
                 </div>
-              ))}
+              </button>
+
+              {usuariosOpen && (
+                <div className="flex flex-wrap gap-3 mt-3">
+                  {resumenUsuarios.map(({ key, nombre, count }) => (
+                    <div key={key} title={key} className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-[#001633] flex items-center justify-center text-white text-sm font-semibold shrink-0">
+                        {nombre.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{nombre}</p>
+                        <p className="text-xs text-slate-400">{count} acción{count !== 1 ? "es" : ""} este mes</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

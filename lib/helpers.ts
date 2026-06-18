@@ -308,6 +308,11 @@ export async function confirmarAsistencia(params: {
 }): Promise<ConfirmarAsistenciaResult> {
   const { patientId, turnoId, fecha, hora, nombre, apellido } = params
 
+  // Guard de fecha: no se puede registrar asistencia de un turno futuro (todavía no
+  // pasó). Defensa a nivel datos además del gateo en la UI. Hoy en TZ Argentina.
+  const hoyKey = format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
+  if (fecha > hoyKey) throw new Error("TURNO_FUTURO")
+
   // Guard de idempotencia: si otro usuario ya lo confirmó, no duplicar la sesión
   const turnoSnap = await get(ref(db, `turnos/${fecha}/${turnoId}`))
   if (!turnoSnap.exists()) throw new Error("TURNO_NO_ENCONTRADO")

@@ -284,6 +284,8 @@ export function Calendario({ refreshTrigger = 0 }: { refreshTrigger?: number }) 
           ? "No se encontró el paciente"
           : err instanceof Error && err.message === "TURNO_NO_ENCONTRADO"
           ? "El turno ya no existe"
+          : err instanceof Error && err.message === "TURNO_FUTURO"
+          ? "No se puede confirmar asistencia de un turno futuro"
           : "Error al confirmar asistencia"
       toast.error(msg)
       throw err

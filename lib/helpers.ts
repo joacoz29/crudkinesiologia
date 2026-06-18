@@ -438,6 +438,7 @@ export type LogAccion =
   | "deshacer_asistencia"
   | "crear_turno"
   | "editar_turno"
+  | "reprogramar_turno"
   | "eliminar_turno"
   | "eliminar_todos_turnos"
   | "deshacer_eliminar_turnos"

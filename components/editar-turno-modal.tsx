@@ -176,7 +176,7 @@ export function EditarTurnoModal({
     const hasta = format(nuevaFecha, "dd/MM/yyyy")
     toast.success(`Turno reprogramado al ${format(nuevaFecha, "EEEE d 'de' MMMM", { locale: es })}`)
     await writeLog({
-      accion: "editar_turno",
+      accion: "reprogramar_turno",
       detalle: `Reprogramó el turno de ${turno.nombre} ${turno.apellido} (${hora}) del ${desde} al ${hasta}`,
       entidadId: turno.id,
       cambios: { Fecha: { antes: desde, despues: hasta } },

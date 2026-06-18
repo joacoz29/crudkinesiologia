@@ -34,6 +34,7 @@ const ACCION_LABEL: Record<string, string> = {
   deshacer_asistencia: "Deshacer asistencia",
   crear_turno: "Crear turno",
   editar_turno: "Editar turno",
+  reprogramar_turno: "Reprogramar turno",
   eliminar_turno: "Eliminar turno",
   eliminar_todos_turnos: "Eliminar turnos próximos",
   deshacer_eliminar_turnos: "Deshacer eliminación de turnos",
@@ -50,6 +51,8 @@ function accionTheme(accion: string): { badge: string; dot: string } {
     return { badge: "bg-sky-50 text-sky-700 border-sky-200", dot: "bg-sky-500" }
   if (accion.startsWith("deshacer"))
     return { badge: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" }
+  if (accion === "reprogramar_turno")
+    return { badge: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" }
   if (accion.startsWith("crear"))
     return { badge: "bg-green-50 text-green-700 border-green-200", dot: "bg-green-500" }
   if (accion.startsWith("editar"))

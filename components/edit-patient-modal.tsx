@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { MessageCircle, Trash2 } from "lucide-react"
-import { useState, useEffect } from "react"
+import { MessageCircle, RefreshCw, Trash2 } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
@@ -111,18 +111,30 @@ export function EditPatientModal({
 
   const [tratamientos, setTratamientos] = useState<Tratamiento[]>([])
 
+  // Re-baja los turnos del paciente desde la base. Una sola lectura por rango
+  // (misma que corre al abrir). `manual` = disparado por el botón Sincronizar:
+  // avisa por toast y NO vacía la lista si falla (conserva lo que ya se ve).
+  const reloadTurnos = useCallback(async (id: string, manual = false) => {
+    setIsLoadingTurnos(true)
+    try {
+      const t = await fetchTurnosPorPaciente(id)
+      setTurnos(t)
+      if (manual) toast.success("Turnos sincronizados")
+    } catch {
+      if (manual) toast.error("No se pudieron sincronizar los turnos")
+      else setTurnos([])
+    } finally {
+      setIsLoadingTurnos(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (!patient) return
     setEditedPatient(patient)
     setSesionesText(formatSesiones((patient.sesiones ?? []).join(" ")))
     setTratamientos(parseTratamientosRaw(patient.tratamientos))
-
-    setIsLoadingTurnos(true)
-    fetchTurnosPorPaciente(patient.id)
-      .then(setTurnos)
-      .catch(() => setTurnos([]))
-      .finally(() => setIsLoadingTurnos(false))
-  }, [patient])
+    reloadTurnos(patient.id)
+  }, [patient, reloadTurnos])
 
   // "Hoy" en hora argentina (no UTC): después de las 21:00 el día UTC ya es mañana
   const hoyKey = formatTZ(new Date(), "yyyy-MM-dd", { timeZone: "America/Argentina/Buenos_Aires" })
@@ -465,6 +477,17 @@ export function EditPatientModal({
                   {turnos.length > 0 ? `${turnos.length} turno${turnos.length !== 1 ? "s" : ""}` : ""}
                 </span>
                 <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7 gap-1.5 border-slate-300 text-slate-600 hover:bg-slate-50"
+                    onClick={() => editedPatient && reloadTurnos(editedPatient.id, true)}
+                    disabled={isLoadingTurnos}
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isLoadingTurnos ? "animate-spin" : ""}`} />
+                    Sincronizar
+                  </Button>
                   {editedPatient.telefono && !isLoadingTurnos && (
                     <Button
                       type="button"

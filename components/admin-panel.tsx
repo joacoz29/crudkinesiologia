@@ -35,6 +35,8 @@ const ACCION_LABEL: Record<string, string> = {
   deshacer_fusion: "Deshacer fusión",
   confirmar_asistencia: "Confirmar asistencia",
   deshacer_asistencia: "Deshacer asistencia",
+  marcar_ausente: "Marcar ausente",
+  deshacer_ausente: "Deshacer ausencia",
   crear_turno: "Crear turno",
   editar_turno: "Editar turno",
   reprogramar_turno: "Reprogramar turno",
@@ -64,6 +66,8 @@ function accionTheme(accion: string): { badge: string; dot: string } {
     return { badge: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500" }
   if (accion === "confirmar_asistencia")
     return { badge: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" }
+  if (accion === "marcar_ausente")
+    return { badge: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-500" }
   if (accion === "fusionar_pacientes")
     return { badge: "bg-indigo-50 text-indigo-700 border-indigo-200", dot: "bg-indigo-500" }
   return { badge: "bg-gray-50 text-gray-600 border-gray-200", dot: "bg-gray-400" }

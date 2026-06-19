@@ -36,7 +36,7 @@ import { ref, update, remove, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
-import { confirmarAsistencia, desconfirmarAsistencia, writeLog, LogCambio, horaToMin, minToHora } from "@/lib/helpers"
+import { confirmarAsistencia, desconfirmarAsistencia, reconciliarAusencia, deshacerAusente, writeLog, LogCambio, horaToMin, minToHora } from "@/lib/helpers"
 
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },
@@ -119,6 +119,84 @@ export function EditarTurnoModal({
   const handleSave = async () => {
     setIsSaving(true)
     try {
+      // Si el cambio involucra "ausente" (entra, sale o cambia la justificación) y el
+      // turno tiene paciente vinculado, va por reconciliarAusencia: registra/quita la
+      // falta en el tratamiento más reciente y ajusta las sesiones autorizadas, atómico.
+      const involucraAusente = estado === "ausente" || turno.estado === "ausente"
+      if (involucraAusente && turno.patientId) {
+        const res = await reconciliarAusencia({
+          patientId: turno.patientId,
+          turnoId: turno.id,
+          fecha,
+          hora,
+          nombre: turno.nombre,
+          apellido: turno.apellido,
+          notas: notas.trim() || null,
+          estadoNuevo: estado,
+          justificadoNuevo: estado === "ausente" ? (justificado ?? false) : false,
+        })
+
+        const nom = `${turno.nombre} ${turno.apellido}`
+        let msg = "Turno actualizado"
+        if (res.tipo === "entro") {
+          msg = !res.afectoTratamiento
+            ? `${nom} marcado como ausente`
+            : res.justificado
+            ? `Falta justificada de ${nom} — +1 sesión autorizada (no pierde la sesión)`
+            : `Falta de ${nom} registrada — se descontó 1 sesión`
+        } else if (res.tipo === "toggle") {
+          msg = res.justificado
+            ? `Falta de ${nom} marcada como justificada — +1 sesión autorizada`
+            : `Falta de ${nom} marcada como no justificada — se quitó la sesión autorizada extra`
+        } else if (res.tipo === "salio") {
+          msg = res.afectoTratamiento ? `Se quitó la marca de ausente de ${nom} — sesión liberada` : "Turno actualizado"
+        }
+
+        toast.success(
+          msg,
+          res.tipo !== "sin_cambio"
+            ? {
+                duration: 8000,
+                action: {
+                  label: "Deshacer",
+                  onClick: async () => {
+                    try {
+                      await deshacerAusente(res.revert, {
+                        patientId: turno.patientId!,
+                        nombre: turno.nombre,
+                        apellido: turno.apellido,
+                        fecha,
+                        hora: turno.hora,
+                      })
+                      toast.success("Cambio deshecho")
+                      onSaved()
+                    } catch {
+                      toast.error("No se pudo deshacer")
+                    }
+                  },
+                },
+              }
+            : undefined
+        )
+
+        // Aviso de autorización solo al consumir una sesión (ausente NO justificada)
+        if (res.tipo === "entro" && !res.justificado && res.remaining != null) {
+          if (res.remaining <= 0) {
+            toast.warning(`Autorización agotada para ${nom} — recordá gestionar una nueva`, { duration: 8000 })
+          } else if (res.remaining <= 2) {
+            toast.warning(
+              `Queda${res.remaining === 1 ? "" : "n"} ${res.remaining} sesión${res.remaining === 1 ? "" : "es"} para ${nom}`,
+              { duration: 6000 }
+            )
+          }
+        }
+
+        onSaved()
+        onOpenChange(false)
+        return
+      }
+
+      // Camino simple: sin "ausente" involucrado, o turno sin paciente vinculado
       const data: Record<string, unknown> = { hora, estado }
       data.notas = notas.trim() || null
       if (estado === "ausente") data.justificado = justificado ?? false
@@ -304,9 +382,21 @@ export function EditarTurnoModal({
   const yaAsistio = turno.estado === "asistio"
   // Turno futuro: todavía no pasó → no se puede marcar asistió/ausente ni confirmar
   const esFuturo = fecha > format(hoy, "yyyy-MM-dd")
-  const estadoOptions = esFuturo
+  // "Asistió" se marca SOLO con el botón verde "Confirmar" (registra la sesión + libro diario).
+  // Se saca del desplegable cuando el turno tiene paciente y todavía no asistió: elegirlo a mano
+  // marcaba asistido sin registrar nada. Si ya asistió se deja (el select deshabilitado lo muestra);
+  // sin paciente no hay botón Confirmar, así que se mantiene como única vía.
+  const estadoOptions = yaAsistio
+    ? ESTADO_OPTIONS
+    : esFuturo
     ? ESTADO_OPTIONS.filter((o) => o.value === "pendiente" || o.value === "cancelado")
+    : turno.patientId
+    ? ESTADO_OPTIONS.filter((o) => o.value !== "asistio")
     : ESTADO_OPTIONS
+
+  // Marcar ausente cambia la cuenta de sesiones (justificada = +1 autorizada; no justificada =
+  // descuenta una), así que hay que elegir explícitamente antes de poder guardar.
+  const faltaJustificacionPendiente = estado === "ausente" && justificado === undefined
 
   return (
     <>
@@ -414,6 +504,9 @@ export function EditarTurnoModal({
                     </button>
                   ))}
                 </div>
+                {faltaJustificacionPendiente && (
+                  <p className="text-xs text-amber-600">Elegí si justificó la falta para poder guardar.</p>
+                )}
               </div>
             )}
 
@@ -529,7 +622,7 @@ export function EditarTurnoModal({
             <div className="flex gap-2 pt-1">
               <Button
                 onClick={handleSave}
-                disabled={isSaving}
+                disabled={isSaving || faltaJustificacionPendiente}
                 className="flex-1 bg-[#001633] hover:bg-[#002966]"
               >
                 {isSaving ? "Guardando..." : "Guardar cambios"}

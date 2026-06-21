@@ -108,8 +108,6 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
   const [confirmCopyOpen, setConfirmCopyOpen] = useState(false)
   const [showGoBottom, setShowGoBottom] = useState(false)
-  // Animación de salida al borrar: la fila se desvanece (key RHF) antes del removeField.
-  const [exitingKey, setExitingKey] = useState<string | null>(null)
   // IDs (uuid de datos) de filas que agregó el usuario en esta sesión → animan su
   // entrada. NO incluye las cargadas del día (se limpia en cada fetch).
   const newRowIds = useRef<Set<string>>(new Set())
@@ -403,24 +401,19 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
 
   const confirmDelete = () => {
     if (deleteIndex === null) return
-    const idx = deleteIndex
-    const entry = watchEntradas?.[idx]
-    const key = fields[idx]?.id ?? null
-    setDeleteIndex(null) // cierra el diálogo
-    setExitingKey(key)   // desvanece la fila
-    // Borrado real tras la animación de salida (150ms). Es una acción de un solo
-    // usuario y nada más muta el array en ese lapso → el índice sigue válido.
-    setTimeout(() => {
-      removeField(idx)
-      setExitingKey(null)
-      toast.success('Entrada eliminada')
-      if (entry) {
-        writeLog({
-          accion: "eliminar_entrada_libro",
-          detalle: `Eliminó "${entry.nombreApellido?.trim() || "(sin nombre)"}" del libro diario del ${fechaLegible(toLocalDateKey(fecha))} (Debe $${(Number(entry.debe) || 0).toFixed(2)}, Haber $${(Number(entry.haber) || 0).toFixed(2)})`,
-        })
-      }
-    }, 150)
+    // Borrado inmediato: que la baja la persista el auto-save (o el flush al
+    // desmontar). No diferir el removeField — si se difería, un cambio de pestaña
+    // dentro de la ventana perdía la baja y dejaba el log sin escritura real.
+    const entry = watchEntradas?.[deleteIndex]
+    removeField(deleteIndex)
+    setDeleteIndex(null)
+    toast.success('Entrada eliminada')
+    if (entry) {
+      writeLog({
+        accion: "eliminar_entrada_libro",
+        detalle: `Eliminó "${entry.nombreApellido?.trim() || "(sin nombre)"}" del libro diario del ${fechaLegible(toLocalDateKey(fecha))} (Debe $${(Number(entry.debe) || 0).toFixed(2)}, Haber $${(Number(entry.haber) || 0).toFixed(2)})`,
+      })
+    }
   }
 
   const doCopyPrevDay = async () => {
@@ -591,7 +584,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
               : tipo === "Ingreso" ? "border-green-200 bg-green-50"
               : "border-gray-200 bg-white"
             return (
-              <div key={field.id} className={`border rounded-lg p-3 space-y-2.5 ${cardBg} ${field.id === exitingKey ? "animate-out fade-out duration-150 ease-out" : newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in slide-in-from-top-1 duration-200 ease-out" : ""}`}>
+              <div key={field.id} className={`border rounded-lg p-3 space-y-2.5 ${cardBg} ${newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in slide-in-from-top-1 duration-200 ease-out" : ""}`}>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 font-mono w-5 shrink-0">{index + 1}</span>
                   <Select
@@ -697,7 +690,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                   const isIncomplete = (Number(watchEntradas?.[index]?.debe) || 0) === 0 && (Number(watchEntradas?.[index]?.haber) || 0) === 0
                   const obraSocialVacia = esPaciente && watchEntradas?.[index]?.cobertura === "Obra Social" && !watchEntradas?.[index]?.obraSocial?.trim()
                   return (
-                    <TableRow key={field.id} className={`${isIncomplete ? "bg-amber-50/60" : index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${field.id === exitingKey ? "animate-out fade-out duration-150 ease-out" : newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in duration-200 ease-out" : ""}`}>
+                    <TableRow key={field.id} className={`${isIncomplete ? "bg-amber-50/60" : index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in duration-200 ease-out" : ""}`}>
                       <TableCell className="text-center text-sm">{index + 1}</TableCell>
                       <TableCell>
                         <Select

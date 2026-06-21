@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { addDays, subDays } from "date-fns"
 import { format } from "date-fns-tz"
 import { usePatients } from "@/lib/patients-store"
@@ -81,6 +81,13 @@ function CategoriaSeccion({
   const [page, setPage] = useState(1)
   const { label, Icon } = CATEGORIA_META[cat]
 
+  // El contenido queda en el DOM aunque esté colapsado (para animar la altura con
+  // grid-rows); `inert` lo saca del foco de teclado mientras la sección está cerrada.
+  const contentRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.inert = !expanded
+  }, [expanded])
+
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
   const pageClamped = Math.min(page, totalPages) // auto-corrige si bajó la cantidad
   const start = (pageClamped - 1) * PAGE_SIZE
@@ -104,7 +111,7 @@ function CategoriaSeccion({
       </button>
 
       <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-        <div className="overflow-hidden">
+        <div ref={contentRef} className="overflow-hidden">
           <ul className="divide-y divide-slate-100">
             {visibles.map((t) => (
               <li key={t.id} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50/60 transition-colors">

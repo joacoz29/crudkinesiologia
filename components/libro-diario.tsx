@@ -108,6 +108,11 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
   const [confirmCopyOpen, setConfirmCopyOpen] = useState(false)
   const [showGoBottom, setShowGoBottom] = useState(false)
+  // Animación de salida al borrar: la fila se desvanece (key RHF) antes del removeField.
+  const [exitingKey, setExitingKey] = useState<string | null>(null)
+  // IDs (uuid de datos) de filas que agregó el usuario en esta sesión → animan su
+  // entrada. NO incluye las cargadas del día (se limpia en cada fetch).
+  const newRowIds = useRef<Set<string>>(new Set())
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSave = useRef<{ dateKey: string; entradas: EntradaLibroDiario[] } | null>(null)
   // Lost-update: en vez de pisar el nodo entero, se escribe por-entrada (`entradas/{id}`).
@@ -306,6 +311,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         saveTimer.current = null
       }
       pendingSave.current = null
+      newRowIds.current.clear() // nuevo día: las filas que entran no son "nuevas" del usuario
       flushAuditLog()
       try {
         const dateKey = toLocalDateKey(date)
@@ -380,8 +386,10 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   }, [fields.length])
 
   const agregarFila = (tipo: TipoEntrada = "Paciente") => {
+    const id = crypto.randomUUID()
+    newRowIds.current.add(id)
     append({
-      id: crypto.randomUUID(),
+      id,
       tipo,
       nombreApellido: "",
       cobertura: "Particular",
@@ -394,10 +402,17 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   }
 
   const confirmDelete = () => {
-    if (deleteIndex !== null) {
-      const entry = watchEntradas?.[deleteIndex]
-      removeField(deleteIndex)
-      setDeleteIndex(null)
+    if (deleteIndex === null) return
+    const idx = deleteIndex
+    const entry = watchEntradas?.[idx]
+    const key = fields[idx]?.id ?? null
+    setDeleteIndex(null) // cierra el diálogo
+    setExitingKey(key)   // desvanece la fila
+    // Borrado real tras la animación de salida (150ms). Es una acción de un solo
+    // usuario y nada más muta el array en ese lapso → el índice sigue válido.
+    setTimeout(() => {
+      removeField(idx)
+      setExitingKey(null)
       toast.success('Entrada eliminada')
       if (entry) {
         writeLog({
@@ -405,7 +420,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           detalle: `Eliminó "${entry.nombreApellido?.trim() || "(sin nombre)"}" del libro diario del ${fechaLegible(toLocalDateKey(fecha))} (Debe $${(Number(entry.debe) || 0).toFixed(2)}, Haber $${(Number(entry.haber) || 0).toFixed(2)})`,
         })
       }
-    }
+    }, 150)
   }
 
   const doCopyPrevDay = async () => {
@@ -430,7 +445,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         haber: 0,
       }))
 
-      prevEntradas.forEach(e => append(e))
+      prevEntradas.forEach(e => { newRowIds.current.add(e.id); append(e) })
       toast.success(`${prevEntradas.length} entrada${prevEntradas.length !== 1 ? 's' : ''} copiada${prevEntradas.length !== 1 ? 's' : ''} del día anterior`)
       writeLog({
         accion: "editar_libro_diario",
@@ -576,7 +591,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
               : tipo === "Ingreso" ? "border-green-200 bg-green-50"
               : "border-gray-200 bg-white"
             return (
-              <div key={field.id} className={`border rounded-lg p-3 space-y-2.5 ${cardBg}`}>
+              <div key={field.id} className={`border rounded-lg p-3 space-y-2.5 ${cardBg} ${field.id === exitingKey ? "animate-out fade-out duration-150 ease-out" : newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in slide-in-from-top-1 duration-200 ease-out" : ""}`}>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 font-mono w-5 shrink-0">{index + 1}</span>
                   <Select
@@ -682,7 +697,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                   const isIncomplete = (Number(watchEntradas?.[index]?.debe) || 0) === 0 && (Number(watchEntradas?.[index]?.haber) || 0) === 0
                   const obraSocialVacia = esPaciente && watchEntradas?.[index]?.cobertura === "Obra Social" && !watchEntradas?.[index]?.obraSocial?.trim()
                   return (
-                    <TableRow key={field.id} className={isIncomplete ? "bg-amber-50/60" : index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                    <TableRow key={field.id} className={`${isIncomplete ? "bg-amber-50/60" : index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${field.id === exitingKey ? "animate-out fade-out duration-150 ease-out" : newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in duration-200 ease-out" : ""}`}>
                       <TableCell className="text-center text-sm">{index + 1}</TableCell>
                       <TableCell>
                         <Select
@@ -919,7 +934,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" })}
           title="Ir al final"
           aria-label="Ir al final del libro"
-          className="fixed bottom-5 left-5 sm:bottom-6 sm:left-6 z-40 h-11 w-11 rounded-full bg-[#001633] text-white shadow-lg flex items-center justify-center hover:bg-[#002966] active:scale-95 transition-all"
+          className="fixed bottom-5 left-5 sm:bottom-6 sm:left-6 z-40 h-11 w-11 rounded-full bg-[#001633] text-white shadow-lg flex items-center justify-center hover:bg-[#002966] active:scale-95 transition-[transform,background-color] duration-150 ease-[var(--ease-out)]"
         >
           <ChevronsDown className="h-5 w-5" />
         </button>

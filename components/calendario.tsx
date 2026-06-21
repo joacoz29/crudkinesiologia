@@ -434,7 +434,7 @@ export function Calendario({
                     onClick={() => handleDayClick(day)}
                     className={[
                       "relative h-12 flex flex-col items-center justify-center gap-0.5 border-b border-gray-100",
-                      "cursor-pointer transition-colors",
+                      "cursor-pointer transition-[background-color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97]",
                       !inMonth
                         ? isWeekend ? "bg-gray-100 hover:bg-gray-200" : "bg-gray-50 hover:bg-gray-100"
                         : isWeekend && !today_ ? "bg-gray-50/80 hover:bg-gray-100" : "hover:bg-slate-50",

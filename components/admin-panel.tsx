@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { fetchOpinionesMes, fetchLogsMes, type Opinion, type LogEntry } from "@/lib/helpers"
 import { format, parseISO, isValid, addMonths, subMonths } from "date-fns"
@@ -107,6 +107,37 @@ export function AdminPanel() {
   const [vista, setVista] = useState<"registro" | "opiniones" | "datos" | "duplicados">("registro")
   const [diaIndex, setDiaIndex] = useState(0) // paginación por día del registro (0 = día más reciente)
   const [usuariosOpen, setUsuariosOpen] = useState(false) // resumen por usuario colapsable
+
+  // Píldora deslizante del segmented: como en desktop los tabs tienen ancho
+  // variable (labels distintos), medimos el botón activo y posicionamos un fondo
+  // absoluto que transiciona. Re-mide en resize (cambio de breakpoint).
+  const segRef = useRef<HTMLDivElement>(null)
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const [pill, setPill] = useState({ left: 0, top: 0, width: 0, height: 0 })
+  const [pillReady, setPillReady] = useState(false)
+  const vistaIndex = ["registro", "opiniones", "datos", "duplicados"].indexOf(vista)
+
+  useLayoutEffect(() => {
+    const el = tabRefs.current[vistaIndex]
+    if (el) setPill({ left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight })
+  }, [vistaIndex])
+
+  useEffect(() => {
+    const node = segRef.current
+    if (!node) return
+    const ro = new ResizeObserver(() => {
+      const el = tabRefs.current[vistaIndex]
+      if (el) setPill({ left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight })
+    })
+    ro.observe(node)
+    return () => ro.disconnect()
+  }, [vistaIndex])
+
+  // Habilita la transición recién tras la primera medición (evita un slide desde 0)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setPillReady(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
 
   const mesKey = format(currentMonth, "yyyy-MM")
   // El mes actual puede crecer (logs/opiniones nuevas) → revalidar; los pasados son inmutables
@@ -243,19 +274,25 @@ export function AdminPanel() {
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
           {/* Toggle registro / opiniones / datos — segmentado full-width en mobile */}
-          <div className="flex w-full sm:inline-flex sm:w-auto rounded-lg bg-slate-100 p-1">
+          <div ref={segRef} className="relative flex w-full sm:inline-flex sm:w-auto rounded-lg bg-slate-100 p-1">
+            <span
+              aria-hidden
+              className={`absolute z-0 rounded-md bg-white shadow-sm ${pillReady ? "transition-[transform,width] duration-200 ease-[var(--ease-out)]" : ""}`}
+              style={{ left: 0, top: pill.top, height: pill.height, width: pill.width, transform: `translateX(${pill.left}px)` }}
+            />
             {([
               ["registro", "Registro de actividad", "Registro"],
               ["opiniones", "Opiniones", "Opiniones"],
               ["datos", "Datos", "Datos"],
               ["duplicados", "Duplicados", "Duplic."],
-            ] as const).map(([value, label, short]) => (
+            ] as const).map(([value, label, short], i) => (
               <button
                 key={value}
+                ref={(el) => { tabRefs.current[i] = el }}
                 onClick={() => setVista(value)}
-                className={`flex-1 sm:flex-none px-3 sm:px-3.5 py-1.5 text-sm rounded-md transition-all whitespace-nowrap ${
+                className={`relative z-10 flex-1 sm:flex-none px-3 sm:px-3.5 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
                   vista === value
-                    ? "bg-white text-[#001633] font-semibold shadow-sm"
+                    ? "text-[#001633] font-semibold"
                     : "text-slate-500 hover:text-slate-700"
                 }`}
               >

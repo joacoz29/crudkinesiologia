@@ -103,8 +103,8 @@ function CategoriaSeccion({
         />
       </button>
 
-      {expanded && (
-        <>
+      <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div className="overflow-hidden">
           <ul className="divide-y divide-slate-100">
             {visibles.map((t) => (
               <li key={t.id} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50/60 transition-colors">
@@ -189,8 +189,8 @@ function CategoriaSeccion({
               </div>
             </div>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </section>
   )
 }

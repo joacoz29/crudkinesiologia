@@ -548,7 +548,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
             <Button
               variant="outline"
               size="sm"
-              className="text-xs h-9 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
+              className="text-xs h-9 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white"
               onClick={() => setFecha(new Date())}
             >
               Hoy
@@ -604,7 +604,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                       <SelectItem value="Ingreso">Ingreso</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white transition-colors shrink-0" onClick={() => setDeleteIndex(index)}>
+                  <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white shrink-0" onClick={() => setDeleteIndex(index)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -791,7 +791,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white transition-colors"
+                          className="h-8 w-8 p-0 hover:bg-red-600 hover:text-white"
                           onClick={() => setDeleteIndex(index)}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -812,7 +812,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           <Button
             type="button"
             onClick={() => agregarFila("Paciente")}
-            className="bg-[#001633] hover:bg-[#002966] transition-colors"
+            className="bg-[#001633] hover:bg-[#002966]"
           >
             + Paciente
           </Button>
@@ -820,7 +820,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
             type="button"
             onClick={() => agregarFila("Gasto")}
             variant="outline"
-            className="border-orange-400 text-orange-600 hover:bg-orange-50 transition-colors"
+            className="border-orange-400 text-orange-600 hover:bg-orange-50"
           >
             + Gasto
           </Button>
@@ -828,7 +828,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
             type="button"
             onClick={() => agregarFila("Ingreso")}
             variant="outline"
-            className="border-green-500 text-green-700 hover:bg-green-50 transition-colors"
+            className="border-green-500 text-green-700 hover:bg-green-50"
           >
             + Ingreso
           </Button>
@@ -837,7 +837,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
             onClick={copyPrevDay}
             variant="outline"
             disabled={isCopying}
-            className="border-gray-400 text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1"
+            className="border-gray-400 text-gray-600 hover:bg-gray-50 flex items-center gap-1"
           >
             {isCopying
               ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -872,7 +872,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           type="button"
           onClick={exportarPDF}
           variant="outline"
-          className="border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
+          className="border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white"
         >
           Exportar PDF
         </Button>

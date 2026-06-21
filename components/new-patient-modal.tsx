@@ -209,7 +209,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
           {/* Esperar a que cargue la caché de pacientes garantiza que el aviso de
               DNI duplicado corra contra datos completos (isLoading pasa a false
               también si la suscripción falla, así que nunca bloquea de forma permanente) */}
-          <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors" disabled={isSaving || isLoadingPatients}>
+          <Button type="submit" className="w-auto bg-[#001633] hover:bg-[#002966]" disabled={isSaving || isLoadingPatients}>
             {isSaving ? "Registrando..." : isLoadingPatients ? "Cargando base…" : "Registrar"}
           </Button>
         </form>

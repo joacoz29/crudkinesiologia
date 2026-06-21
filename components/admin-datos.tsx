@@ -526,7 +526,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
           variant="outline"
           size="sm"
           onClick={exportarPDF}
-          className="border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors flex items-center gap-1.5"
+          className="border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white flex items-center gap-1.5"
         >
           <Download className="h-4 w-4" />
           Exportar PDF

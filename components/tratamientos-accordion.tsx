@@ -106,7 +106,7 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
           type="button"
           variant="outline"
           size="sm"
-          className="flex items-center gap-1 text-xs border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
+          className="flex items-center gap-1 text-xs border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white"
           onClick={() => setShowNewForm((v) => !v)}
         >
           <Plus className="h-3 w-3" />
@@ -306,7 +306,7 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs gap-1 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white transition-colors"
+                      className="h-7 text-xs gap-1 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white"
                       onClick={() => addSession(trat.id)}
                     >
                       <Plus className="h-3 w-3" />

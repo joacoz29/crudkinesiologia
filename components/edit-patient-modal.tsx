@@ -558,7 +558,7 @@ export function EditPatientModal({
 
             <Button
               type="submit"
-              className="w-auto bg-[#001633] hover:bg-[#002966] transition-colors"
+              className="w-auto bg-[#001633] hover:bg-[#002966]"
               disabled={isSaving}
             >
               {isSaving ? "Guardando..." : "Guardar Cambios"}

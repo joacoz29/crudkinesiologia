@@ -137,7 +137,7 @@ function CategoriaSeccion({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-8 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
+                      className="h-8 text-[#001633] hover:bg-[#001633] hover:text-white gap-1"
                       onClick={() => onAbrirTurno(t.turnoRef!)}
                     >
                       Marcar asistencia
@@ -148,7 +148,7 @@ function CategoriaSeccion({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
+                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white gap-1"
                     onClick={() => onAgendar(t.patientId!)}
                   >
                     Agendar turno
@@ -158,7 +158,7 @@ function CategoriaSeccion({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white transition-colors gap-1"
+                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white gap-1"
                     onClick={() => onAbrirFicha(t.patientId!)}
                   >
                     Abrir ficha

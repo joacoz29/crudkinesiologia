@@ -234,7 +234,7 @@ export default function Page() {
               </div>
               <Button
                 variant="secondary"
-                className="bg-white text-[#001633] hover:bg-gray-200 transition-colors flex items-center gap-2"
+                className="bg-white text-[#001633] hover:bg-gray-200 flex items-center gap-2"
                 onClick={async () => {
                   // Log antes de signOut: después ya no hay usuario autenticado para escribir
                   await writeLog({ accion: "logout", detalle: "Cerró sesión" })
@@ -319,7 +319,7 @@ export default function Page() {
                 </p>
               </div>
               <Button
-                className="bg-[#001633] hover:bg-[#002966] transition-colors w-full sm:w-auto flex items-center gap-2"
+                className="bg-[#001633] hover:bg-[#002966] w-full sm:w-auto flex items-center gap-2"
                 onClick={() => setModalOpen(true)}
               >
                 <UserPlus className="h-4 w-4" />
@@ -363,14 +363,14 @@ export default function Page() {
                         <p className="text-xs text-slate-500 truncate">{patient.obraSocial}{patient.telefono ? ` · ${patient.telefono}` : ""}</p>
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-emerald-600 transition-colors rounded-lg" title="Agendar turno" onClick={() => handleAgendarTurno(patient)}>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-emerald-600 rounded-lg" title="Agendar turno" onClick={() => handleAgendarTurno(patient)}>
                           <CalendarPlus className="h-3.5 w-3.5" />
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-[#001633] transition-colors rounded-lg" onClick={() => handleEdit(patient)}>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-[#001633] rounded-lg" onClick={() => handleEdit(patient)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         {isAdminUser && (
-                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 transition-colors rounded-lg" onClick={() => handleDelete(patient)}>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 rounded-lg" onClick={() => handleDelete(patient)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         )}
@@ -480,7 +480,7 @@ export default function Page() {
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-emerald-600 transition-colors rounded-lg"
+                                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-emerald-600 rounded-lg"
                                     title="Agendar turno"
                                     onClick={() => handleAgendarTurno(patient)}
                                   >
@@ -489,7 +489,7 @@ export default function Page() {
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-[#001633] transition-colors rounded-lg"
+                                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-[#001633] rounded-lg"
                                     onClick={() => handleEdit(patient)}
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
@@ -498,7 +498,7 @@ export default function Page() {
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 transition-colors rounded-lg"
+                                      className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-red-500 rounded-lg"
                                       onClick={() => handleDelete(patient)}
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />

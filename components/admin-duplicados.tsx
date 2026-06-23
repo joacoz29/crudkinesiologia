@@ -5,6 +5,7 @@ import { usePatients } from "@/lib/patients-store"
 import { gruposDuplicados, fusionarPacientes, deshacerFusion, type GrupoDuplicado } from "@/lib/dedup"
 import { getSessionStats } from "@/lib/helpers"
 import { Patient } from "@/types"
+import { PreviewPatientPanel } from "@/components/preview-patient-panel"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -44,6 +45,7 @@ export function AdminDuplicados() {
   const [keepSel, setKeepSel] = useState<Record<string, string>>({}) // dni → keepId elegido
   const [confirmGrupo, setConfirmGrupo] = useState<GrupoDuplicado | null>(null)
   const [merging, setMerging] = useState(false)
+  const [preview, setPreview] = useState<Patient | null>(null)
 
   const keepIdDe = (g: GrupoDuplicado) => keepSel[g.dni] ?? mejorKeeper(g)
 
@@ -108,7 +110,7 @@ export function AdminDuplicados() {
       <div>
         <h2 className="text-xl font-semibold text-[#001633]">Pacientes duplicados</h2>
         <p className="text-sm text-slate-500 mt-1">
-          {grupos.length} grupo{grupos.length !== 1 ? "s" : ""} con el mismo DNI. Elegí cuál conservar y fusioná.
+          {grupos.length} grupo{grupos.length !== 1 ? "s" : ""} con el mismo DNI. Tocá una ficha para verla en detalle, elegí cuál conservar y fusioná.
         </p>
       </div>
 
@@ -134,12 +136,14 @@ export function AdminDuplicados() {
               <div className="space-y-1.5">
                 {g.pacientes.map((p) => {
                   const isKeep = keepId === p.id
+                  const isPreviewing = preview?.id === p.id
                   return (
                     <label
                       key={p.id}
+                      onClick={() => setPreview(p)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
                         isKeep ? "border-emerald-300 bg-emerald-50" : "border-slate-200 hover:bg-slate-50"
-                      }`}
+                      } ${isPreviewing ? "ring-2 ring-[#001633]/30" : ""}`}
                     >
                       <input
                         type="radio"
@@ -221,6 +225,8 @@ export function AdminDuplicados() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <PreviewPatientPanel patient={preview} onClose={() => setPreview(null)} />
     </div>
   )
 }

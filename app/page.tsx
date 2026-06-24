@@ -9,7 +9,7 @@ import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users, CalendarPlus } from "lucide-react"
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, update } from "firebase/database"
 import { fetchTurnosPorPaciente, writeLog } from "@/lib/helpers"
@@ -60,7 +60,10 @@ function getPaginationPages(current: number, total: number): (number | "...")[] 
   return pages
 }
 
-export default function Page() {
+// Pestañas conocidas (para validar el ?tab= de la URL contra valores arbitrarios).
+const ALL_TABS = ["pacientes", "libroDiario", "calendario", "pendientes", "admin"]
+
+export default function Page({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
@@ -71,7 +74,13 @@ export default function Page() {
   const [canSeeLibroDiario, setCanSeeLibroDiario] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
-  const [activeTab, setActiveTab] = useState("pacientes")
+  // Pestaña inicial leída de la URL (?tab=) EN EL SERVIDOR vía searchParams, para
+  // que el HTML inicial ya sea la pestaña correcta y no haya un parpadeo a
+  // Pacientes al recargar (el primer paint es el HTML del servidor, así que la
+  // corrección tiene que venir de ahí). El rol se valida después (guard más abajo).
+  const rawTab = searchParams?.tab
+  const tabParam = typeof rawTab === "string" ? rawTab : ""
+  const [activeTab, setActiveTab] = useState(ALL_TABS.includes(tabParam) ? tabParam : "pacientes")
   const [calendarioRefreshTrigger, setCalendarioRefreshTrigger] = useState(0)
   // Deep-link al calendario (fecha + nonce para re-disparar la misma fecha)
   const [calTarget, setCalTarget] = useState<{ fecha: string; nonce: number } | null>(null)
@@ -142,17 +151,15 @@ export default function Page() {
     if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages)
   }, [currentPage, totalPages])
 
-  // Al cargar (una vez resuelto el auth, una sola vez): si la URL trae ?tab= y el
-  // rol lo permite, abrir esa pestaña; si es inválida o es el default, limpiar la
-  // URL. Esperar a `currentUser` garantiza que los roles ya están seteados.
-  const tabRestoredRef = useRef(false)
+  // La pestaña inicial vino del ?tab= de la URL (ver useState de arriba). Si el rol
+  // no la permite (ej. ?tab=admin sin ser admin), una vez resueltos los roles
+  // vuelve a Pacientes y limpia la URL. Esperar a `currentUser` evita reaccionar
+  // antes de que los roles estén seteados (se setean junto a currentUser).
   useEffect(() => {
-    if (tabRestoredRef.current || !currentUser) return
-    tabRestoredRef.current = true
-    const urlTab = new URLSearchParams(window.location.search).get("tab")
-    if (urlTab && urlTab !== "pacientes" && tabs.includes(urlTab)) setActiveTab(urlTab)
-    else if (urlTab) window.history.replaceState(null, "", window.location.pathname)
-  }, [currentUser, tabs])
+    if (!currentUser || tabs.includes(activeTab)) return
+    setActiveTab("pacientes")
+    window.history.replaceState(null, "", window.location.pathname)
+  }, [currentUser, tabs, activeTab])
 
   // Botón atrás/adelante del navegador: seguir la pestaña que indique la URL.
   useEffect(() => {

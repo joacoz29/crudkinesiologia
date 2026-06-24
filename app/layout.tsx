@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Bricolage_Grotesque } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
@@ -14,6 +14,23 @@ const bricolage = Bricolage_Grotesque({
 export const metadata: Metadata = {
   title: 'Gestión de Consultorio',
   description: 'Sistema de gestión de pacientes para consultorio kinesiológico',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
+  // iOS standalone (Agregar a inicio): título corto y barra de estado clara.
+  appleWebApp: {
+    capable: true,
+    title: 'Kinesiología',
+    statusBarStyle: 'default',
+  },
+}
+
+// theme-color: en Next 14 va en el export `viewport` (no en metadata). Tiñe la
+// barra del navegador en mobile y el marco de la PWA con el azul del header.
+export const viewport: Viewport = {
+  themeColor: '#001633',
 }
 
 export default function RootLayout({

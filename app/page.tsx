@@ -21,6 +21,7 @@ import { Patient, Turno } from "@/types"
 import { getUserDisplayName, isAdmin, canAccessLibroDiario } from "@/lib/auth-helper"
 import { AdminPanel } from "@/components/admin-panel"
 import { TareasPendientes } from "@/components/tareas-pendientes"
+import { ConnectionStatus } from "@/components/connection-status"
 import { computeTareasPacientes } from "@/lib/tareas"
 import { fetchFeriados } from "@/lib/feriados"
 import { toast } from "sonner"
@@ -62,6 +63,15 @@ function getPaginationPages(current: number, total: number): (number | "...")[] 
 
 // Pestañas conocidas (para validar el ?tab= de la URL contra valores arbitrarios).
 const ALL_TABS = ["pacientes", "libroDiario", "calendario", "pendientes", "admin"]
+// Etiquetas legibles de cada pestaña. A nivel módulo para compartirlas entre la
+// barra de navegación y el título dinámico del documento.
+const TAB_LABELS: Record<string, string> = {
+  pacientes: "Pacientes",
+  libroDiario: "Libro Diario",
+  calendario: "Calendario",
+  pendientes: "Pendientes",
+  admin: "Admin",
+}
 
 export default function Page({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
   const [modalOpen, setModalOpen] = useState(false)
@@ -170,6 +180,18 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
   }, [tabs])
+
+  // Título dinámico de la pestaña del navegador: refleja la sección actual o la
+  // ficha abierta, y antepone el conteo de Pendientes. Ayuda al historial y a
+  // distinguir pestañas. Es un client component, así que se setea por efecto
+  // (no por la metadata estática del layout).
+  useEffect(() => {
+    const fichaAbierta =
+      editModalOpen && selectedPatient ? `${selectedPatient.nombre} ${selectedPatient.apellido}` : null
+    const seccion = fichaAbierta ?? TAB_LABELS[activeTab] ?? ""
+    const prefijo = activeTab === "pendientes" && pendientesCount > 0 ? `(${pendientesCount}) ` : ""
+    document.title = seccion ? `${prefijo}${seccion} · Kinesiología Integral` : "Kinesiología Integral"
+  }, [activeTab, editModalOpen, selectedPatient, pendientesCount])
 
   const handleEdit = (patient: Patient) => {
     setSelectedPatient(patient)
@@ -300,7 +322,6 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
           </div>
           <nav className="flex gap-1 border-b border-white/20 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {tabs.map((tab) => {
-              const labels: Record<string, string> = { pacientes: "Pacientes", libroDiario: "Libro Diario", calendario: "Calendario", pendientes: "Pendientes", admin: "Admin" }
               return (
                 <button
                   key={tab}
@@ -319,7 +340,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
                       : "text-white/60 border-transparent hover:text-white/90 hover:border-white/40"
                   }`}
                 >
-                  {labels[tab]}
+                  {TAB_LABELS[tab]}
                   {tab === "pendientes" && pendientesCount > 0 && (
                     <span className="ml-1.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 text-[10px] font-bold rounded-full bg-amber-400 text-[#001633] align-middle">
                       {pendientesCount}
@@ -652,6 +673,9 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
           onSaved={() => setCalendarioRefreshTrigger((t) => t + 1)}
         />
       )}
+
+      {/* Banner global de "sin conexión" (overlay fijo abajo-centro). */}
+      <ConnectionStatus />
     </div>
   )
 }

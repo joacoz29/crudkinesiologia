@@ -9,7 +9,7 @@ import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users, CalendarPlus } from "lucide-react"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, update } from "firebase/database"
 import { fetchTurnosPorPaciente, writeLog } from "@/lib/helpers"
@@ -98,6 +98,28 @@ export default function Page() {
   const pendientesCount = useMemo(() => computeTareasPacientes(allPatients).length, [allPatients])
   const error = mutationError ?? storeError
   const router = useRouter()
+
+  // La pestaña activa se refleja en la URL (?tab=) para que recargar no vuelva a
+  // Pacientes y el botón atrás/adelante navegue entre pestañas. `tabs` = pestañas
+  // habilitadas según rol (la misma lista que renderiza la barra de navegación).
+  const tabs = useMemo(
+    () => [
+      "pacientes",
+      ...(canSeeLibroDiario ? ["libroDiario"] : []),
+      "calendario",
+      ...(isAdminUser || canSeeLibroDiario ? ["pendientes"] : []),
+      ...(isAdminUser ? ["admin"] : []),
+    ],
+    [canSeeLibroDiario, isAdminUser],
+  )
+
+  // Cambia de pestaña y empuja la URL (pushState → atrás vuelve a la anterior).
+  // El default "pacientes" deja la URL limpia, sin ?tab=. Next 14.2 soporta la
+  // History API nativa para shallow routing, así que alcanza con window.history.
+  const goToTab = (tab: string) => {
+    setActiveTab(tab)
+    window.history.pushState(null, "", tab === "pacientes" ? window.location.pathname : `?tab=${tab}`)
+  }
   const [libroDiarioUpdateTrigger, setLibroDiarioUpdateTrigger] = useState(0)
 
   useEffect(() => {
@@ -120,6 +142,28 @@ export default function Page() {
     if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages)
   }, [currentPage, totalPages])
 
+  // Al cargar (una vez resuelto el auth, una sola vez): si la URL trae ?tab= y el
+  // rol lo permite, abrir esa pestaña; si es inválida o es el default, limpiar la
+  // URL. Esperar a `currentUser` garantiza que los roles ya están seteados.
+  const tabRestoredRef = useRef(false)
+  useEffect(() => {
+    if (tabRestoredRef.current || !currentUser) return
+    tabRestoredRef.current = true
+    const urlTab = new URLSearchParams(window.location.search).get("tab")
+    if (urlTab && urlTab !== "pacientes" && tabs.includes(urlTab)) setActiveTab(urlTab)
+    else if (urlTab) window.history.replaceState(null, "", window.location.pathname)
+  }, [currentUser, tabs])
+
+  // Botón atrás/adelante del navegador: seguir la pestaña que indique la URL.
+  useEffect(() => {
+    const onPopState = () => {
+      const urlTab = new URLSearchParams(window.location.search).get("tab") || "pacientes"
+      setActiveTab(tabs.includes(urlTab) ? urlTab : "pacientes")
+    }
+    window.addEventListener("popstate", onPopState)
+    return () => window.removeEventListener("popstate", onPopState)
+  }, [tabs])
+
   const handleEdit = (patient: Patient) => {
     setSelectedPatient(patient)
     setEditModalOpen(true)
@@ -139,7 +183,7 @@ export default function Page() {
   const handleIrCalendario = (fecha: string) => {
     setCalTarget({ fecha, nonce: Date.now() })
     setCalendarioRefreshTrigger((t) => t + 1)
-    setActiveTab("calendario")
+    goToTab("calendario")
   }
 
   // Agendar un turno para un paciente directo desde la grilla (sin ir al calendario).
@@ -248,13 +292,7 @@ export default function Page() {
             </div>
           </div>
           <nav className="flex gap-1 border-b border-white/20 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {([
-              "pacientes",
-              ...(canSeeLibroDiario ? ["libroDiario"] : []),
-              "calendario",
-              ...(isAdminUser || canSeeLibroDiario ? ["pendientes"] : []),
-              ...(isAdminUser ? ["admin"] : []),
-            ] as const).map((tab) => {
+            {tabs.map((tab) => {
               const labels: Record<string, string> = { pacientes: "Pacientes", libroDiario: "Libro Diario", calendario: "Calendario", pendientes: "Pendientes", admin: "Admin" }
               return (
                 <button
@@ -266,7 +304,7 @@ export default function Page() {
                       // para no re-saltar a esa fecha al re-entrar a la pestaña.
                       setCalTarget(null)
                     }
-                    setActiveTab(tab)
+                    goToTab(tab)
                   }}
                   className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                     activeTab === tab

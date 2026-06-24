@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { MessageCircle, RefreshCw, Trash2 } from "lucide-react"
+import { MessageCircle, RefreshCw, Trash2, Loader2 } from "lucide-react"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO, isValid } from "date-fns"
@@ -119,6 +119,10 @@ export function EditPatientModal({
   const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false)
   // Confirmación al cerrar la ficha con cambios sin guardar (ver isDirty).
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false)
+  // Borrado de turnos: id del que se está borrando (deshabilita su tachito) y flag
+  // del borrado masivo "Eliminar próximos".
+  const [deletingTurnoId, setDeletingTurnoId] = useState<string | null>(null)
+  const [isDeletingAll, setIsDeletingAll] = useState(false)
 
   const [tratamientos, setTratamientos] = useState<Tratamiento[]>([])
 
@@ -204,6 +208,7 @@ export function EditPatientModal({
   const pasadosCount = turnos.length - turnosFuturos.length
 
   const handleDeleteTurno = async (turno: TurnoConFecha) => {
+    setDeletingTurnoId(turno.id)
     try {
       await remove(ref(db, `turnos/${turno.fecha}/${turno.id}`))
       setTurnos((prev) => prev.filter((t) => t.id !== turno.id))
@@ -211,6 +216,8 @@ export function EditPatientModal({
       await writeLog({ accion: "eliminar_turno", detalle: `Eliminó turno de ${turno.nombre} ${turno.apellido} (${turno.fecha} ${turno.hora})`, entidadId: turno.id })
     } catch {
       toast.error("Error al eliminar el turno")
+    } finally {
+      setDeletingTurnoId(null)
     }
   }
 
@@ -219,6 +226,7 @@ export function EditPatientModal({
   const handleDeleteAllTurnos = async () => {
     const nombrePaciente = `${editedPatient?.nombre ?? ""} ${editedPatient?.apellido ?? ""}`.trim()
     const turnosPrevios = turnos
+    setIsDeletingAll(true)
     try {
       const updates: Record<string, unknown> = {}
       const revert: Record<string, unknown> = {}
@@ -281,6 +289,9 @@ export function EditPatientModal({
       })
     } catch {
       toast.error("Error al eliminar los turnos")
+    } finally {
+      setIsDeletingAll(false)
+      setConfirmDeleteAllOpen(false)
     }
   }
 
@@ -602,8 +613,10 @@ export function EditPatientModal({
                           size="sm"
                           className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0"
                           onClick={() => handleDeleteTurno(t)}
+                          disabled={deletingTurnoId !== null}
+                          aria-label="Eliminar turno"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          {deletingTurnoId === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                         </Button>
                       </div>
                     )
@@ -615,7 +628,7 @@ export function EditPatientModal({
             <Button
               type="submit"
               className="w-auto bg-[#001633] hover:bg-[#002966]"
-              disabled={isSaving}
+              loading={isSaving}
             >
               {isSaving ? "Guardando..." : "Guardar Cambios"}
             </Button>
@@ -635,7 +648,7 @@ export function EditPatientModal({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmDeleteAllOpen} onOpenChange={setConfirmDeleteAllOpen}>
+      <AlertDialog open={confirmDeleteAllOpen} onOpenChange={(o) => { if (!isDeletingAll) setConfirmDeleteAllOpen(o) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar los turnos próximos?</AlertDialogTitle>
@@ -655,9 +668,13 @@ export function EditPatientModal({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteAllTurnos} className="bg-red-600 hover:bg-red-700">
-              Eliminar próximos
+            <AlertDialogCancel disabled={isDeletingAll}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeletingAll}
+              onClick={(e) => { e.preventDefault(); handleDeleteAllTurnos() }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeletingAll ? (<><Loader2 className="h-4 w-4 animate-spin" />Eliminando...</>) : "Eliminar próximos"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

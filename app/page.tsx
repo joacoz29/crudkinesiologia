@@ -84,6 +84,8 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   const [canSeeLibroDiario, setCanSeeLibroDiario] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   // Pestaña inicial leída de la URL (?tab=) EN EL SERVIDOR vía searchParams, para
   // que el HTML inicial ya sea la pestaña correcta y no haya un parpadeo a
   // Pacientes al recargar (el primer paint es el HTML del servidor, así que la
@@ -231,6 +233,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   const confirmDelete = async () => {
     if (patientToDelete) {
       setMutationError(null)
+      setIsDeleting(true)
       try {
         const turnos = await fetchTurnosPorPaciente(patientToDelete.id)
         // Borrado atómico: el paciente y todos sus turnos se nulifican en UNA
@@ -252,6 +255,8 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
         const errorMessage = error instanceof Error ? error.message : 'Error al eliminar el paciente'
         setMutationError(errorMessage)
         toast.error(errorMessage)
+      } finally {
+        setIsDeleting(false)
       }
     }
   }
@@ -307,12 +312,19 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
               </div>
               <Button
                 variant="secondary"
+                loading={isLoggingOut}
                 className="bg-white text-[#001633] hover:bg-gray-200 flex items-center gap-2"
                 onClick={async () => {
-                  // Log antes de signOut: después ya no hay usuario autenticado para escribir
-                  await writeLog({ accion: "logout", detalle: "Cerró sesión" })
-                  await signOut(auth)
-                  router.push("/login")
+                  setIsLoggingOut(true)
+                  try {
+                    // Log antes de signOut: después ya no hay usuario autenticado para escribir
+                    await writeLog({ accion: "logout", detalle: "Cerró sesión" })
+                    await signOut(auth)
+                    router.push("/login")
+                  } catch {
+                    // Si falla, re-habilitar para reintentar (si fue OK navegamos y no importa)
+                    setIsLoggingOut(false)
+                  }
                 }}
               >
                 <LogOut className="w-4 h-4" />
@@ -624,9 +636,10 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
             />
             <DeletePatientDialog
               isOpen={isDeleteDialogOpen}
-              onClose={() => setIsDeleteDialogOpen(false)}
+              onClose={() => { if (!isDeleting) setIsDeleteDialogOpen(false) }}
               onConfirm={confirmDelete}
               patientName={patientToDelete ? `${patientToDelete.nombre} ${patientToDelete.apellido}` : ""}
+              loading={isDeleting}
             />
           </>
         ) : activeTab === "libroDiario" ? (

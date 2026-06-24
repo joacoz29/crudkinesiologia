@@ -753,7 +753,8 @@ export function NuevoTurnoModal({
 
           <Button
             onClick={handleSave}
-            disabled={isSaving || !canSave}
+            disabled={!canSave}
+            loading={isSaving}
             className="w-full bg-[#001633] hover:bg-[#002966]"
           >
             {isSaving

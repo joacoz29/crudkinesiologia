@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
-import { GitMerge, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react"
+import { GitMerge, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 
 const PAGE_SIZE = 10
 
@@ -233,7 +233,7 @@ export function AdminDuplicados() {
               onClick={(e) => { e.preventDefault(); if (confirmGrupo) doFusion(confirmGrupo) }}
               className="bg-[#001633] hover:bg-[#002966]"
             >
-              {merging ? "Fusionando..." : "Fusionar"}
+              {merging ? (<><Loader2 className="h-4 w-4 animate-spin" />Fusionando...</>) : "Fusionar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

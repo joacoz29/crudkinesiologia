@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { DatePicker } from "@/components/ui/date-picker"
-import { CheckCircle2, Trash2, CalendarDays } from "lucide-react"
+import { CheckCircle2, Trash2, CalendarDays, Loader2 } from "lucide-react"
 import { ref, update, remove, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
@@ -67,6 +67,7 @@ export function EditarTurnoModal({
   const [isSaving, setIsSaving] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [isDeletingTurno, setIsDeletingTurno] = useState(false)
   const [reprogramando, setReprogramando] = useState(false)
   const [nuevaFecha, setNuevaFecha] = useState<Date | undefined>(undefined)
   const [isMoving, setIsMoving] = useState(false)
@@ -219,6 +220,7 @@ export function EditarTurnoModal({
   }
 
   const handleDelete = async () => {
+    setIsDeletingTurno(true)
     try {
       await remove(ref(db, `turnos/${fecha}/${turno.id}`))
       toast.success("Turno eliminado")
@@ -228,6 +230,9 @@ export function EditarTurnoModal({
     } catch (err) {
       console.error("[EditarTurnoModal] delete error:", err)
       toast.error(err instanceof Error ? err.message : "Error al eliminar el turno")
+    } finally {
+      setIsDeletingTurno(false)
+      setConfirmDeleteOpen(false)
     }
   }
 
@@ -438,7 +443,7 @@ export function EditarTurnoModal({
                   <Button
                     size="sm"
                     onClick={handleConfirmarAsistencia}
-                    disabled={isConfirming}
+                    loading={isConfirming}
                     className="shrink-0 bg-green-600 hover:bg-green-700 text-white"
                   >
                     {isConfirming ? "Registrando..." : "Confirmar"}
@@ -562,7 +567,8 @@ export function EditarTurnoModal({
                       <Button
                         type="button"
                         onClick={handleReprogramar}
-                        disabled={isMoving || !nuevaFecha || loadingTurnosDia}
+                        disabled={!nuevaFecha || loadingTurnosDia}
+                        loading={isMoving}
                         className="bg-[#001633] hover:bg-[#002966]"
                       >
                         {isMoving ? "Moviendo..." : "Mover"}
@@ -622,7 +628,8 @@ export function EditarTurnoModal({
             <div className="flex gap-2 pt-1">
               <Button
                 onClick={handleSave}
-                disabled={isSaving || faltaJustificacionPendiente}
+                disabled={faltaJustificacionPendiente}
+                loading={isSaving}
                 className="flex-1 bg-[#001633] hover:bg-[#002966]"
               >
                 {isSaving ? "Guardando..." : "Guardar cambios"}
@@ -641,7 +648,7 @@ export function EditarTurnoModal({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={(o) => { if (!isDeletingTurno) setConfirmDeleteOpen(o) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar turno?</AlertDialogTitle>
@@ -654,12 +661,13 @@ export function EditarTurnoModal({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeletingTurno}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
+              disabled={isDeletingTurno}
+              onClick={(e) => { e.preventDefault(); handleDelete() }}
               className="bg-red-600 hover:bg-red-700"
             >
-              Eliminar
+              {isDeletingTurno ? (<><Loader2 className="h-4 w-4 animate-spin" />Eliminando...</>) : "Eliminar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

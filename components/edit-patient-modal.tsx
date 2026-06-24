@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { MessageCircle, RefreshCw, Trash2 } from "lucide-react"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
@@ -45,6 +45,15 @@ const ESTADO_CHIP: Record<TurnoEstado, string> = {
 
 function formatSesiones(text: string): string {
   return text.replace(/\s+(\d+-)/g, "\n$1").trim()
+}
+
+// Campos de texto editables del form (los mismos que se diffean para el audit log).
+// A nivel módulo para compartirlos entre handleSave y la detección de "cambios sin
+// guardar" (isDirty).
+const CAMPOS_LABEL: Partial<Record<keyof Patient, string>> = {
+  nombre: "Nombre", apellido: "Apellido", edad: "Edad", dni: "DNI",
+  obraSocial: "Obra Social", nroAFL: "N°AFL", telefono: "Teléfono",
+  domicilio: "Domicilio", anotaciones: "Anotaciones", sexo: "Sexo",
 }
 
 // Para diffs de textos largos en el log: muestra el final, que es donde se agregan sesiones
@@ -108,6 +117,8 @@ export function EditPatientModal({
   const [turnos, setTurnos] = useState<TurnoConFecha[]>([])
   const [isLoadingTurnos, setIsLoadingTurnos] = useState(false)
   const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false)
+  // Confirmación al cerrar la ficha con cambios sin guardar (ver isDirty).
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false)
 
   const [tratamientos, setTratamientos] = useState<Tratamiento[]>([])
 
@@ -128,13 +139,63 @@ export function EditPatientModal({
     }
   }, [])
 
+  // Repuebla el form con los datos originales del paciente. Se usa al abrir y al
+  // descartar cambios (toma el paciente por argumento para no depender de closures).
+  const resetForm = useCallback((p: Patient) => {
+    setEditedPatient(p)
+    setSesionesText(formatSesiones((p.sesiones ?? []).join(" ")))
+    setTratamientos(parseTratamientosRaw(p.tratamientos))
+  }, [])
+
   useEffect(() => {
     if (!patient) return
-    setEditedPatient(patient)
-    setSesionesText(formatSesiones((patient.sesiones ?? []).join(" ")))
-    setTratamientos(parseTratamientosRaw(patient.tratamientos))
+    resetForm(patient)
     reloadTurnos(patient.id)
-  }, [patient, reloadTurnos])
+  }, [patient, reloadTurnos, resetForm])
+
+  // ¿Hay ediciones sin guardar? Compara el estado del form contra el paciente
+  // original. Misma lógica de comparación que usa handleSave para el diff del log,
+  // así que es consistente (mismo criterio de "tocado").
+  const isDirty = useMemo(() => {
+    if (!patient || !editedPatient) return false
+    const personalCambio = (Object.keys(CAMPOS_LABEL) as (keyof Patient)[]).some(
+      (campo) => String(patient[campo] ?? "") !== String(editedPatient[campo] ?? ""),
+    )
+    const historialInicial = formatSesiones((patient.sesiones ?? []).join(" "))
+    const historialCambio = sesionesText.trim() !== historialInicial
+    const tratsCambio =
+      JSON.stringify(tratamientos) !== JSON.stringify(parseTratamientosRaw(patient.tratamientos))
+    return personalCambio || historialCambio || tratsCambio
+  }, [patient, editedPatient, sesionesText, tratamientos])
+
+  // Intercepta el cierre del modal (Esc, click afuera, botón X): si hay cambios sin
+  // guardar pide confirmación en vez de descartarlos en silencio. El cierre que
+  // dispara un guardado exitoso NO pasa por acá (lo controla el prop `open` desde el
+  // padre), así que guardar nunca dispara este aviso.
+  const handleOpenChange = (next: boolean) => {
+    if (!next && isDirty && !isSaving) {
+      setConfirmCloseOpen(true)
+      return
+    }
+    onOpenChange(next)
+  }
+
+  const confirmDiscard = () => {
+    setConfirmCloseOpen(false)
+    if (patient) resetForm(patient)
+    onOpenChange(false)
+  }
+
+  // Cerrar/recargar la pestaña con cambios sin guardar → prompt nativo del navegador.
+  useEffect(() => {
+    if (!open || !isDirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    window.addEventListener("beforeunload", handler)
+    return () => window.removeEventListener("beforeunload", handler)
+  }, [open, isDirty])
 
   // "Hoy" en hora argentina (no UTC): después de las 21:00 el día UTC ya es mañana
   const hoyKey = formatTZ(new Date(), "yyyy-MM-dd", { timeZone: "America/Argentina/Buenos_Aires" })
@@ -272,11 +333,6 @@ export function EditPatientModal({
         },
       }
 
-      const CAMPOS_LABEL: Partial<Record<keyof Patient, string>> = {
-        nombre: "Nombre", apellido: "Apellido", edad: "Edad", dni: "DNI",
-        obraSocial: "Obra Social", nroAFL: "N°AFL", telefono: "Teléfono",
-        domicilio: "Domicilio", anotaciones: "Anotaciones", sexo: "Sexo",
-      }
       const cambios: LogCambio = {}
       for (const campo of Object.keys(CAMPOS_LABEL) as (keyof Patient)[]) {
         const antes = String(patient?.[campo] ?? "")
@@ -364,7 +420,7 @@ export function EditPatientModal({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
           className="max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto"
           // No autoenfocar el primer input al abrir: en mobile dispara el teclado
@@ -602,6 +658,24 @@ export function EditPatientModal({
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteAllTurnos} className="bg-red-600 hover:bg-red-700">
               Eliminar próximos
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmCloseOpen} onOpenChange={setConfirmCloseOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Descartar los cambios?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tenés cambios sin guardar en la ficha de {editedPatient.nombre} {editedPatient.apellido}.
+              Si cerrás ahora se van a perder.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Seguir editando</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDiscard} className="bg-red-600 hover:bg-red-700">
+              Descartar cambios
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

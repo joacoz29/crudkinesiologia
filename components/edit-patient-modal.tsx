@@ -479,11 +479,11 @@ export function EditPatientModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="dni">DNI</Label>
-                  <Input id="dni" value={editedPatient.dni} onChange={(e) => setEditedPatient({ ...editedPatient, dni: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+                  <Input id="dni" inputMode="numeric" autoComplete="off" value={editedPatient.dni} onChange={(e) => setEditedPatient({ ...editedPatient, dni: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edad">Edad</Label>
-                  <Input id="edad" value={editedPatient.edad} onChange={(e) => setEditedPatient({ ...editedPatient, edad: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+                  <Input id="edad" inputMode="numeric" autoComplete="off" value={editedPatient.edad} onChange={(e) => setEditedPatient({ ...editedPatient, edad: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -492,7 +492,7 @@ export function EditPatientModal({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="telefono">Teléfono</Label>
-                <Input id="telefono" value={editedPatient.telefono} onChange={(e) => setEditedPatient({ ...editedPatient, telefono: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+                <Input id="telefono" type="tel" autoComplete="off" value={editedPatient.telefono} onChange={(e) => setEditedPatient({ ...editedPatient, telefono: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
               </div>
             </div>
 

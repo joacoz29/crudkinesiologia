@@ -148,11 +148,11 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="dni">DNI</Label>
-                <Input id="dni" value={patient.dni} onChange={(e) => setPatient({ ...patient, dni: e.target.value })} required className="border-slate-200 focus:border-[#001633]" />
+                <Input id="dni" inputMode="numeric" autoComplete="off" value={patient.dni} onChange={(e) => setPatient({ ...patient, dni: e.target.value })} required className="border-slate-200 focus:border-[#001633]" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edad">Edad</Label>
-                <Input id="edad" value={patient.edad} onChange={(e) => setPatient({ ...patient, edad: e.target.value })} required className="border-slate-200 focus:border-[#001633]" />
+                <Input id="edad" inputMode="numeric" autoComplete="off" value={patient.edad} onChange={(e) => setPatient({ ...patient, edad: e.target.value })} required className="border-slate-200 focus:border-[#001633]" />
               </div>
             </div>
             <div className="space-y-2">
@@ -161,7 +161,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="telefono">Teléfono</Label>
-              <Input id="telefono" value={patient.telefono} onChange={(e) => setPatient({ ...patient, telefono: e.target.value })} required className="border-slate-200 focus:border-[#001633]" />
+              <Input id="telefono" type="tel" autoComplete="off" value={patient.telefono} onChange={(e) => setPatient({ ...patient, telefono: e.target.value })} required className="border-slate-200 focus:border-[#001633]" />
             </div>
           </div>
 

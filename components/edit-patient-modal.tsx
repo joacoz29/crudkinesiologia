@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { MessageCircle, RefreshCw, Trash2, Loader2 } from "lucide-react"
+import { MessageCircle, RefreshCw, Trash2, Loader2, Printer } from "lucide-react"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO, isValid } from "date-fns"
@@ -17,6 +17,8 @@ import { addToLibroDiario, appendSesionAlHistorial, fetchTurnosPorPaciente, pars
 import { TratamientosAccordion } from "@/components/tratamientos-accordion"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
 import { toast } from "sonner"
+import { Printable } from "@/components/printable"
+import { printScoped } from "@/lib/print"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -625,13 +627,25 @@ export function EditPatientModal({
               )}
             </div>
 
-            <Button
-              type="submit"
-              className="w-auto bg-[#001633] hover:bg-[#002966]"
-              loading={isSaving}
-            >
-              {isSaving ? "Guardando..." : "Guardar Cambios"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="submit"
+                className="bg-[#001633] hover:bg-[#002966]"
+                loading={isSaving}
+              >
+                {isSaving ? "Guardando..." : "Guardar Cambios"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={printScoped}
+                className="gap-1.5"
+                title="Imprimir la ficha"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir
+              </Button>
+            </div>
 
             <div className="text-sm text-slate-400 mt-2">
               Última actualización: {editedPatient.ultima_actualizacion?.usuario || "N/A"} —{" "}
@@ -697,6 +711,79 @@ export function EditPatientModal({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Región imprimible de la ficha (oculta en pantalla; la dispara "Imprimir"
+          vía printScoped). Solo mientras el modal está abierto, para no dejar una
+          región con datos viejos montada al cerrar. */}
+      {open && (
+        <Printable>
+          <div className="p-2 text-black">
+            <div className="mb-4 border-b border-black pb-2">
+              <h1 className="text-lg font-bold">Kinesiología Integral</h1>
+              <p className="text-sm">Lic. Ana Patricia Tullio · 02320-659087</p>
+            </div>
+            <h2 className="text-xl font-bold">{editedPatient.nombre} {editedPatient.apellido}</h2>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-3 text-sm">
+              <div><span className="font-semibold">DNI:</span> {editedPatient.dni || "—"}</div>
+              <div><span className="font-semibold">Edad:</span> {editedPatient.edad || "—"}</div>
+              <div><span className="font-semibold">Sexo:</span> {editedPatient.sexo || "—"}</div>
+              <div><span className="font-semibold">Teléfono:</span> {editedPatient.telefono || "—"}</div>
+              <div className="col-span-2"><span className="font-semibold">Domicilio:</span> {editedPatient.domicilio || "—"}</div>
+              <div><span className="font-semibold">Obra Social:</span> {editedPatient.obraSocial || "—"}</div>
+              <div><span className="font-semibold">N°AFL:</span> {editedPatient.nroAFL || "—"}</div>
+            </div>
+
+            {editedPatient.anotaciones && (
+              <div className="mt-3 text-sm">
+                <p className="font-semibold">Anotaciones</p>
+                <p className="whitespace-pre-wrap">{editedPatient.anotaciones}</p>
+              </div>
+            )}
+
+            {tratamientos.length > 0 && (
+              <div className="mt-4 text-sm">
+                <p className="font-semibold border-b border-gray-400 pb-0.5 mb-1">Tratamientos</p>
+                {tratamientos.map((t, i) => (
+                  <div key={t.id} className="mb-2">
+                    <p className="font-medium">
+                      Tratamiento {i + 1}
+                      {t.nroAutorizacion ? ` · Aut. ${t.nroAutorizacion}` : ""} — {t.sesiones.length}/{t.sesionesAutorizadas} sesiones
+                    </p>
+                    {t.diagnostico && <p>Diagnóstico: {t.diagnostico}</p>}
+                    {t.doctor && <p>Derivante: {t.doctor}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {sesionesText.trim() && (
+              <div className="mt-4 text-sm">
+                <p className="font-semibold border-b border-gray-400 pb-0.5 mb-1">Historial de sesiones</p>
+                <p className="whitespace-pre-wrap font-mono text-xs">{sesionesText}</p>
+              </div>
+            )}
+
+            {turnosFuturos.length > 0 && (
+              <div className="mt-4 text-sm">
+                <p className="font-semibold border-b border-gray-400 pb-0.5 mb-1">Próximos turnos</p>
+                <ul className="list-disc list-inside">
+                  {[...turnosFuturos]
+                    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora))
+                    .map((t) => (
+                      <li key={`${t.fecha}-${t.id}`} className="capitalize">
+                        {(() => { const d = parseISO(t.fecha); return isValid(d) ? format(d, "EEE d/MM/yyyy", { locale: es }) : t.fecha })()} · {t.hora}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+
+            <p className="mt-6 text-xs text-gray-500">
+              Impreso el {format(new Date(), "d/MM/yyyy HH:mm", { locale: es })}
+            </p>
+          </div>
+        </Printable>
+      )}
     </>
   )
 }

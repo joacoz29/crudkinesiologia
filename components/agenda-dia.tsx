@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react"
 import { format, isToday } from "date-fns"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Plus, Search, X, Flag, CheckCircle2, Loader2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Search, X, Flag, CheckCircle2, Loader2, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Printable } from "@/components/printable"
+import { printScoped } from "@/lib/print"
 import { Turno, TurnoEstado } from "@/types"
 
 const BASE_HOURS = Array.from({ length: 12 }, (_, i) => i + 8) // 8 → 19
@@ -138,6 +140,16 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
           >
             <Plus className="h-3.5 w-3.5" />
             Nuevo turno
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 border-gray-200 text-gray-600 hover:bg-gray-50 text-xs"
+            onClick={printScoped}
+            title="Imprimir la agenda del día"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Imprimir</span>
           </Button>
           <div className="flex items-center gap-1">
             <Button
@@ -338,6 +350,53 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
           )
         })}
       </div>
+
+      {/* Región imprimible (oculta en pantalla): tabla limpia de la agenda del día.
+          La dispara el botón "Imprimir" vía printScoped(). */}
+      <Printable>
+        <div className="p-2 text-black">
+          <div className="mb-4 border-b border-black pb-2">
+            <h1 className="text-lg font-bold">Kinesiología Integral</h1>
+            <p className="text-sm">Lic. Ana Patricia Tullio · 02320-659087</p>
+            <p className="mt-2 text-base font-semibold capitalize">
+              Agenda del {format(fecha, "EEEE d 'de' MMMM 'de' yyyy", { locale: es })}
+            </p>
+            <p className="text-xs">
+              {totalAgendados} turno{totalAgendados !== 1 ? "s" : ""} agendado{totalAgendados !== 1 ? "s" : ""}
+              {feriado ? ` · Feriado: ${feriado}` : ""}
+            </p>
+          </div>
+          {totalAgendados === 0 ? (
+            <p className="text-sm">Sin turnos agendados.</p>
+          ) : (
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b-2 border-black text-left">
+                  <th className="py-1 pr-3 w-16">Hora</th>
+                  <th className="py-1 pr-3">Paciente</th>
+                  <th className="py-1 pr-3 w-28">Estado</th>
+                  <th className="py-1">Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...turnos]
+                  .sort((a, b) => a.hora.localeCompare(b.hora))
+                  .map((t) => (
+                    <tr key={t.id} className="border-b border-gray-400 align-top">
+                      <td className="py-1 pr-3 font-mono">{t.hora}</td>
+                      <td className="py-1 pr-3">{t.nombre} {t.apellido}</td>
+                      <td className="py-1 pr-3">
+                        {ESTADO_LABELS[t.estado]}
+                        {t.estado === "ausente" && t.justificado ? " (just.)" : ""}
+                      </td>
+                      <td className="py-1">{t.notas ?? ""}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Printable>
     </div>
   )
 }

@@ -104,3 +104,31 @@ body {
   --toast-close-button-end: 0;
   --toast-close-button-transform: translate(35%, -35%);
 }
+
+/* Impresión. La región imprimible (componente Printable → [data-print-portal])
+   está oculta en pantalla. printScoped() pone data-printing en <body>: ahí se
+   oculta el resto de la app y se imprime SOLO esa región, ya formateada para papel.
+   Un Ctrl+P normal (sin data-printing) imprime la página visible como siempre. */
+[data-print-portal] {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 1.5cm;
+  }
+  /* Que fondos/colores de tablas y encabezados salgan en el papel */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .no-print {
+    display: none !important;
+  }
+  body[data-printing] > :not([data-print-portal]) {
+    display: none !important;
+  }
+  body[data-printing] [data-print-portal] {
+    display: block !important;
+  }
+}

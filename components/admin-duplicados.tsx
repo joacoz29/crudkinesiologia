@@ -141,7 +141,7 @@ export function AdminDuplicados() {
                     <label
                       key={p.id}
                       onClick={() => setPreview(p)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow] duration-200 ease-[var(--ease-out)] ${
                         isKeep ? "border-emerald-300 bg-emerald-50" : "border-slate-200 hover:bg-slate-50"
                       } ${isPreviewing ? "ring-2 ring-[#001633]/30" : ""}`}
                     >
@@ -168,15 +168,28 @@ export function AdminDuplicados() {
                 })}
               </div>
 
-              <div className="flex items-center justify-end mt-3">
-                <Button
-                  size="sm"
-                  onClick={() => setConfirmGrupo(g)}
-                  className="bg-[#001633] hover:bg-[#002966] gap-1.5"
+              {/* La vista previa es un panel fixed que cubre ~448px del borde
+                  derecho. Con una ficha abierta el botón se desliza a la
+                  izquierda para no quedar tapado, y vuelve a la derecha al
+                  cerrar. Posición absoluta + transición de left/translateX =
+                  glide horizontal con la curva de salida del proyecto; el alto
+                  del contenedor (h-9 = botón sm) reserva el espacio. motion-reduce
+                  lo deja saltar sin animar. */}
+              <div className="relative mt-3 h-9">
+                <div
+                  className={`absolute top-0 transition-[left,transform] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none ${
+                    preview ? "left-0 translate-x-0" : "left-full -translate-x-full"
+                  }`}
                 >
-                  <GitMerge className="h-3.5 w-3.5" />
-                  Fusionar
-                </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setConfirmGrupo(g)}
+                    className="bg-[#001633] hover:bg-[#002966] gap-1.5"
+                  >
+                    <GitMerge className="h-3.5 w-3.5" />
+                    Fusionar
+                  </Button>
+                </div>
               </div>
             </div>
           )

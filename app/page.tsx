@@ -65,7 +65,7 @@ const TAB_LABELS: Record<string, string> = {
   pacientes: "Pacientes",
   libroDiario: "Libro Diario",
   calendario: "Calendario",
-  pendientes: "Pendientes",
+  pendientes: "Recepción",
   admin: "Admin",
 }
 

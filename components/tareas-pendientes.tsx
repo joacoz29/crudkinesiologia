@@ -330,7 +330,7 @@ export function TareasPendientes({
     <div>
       <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-[#001633]">Tareas pendientes</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-[#001633]">Recepción</h1>
           <p className="text-sm text-slate-500 mt-1">
             {tareas.length === 0 ? (
               "Sin pendientes detectados"

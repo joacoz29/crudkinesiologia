@@ -37,7 +37,7 @@ La regla de oro: **nunca volver a bajar lo que ya está en memoria.** Una lectur
 - **Una sola lectura que devuelve todo lo derivado** en vez de varias (ej.: `fetchLibroDiarioPorRango` devuelve `{porDia, haberParticular, haberObraSocial, ...}` de una pasada).
 - **Live (`onValue`) cuando hay que reflejar escrituras de otros** sin invalidación manual (pacientes). **Snapshot + caché de sesión** cuando el dato es estable por partición (meses).
 - **Excepción deliberada:** el **libro diario NO se cachea** en lectura — es dato financiero que se escribe desde dos lados (auto-save propio + `confirmarAsistencia`/`addToLibroDiario` desde el calendario) sin señal confiable de invalidación cross-tab. Fetch fresco en cada montaje/cambio de fecha. No "optimizar" esto sin resolver la invalidación.
-- Al mutar algo cacheado: `invalidateMonth(key)` (puntual) o `clearCachePrefix(prefix)` (rangos solapados como el calendario).
+- Al mutar algo cacheado: `clearCachePrefix(prefix)` (sirve para un rango —ej. `turnos-cal/`— y también para una key puntual, pasando la key completa).
 
 ---
 
@@ -47,7 +47,7 @@ La regla de oro: **nunca volver a bajar lo que ya está en memoria.** Una lectur
 - **El archivo `database.rules.json` NO se despliega solo.** Hay que **publicarlo a mano en Firebase Console**. Si una feature agrega un nodo, decilo explícito en el cierre: "falta publicar reglas". Verificar en prod (read/write esperados dan 200 / lo prohibido da 401/403/404).
 - **Nada público toca el client SDK directo.** Lo sin-cuenta (ej. `/opinion`) va por **API route con admin SDK** + validación + rate-limit por IP hasheada + dedup (patrón de `/api/opinion`: valida DNI contra pacientes, 1 cada 7 días, 10/h por IP). Nunca exponer datos de pacientes en un path legible sin auth.
 - **No confiar en el cliente para autorización.** `isAdmin` y `ROLE_MAP` (`lib/auth-helper.ts`) son **solo UI** hoy — las reglas todavía no filtran por rol. No bases una garantía de seguridad en una comprobación client-side; si algo debe ser realmente admin-only, va por reglas o por API con token verificado. (Pendiente acordado: llevar roles a las reglas antes del endurecimiento pre-QR.)
-- **Endpoints autenticados** verifican el ID token (`getAuthHeaders` en cliente → verificación server-side).
+- **Hoy NO hay endpoints autenticados:** las únicas API routes (`/api/opinion`, `/api/feriados`) son públicas y validan todo server-side. Si agregás un endpoint que toque datos de pacientes con identidad del usuario, verificá el ID token server-side con `verifyIdToken` (admin SDK) — todavía no existe un helper para eso.
 - **Secretos** (service account, claves) en `.env.local` gitignoreado. Nunca commitear credenciales ni `claves-*.txt`. Si aparece un secreto en el diff, frená.
 - **Input validation server-side** en todo lo público (DNI numérico/formato, rangos, longitudes).
 

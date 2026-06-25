@@ -6,6 +6,17 @@ import { getUserDisplayName } from "@/lib/auth-helper"
 
 const TZ = "America/Argentina/Buenos_Aires"
 
+// Sesión registrada en el historial libre: "N-" seguido de espacio o fin de
+// texto. El lookahead evita falsos positivos con teléfonos ("02320-659087") o
+// fechas ("2026-06-10") anotados en el mismo campo. Fuente única para contar y
+// numerar sesiones (countSesionesEnHistorial / getNextSessionNumber).
+const SESION_RE = /(\d+)-(?=\s|$)/g
+
+/** Cuenta las sesiones "N-" registradas en el historial libre (esquema legacy). */
+export function countSesionesEnHistorial(text: string): number {
+  return [...text.matchAll(SESION_RE)].length
+}
+
 // Hora "HH:MM" → minutos del día, y viceversa (para ventanas horarias)
 export function horaToMin(h: string): number {
   const [hh, mm] = (h ?? "").split(":")
@@ -54,7 +65,7 @@ export function getSessionStats(patient: Patient): { used: number; authorized: n
   const authorized = patient.sesionesAutorizadas
   if (!authorized) return null
   const sesionesText = (patient.sesiones ?? []).join(" ")
-  const used = [...sesionesText.matchAll(/\d+-/g)].length
+  const used = countSesionesEnHistorial(sesionesText)
   return { used, authorized }
 }
 
@@ -293,9 +304,9 @@ export function appendSesionAlHistorial(historial: string, fechaHora: string): s
 }
 
 export function getNextSessionNumber(text: string): number {
-  // Solo "N-" seguido de espacio o fin de texto: evita falsos positivos con
-  // teléfonos ("02320-659087") o fechas ("2026-06-10") anotados en el historial
-  const matches = [...text.matchAll(/(\d+)-(?=\s|$)/g)]
+  // Mismo criterio que countSesionesEnHistorial (ver SESION_RE): cuenta "N-"
+  // reales, no fechas ni teléfonos anotados en el historial libre.
+  const matches = [...text.matchAll(SESION_RE)]
   if (matches.length === 0) return 1
   return Math.max(...matches.map((m) => parseInt(m[1], 10))) + 1
 }

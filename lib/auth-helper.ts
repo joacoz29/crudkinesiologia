@@ -1,5 +1,4 @@
 import { User } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
 
 export const ADMIN_EMAIL = 'joaco@joaco.com.ar'
 
@@ -63,10 +62,4 @@ export function getUserDisplayName(user: User | null): string {
 
 export function isAdmin(user: User | null): boolean {
   return getUserRole(user) === 'admin'
-}
-
-// Header de autorización para las API routes (verificado server-side con verifyIdToken)
-export async function getAuthHeaders(): Promise<Record<string, string>> {
-  const token = await auth.currentUser?.getIdToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
 }

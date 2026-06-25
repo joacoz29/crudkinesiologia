@@ -40,7 +40,6 @@ export interface Patient {
   anotaciones?: string
   tratamiento?: string
   sesiones: string[]
-  sesionesAux?: string[]
   sesionesAutorizadas?: number
   nroAutorizacion?: string
   tratamientos?: Tratamiento[]

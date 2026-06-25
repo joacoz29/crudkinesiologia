@@ -12,7 +12,7 @@ import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, Alert
 import { useState, useEffect, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, update } from "firebase/database"
-import { fetchTurnosPorPaciente, writeLog } from "@/lib/helpers"
+import { countSesionesEnHistorial, fetchTurnosPorPaciente, writeLog } from "@/lib/helpers"
 import { usePatients, queryPatients } from "@/lib/patients-store"
 import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut, User } from "firebase/auth"
@@ -38,10 +38,6 @@ function getAvatarColor(seed: string): string {
 
 function getInitials(nombre: string, apellido: string): string {
   return `${nombre.charAt(0)}${apellido.charAt(0)}`.toUpperCase()
-}
-
-function countPatientSessions(sesiones: string[]): number {
-  return [...sesiones.join(" ").matchAll(/\d+-/g)].length
 }
 
 function sessionBadgeClass(used: number, authorized: number): string {
@@ -545,7 +541,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
                                   }
                                   const authorized = patient.sesionesAutorizadas
                                   if (!authorized) return null
-                                  const used = countPatientSessions(patient.sesiones)
+                                  const used = countSesionesEnHistorial(patient.sesiones.join(" "))
                                   return (
                                     <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${sessionBadgeClass(used, authorized)}`}>
                                       {used}/{authorized}

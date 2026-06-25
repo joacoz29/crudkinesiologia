@@ -11,11 +11,6 @@ import { useEffect, useReducer, useRef, useState } from "react"
 
 const cache = new Map<string, unknown>()
 
-/** Invalida una entrada (p. ej. tras escribir en ese mes). */
-export function invalidateMonth(key: string): void {
-  cache.delete(key)
-}
-
 /** Borra todas las entradas cuya clave empieza con `prefix` (p. ej. al mutar). */
 export function clearCachePrefix(prefix: string): void {
   for (const k of cache.keys()) {

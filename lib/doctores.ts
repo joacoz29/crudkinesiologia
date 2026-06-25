@@ -47,20 +47,58 @@ export interface Derivante {
  * nombre. La etiqueta de cada grupo es la variante original más frecuente
  * (desempate: la primera vista). Ordena por cantidad desc.
  */
+interface GrupoDerivante {
+  tokens: Set<string>
+  total: number
+  variantes: Map<string, number>
+  activo: boolean
+}
+
 export function rankDerivantes(doctores: string[]): Derivante[] {
-  // clave canónica → { total, variantes: textoOriginal → veces }
-  const grupos = new Map<string, { total: number; variantes: Map<string, number> }>()
+  // clave canónica → grupo (total + variantes originales + tokens del nombre)
+  const porKey = new Map<string, GrupoDerivante>()
   for (const raw of doctores) {
     const doc = (raw ?? "").trim()
     if (!doc) continue
     const key = normalizeDoctorKey(doc)
     if (!key) continue
-    const g = grupos.get(key) ?? { total: 0, variantes: new Map<string, number>() }
+    let g = porKey.get(key)
+    if (!g) {
+      g = { tokens: new Set(key.split(" ")), total: 0, variantes: new Map<string, number>(), activo: true }
+      porKey.set(key, g)
+    }
     g.total++
     g.variantes.set(doc, (g.variantes.get(doc) ?? 0) + 1)
-    grupos.set(key, g)
   }
-  return Array.from(grupos.values())
+
+  // Absorción de nombres parciales: si los tokens de un grupo son SUBCONJUNTO
+  // estricto de otro (p. ej. solo el apellido "Gurpide" ⊂ "Gustavo Gurpide"),
+  // se funde en el grupo MÁS FRECUENTE que lo contiene. Se procesa de menos a
+  // más tokens para absorber primero los nombres más cortos. Es heurística para
+  // el ranking/autocompletado, no identidad clínica: un apellido suelto ambiguo
+  // se atribuye al derivante dominante. No toca el dato guardado.
+  const grupos = Array.from(porKey.values())
+  const porTokens = [...grupos].sort((a, b) => a.tokens.size - b.tokens.size)
+  for (const g of porTokens) {
+    if (!g.activo) continue
+    let mejor: GrupoDerivante | null = null
+    for (const h of grupos) {
+      if (h === g || !h.activo || h.tokens.size <= g.tokens.size) continue
+      let contiene = true
+      for (const t of g.tokens) {
+        if (!h.tokens.has(t)) { contiene = false; break }
+      }
+      if (contiene && (!mejor || h.total > mejor.total)) mejor = h
+    }
+    if (mejor) {
+      mejor.total += g.total
+      for (const [v, c] of g.variantes) mejor.variantes.set(v, (mejor.variantes.get(v) ?? 0) + c)
+      g.activo = false
+    }
+  }
+
+  return grupos
+    .filter((g) => g.activo)
     .map((g) => ({
       nombre: Array.from(g.variantes.entries()).sort((a, b) => b[1] - a[1])[0][0],
       count: g.total,

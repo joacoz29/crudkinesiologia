@@ -9,6 +9,7 @@ import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknot
 import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, type Opinion, type LibroResumen } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
+import { rankDerivantes } from "@/lib/doctores"
 import { Button } from "@/components/ui/button"
 import { Patient, Turno } from "@/types"
 
@@ -258,7 +259,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       { rango: "60+", min: 61, max: Infinity, count: 0 },
     ]
     let sinEdad = 0
-    const derivantes = new Map<string, number>()
+    const docList: string[] = []
     for (const p of patients) {
       const s = (p.sexo ?? "").trim().toLowerCase()
       if (s.startsWith("m")) masculino++
@@ -269,14 +270,12 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       if (Number.isNaN(edad) || edad <= 0) sinEdad++
       else (edadBuckets.find((b) => edad >= b.min && edad <= b.max) ?? edadBuckets[4]).count++
 
-      const doc = (p.doctor ?? "").trim()
-      if (doc) derivantes.set(doc, (derivantes.get(doc) ?? 0) + 1)
+      if (p.doctor) docList.push(p.doctor)
     }
     const maxEdad = Math.max(1, ...edadBuckets.map((b) => b.count))
-    const derivantesRank = Array.from(derivantes.entries())
-      .map(([nombre, count]) => ({ nombre, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 6)
+    // Fusiona variantes de tipeo del mismo médico ("Gurpide Gustavo" vs
+    // "GUSTAVO GURPIDE" → una sola entrada). Ver lib/doctores.ts.
+    const derivantesRank = rankDerivantes(docList).slice(0, 6)
     const conSexo = masculino + femenino + otroSexo
     return { masculino, femenino, otroSexo, conSexo, edadBuckets, maxEdad, sinEdad, derivantesRank, total: patients.length }
   }, [patients])

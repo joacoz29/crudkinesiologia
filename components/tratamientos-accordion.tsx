@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { format, isValid } from "date-fns"
 import { format as formatTZ } from "date-fns-tz"
 import { ChevronDown, Plus, X } from "lucide-react"
@@ -9,6 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tratamiento } from "@/types"
+import { usePatients } from "@/lib/patients-store"
+import { sugerenciasDoctores } from "@/lib/doctores"
+
+// id del <datalist> de médicos, compartido por los dos inputs de doctor
+const DATALIST_DOCTORES = "doctores-derivantes"
 
 function getCurrentArgentinaDateTime() {
   return formatTZ(new Date(), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
@@ -42,6 +47,11 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
   const [newSesionesAuth, setNewSesionesAuth] = useState("")
   const [newDiagnostico, setNewDiagnostico] = useState("")
   const [newDoctor, setNewDoctor] = useState("")
+
+  // Médicos ya cargados en toda la base (caché live → sin lecturas nuevas), para
+  // autocompletar y evitar variantes de tipeo del mismo derivante.
+  const { patients } = usePatients()
+  const doctoresSugeridos = useMemo(() => sugerenciasDoctores(patients), [patients])
 
   const toggleExpanded = (id: string) => {
     setExpandedIds((prev) => {
@@ -100,6 +110,13 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
 
   return (
     <div className="space-y-4 border-t border-slate-100 pt-5">
+      {/* Sugerencias de médicos ya cargados (los dos inputs de doctor lo comparten) */}
+      <datalist id={DATALIST_DOCTORES}>
+        {doctoresSugeridos.map((d) => (
+          <option key={d} value={d} />
+        ))}
+      </datalist>
+
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tratamientos</h3>
         <Button
@@ -156,6 +173,8 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
                 value={newDoctor}
                 onChange={(e) => setNewDoctor(e.target.value)}
                 placeholder="Nombre del médico"
+                list={DATALIST_DOCTORES}
+                autoComplete="off"
                 className="h-8 text-sm border-slate-200 focus:border-[#001633]"
               />
             </div>
@@ -260,6 +279,8 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
                           value={trat.doctor ?? ""}
                           onChange={(e) => updateTrat(trat.id, { doctor: e.target.value })}
                           placeholder="—"
+                          list={DATALIST_DOCTORES}
+                          autoComplete="off"
                           className="h-7 text-sm border-slate-200 focus:border-[#001633]"
                         />
                       </div>

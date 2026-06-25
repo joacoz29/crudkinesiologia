@@ -34,10 +34,17 @@ import {
 const TZ = "America/Argentina/Buenos_Aires"
 const PAGE_SIZE = 8
 
-const CATEGORIA_META: Record<TareaCategoria, { label: string; Icon: typeof UserCog }> = {
-  operativo: { label: "Turnos", Icon: CalendarClock },
-  clinico: { label: "Seguimiento clínico", Icon: ClipboardList },
-  datos: { label: "Datos de pacientes", Icon: UserCog },
+// Identidad visual por área: el chip del ícono y el contador llevan un tinte
+// semántico propio por categoría, para triar de un vistazo Turnos / Clínico /
+// Datos. Se evitan rojo y ámbar a propósito: esos colores son de SEVERIDAD, no
+// de categoría. Las acciones siguen en navy para no romper el vocabulario de la app.
+const CATEGORIA_META: Record<
+  TareaCategoria,
+  { label: string; Icon: typeof UserCog; iconWrap: string; count: string }
+> = {
+  operativo: { label: "Turnos", Icon: CalendarClock, iconWrap: "bg-sky-50 text-sky-600", count: "bg-sky-50 text-sky-700" },
+  clinico: { label: "Seguimiento clínico", Icon: ClipboardList, iconWrap: "bg-emerald-50 text-emerald-600", count: "bg-emerald-50 text-emerald-700" },
+  datos: { label: "Datos de pacientes", Icon: UserCog, iconWrap: "bg-violet-50 text-violet-600", count: "bg-violet-50 text-violet-700" },
 }
 
 const SEV_META: Record<TareaSeveridad, { dot: string }> = {
@@ -79,7 +86,8 @@ function CategoriaSeccion({
 }) {
   const [expanded, setExpanded] = useState(true)
   const [page, setPage] = useState(1)
-  const { label, Icon } = CATEGORIA_META[cat]
+  const { label, Icon, iconWrap, count } = CATEGORIA_META[cat]
+  const altaCount = items.filter((t) => t.severidad === "alta").length
 
   // El contenido queda en el DOM aunque esté colapsado (para animar la altura con
   // grid-rows); `inert` lo saca del foco de teclado mientras la sección está cerrada.
@@ -94,23 +102,31 @@ function CategoriaSeccion({
   const visibles = items.slice(start, start + PAGE_SIZE)
 
   return (
-    <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+    <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60 hover:bg-slate-100/70 transition-colors text-left"
+        className="w-full flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/60 hover:bg-slate-100/70 transition-colors text-left"
       >
-        <Icon className="h-4 w-4 text-[#001633] shrink-0" />
+        <span className={`grid h-8 w-8 place-items-center rounded-lg shrink-0 ${iconWrap}`}>
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
         <h2 className="text-sm font-semibold text-[#001633]">{label}</h2>
-        <span className="text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">
+        <span className={`text-xs font-semibold rounded-full px-2 py-0.5 tabular-nums ${count}`}>
           {items.length}
         </span>
+        {altaCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+            {altaCount} urgente{altaCount !== 1 ? "s" : ""}
+          </span>
+        )}
         <ChevronDown
-          className={`ml-auto h-4 w-4 text-slate-400 transition-transform ${expanded ? "" : "-rotate-90"}`}
+          className={`ml-auto h-4 w-4 text-slate-400 transition-transform duration-200 motion-reduce:transition-none ${expanded ? "" : "-rotate-90"}`}
         />
       </button>
 
-      <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+      <div className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
         <div ref={contentRef} className="overflow-hidden">
           <ul className="divide-y divide-slate-100">
             {visibles.map((t) => (
@@ -120,8 +136,8 @@ function CategoriaSeccion({
                   title={`Prioridad ${t.severidad}`}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-800">{t.titulo}</p>
-                  <p className="text-xs text-slate-500 mt-0.5 break-words">{t.descripcion}</p>
+                  <p className="text-sm font-medium text-slate-900">{t.titulo}</p>
+                  <p className="text-xs text-slate-600 mt-0.5 break-words">{t.descripcion}</p>
                 </div>
                 {t.turnoRef ? (
                   <div className="flex shrink-0 items-center gap-1">
@@ -295,6 +311,8 @@ export function TareasPendientes({
     return map
   }, [tareas])
 
+  const urgentes = useMemo(() => tareas.filter((t) => t.severidad === "alta").length, [tareas])
+
   if (patientsLoading) {
     return (
       <div className="space-y-3">
@@ -314,9 +332,22 @@ export function TareasPendientes({
         <div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-[#001633]">Tareas pendientes</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {tareas.length === 0
-              ? "Sin pendientes detectados"
-              : `${tareas.length} pendiente${tareas.length !== 1 ? "s" : ""} para revisar`}
+            {tareas.length === 0 ? (
+              "Sin pendientes detectados"
+            ) : (
+              <>
+                <span className="font-medium text-slate-700">{tareas.length}</span> pendiente
+                {tareas.length !== 1 ? "s" : ""} para revisar
+                {urgentes > 0 && (
+                  <>
+                    {" · "}
+                    <span className="font-medium text-red-600">
+                      {urgentes} urgente{urgentes !== 1 ? "s" : ""}
+                    </span>
+                  </>
+                )}
+              </>
+            )}
             {turnosLoading && (
               <span className="inline-flex items-center gap-1 ml-2 text-slate-400">
                 <Loader2 className="h-3 w-3 animate-spin" /> actualizando turnos…

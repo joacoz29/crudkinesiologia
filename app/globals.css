@@ -100,11 +100,22 @@ body {
    interrumpible) usando la curva de salida fuerte de --ease-out, < 300ms. En
    reduced-motion se quita el movimiento y se mantiene el color (guía de animación). */
 .chart-bar {
-  transition: transform 280ms var(--ease-out), background-color 200ms ease, filter 150ms ease;
+  transition: transform 280ms var(--ease-out), background-color 200ms ease, filter 150ms ease, opacity 150ms ease;
+}
+/* Panel de detalle del día (drill-down): entra con un fade + leve descenso. */
+@keyframes dayDetailIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.day-detail {
+  animation: dayDetailIn 200ms var(--ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
   .chart-bar {
-    transition: background-color 200ms ease, filter 150ms ease;
+    transition: background-color 200ms ease, filter 150ms ease, opacity 150ms ease;
+  }
+  .day-detail {
+    animation: none;
   }
 }
 

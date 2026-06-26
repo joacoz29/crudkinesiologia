@@ -5,7 +5,7 @@ import { format, parseISO, startOfMonth, endOfMonth, subMonths, getDay, getDaysI
 import { es } from "date-fns/locale"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
-import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity, Users, Stethoscope, Download } from "lucide-react"
+import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity, Users, Stethoscope, Download, X } from "lucide-react"
 import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, type Opinion, type LibroResumen } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
@@ -23,6 +23,14 @@ const VISTAS_RECAUD = [
   { k: "acum", label: "Acumulado" },
 ] as const
 type VistaRecaud = (typeof VISTAS_RECAUD)[number]["k"]
+
+// Vistas del gráfico "por día" (toggle de métrica)
+const VISTAS_ATENC = [
+  { k: "asistio", label: "Atenciones" },
+  { k: "ausente", label: "Ausencias" },
+  { k: "total", label: "Turnos" },
+] as const
+type VistaAtenc = (typeof VISTAS_ATENC)[number]["k"]
 
 // Variación porcentual vs mes anterior (null si no hay base de comparación)
 function pctCambio(actual: number, anterior: number): number | null {
@@ -180,14 +188,18 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
 
   // Estado del gráfico interactivo de recaudación (vista elegida + día en hover)
   const [vistaRecaud, setVistaRecaud] = useState<VistaRecaud>("saldo")
+  const [vistaAtenc, setVistaAtenc] = useState<VistaAtenc>("asistio")
   const [hoverDia, setHoverDia] = useState<number | null>(null)
   const [hoverAtenc, setHoverAtenc] = useState<number | null>(null)
+  const [diaSelAtenc, setDiaSelAtenc] = useState<string | null>(null)
   // Crecimiento de las barras al abrir la pestaña (scaleY(0) → su valor)
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     const r = requestAnimationFrame(() => setMounted(true))
     return () => cancelAnimationFrame(r)
   }, [])
+  // Al cambiar de mes, cerrar el detalle del día abierto (apuntaba a otro mes)
+  useEffect(() => { setDiaSelAtenc(null) }, [currentMonth])
 
   const mesKey = format(currentMonth, "yyyy-MM")
   const hoyMesKey = format(new Date(), "yyyy-MM")
@@ -303,15 +315,16 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     return { masculino, femenino, otroSexo, conSexo, edadBuckets, maxEdad, sinEdad, derivantesRank, total: patients.length }
   }, [patients])
 
-  const metrics = useMemo(() => {
-    const patientById = new Map(patients.map((p) => [p.id, p]))
-    const patientByName = new Map(
-      patients.map((p) => [`${p.nombre} ${p.apellido}`.toLowerCase().trim(), p])
-    )
-    const pacienteDe = (t: Turno): Patient | undefined =>
-      (t.patientId && patientById.get(t.patientId)) ||
-      patientByName.get(`${t.nombre} ${t.apellido}`.toLowerCase().trim())
+  // Resuelve la ficha de un turno (por id, con fallback a nombre). Compartido por
+  // las métricas y el detalle del día (drill-down).
+  const pacienteDe = useMemo(() => {
+    const byId = new Map(patients.map((p) => [p.id, p]))
+    const byName = new Map(patients.map((p) => [`${p.nombre} ${p.apellido}`.toLowerCase().trim(), p]))
+    return (t: Turno): Patient | undefined =>
+      (t.patientId && byId.get(t.patientId)) || byName.get(`${t.nombre} ${t.apellido}`.toLowerCase().trim())
+  }, [patients])
 
+  const metrics = useMemo(() => {
     const todos: Array<Turno & { fecha: string }> = []
     for (const [fecha, turnos] of Object.entries(turnosPorDia)) {
       for (const t of turnos) todos.push({ ...t, fecha })
@@ -335,15 +348,17 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     const base = format(currentMonth, "yyyy-MM")
     const porDia = Array.from({ length: diasDelMes }, (_, i) => {
       const fecha = `${base}-${String(i + 1).padStart(2, "0")}`
+      const ts = turnosPorDia[fecha] ?? []
       return {
         dia: i + 1,
         fecha,
         weekday: getDay(parseISO(fecha)),
-        count: (turnosPorDia[fecha] ?? []).filter((t) => t.estado === "asistio").length,
+        asistio: ts.filter((t) => t.estado === "asistio").length,
+        ausente: ts.filter((t) => t.estado === "ausente").length,
+        total: ts.filter((t) => t.estado !== "cancelado").length,
       }
     })
-    const maxDia = Math.max(1, ...porDia.map((d) => d.count))
-    const diasConAtencion = porDia.filter((d) => d.count > 0).length
+    const diasConAtencion = porDia.filter((d) => d.asistio > 0).length
     const promedioPorDia = diasConAtencion ? asistidos.length / diasConAtencion : 0
 
     // Distribución por cobertura (sobre atenciones; agrupa case-insensitive)
@@ -439,7 +454,6 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       pacientesActivos,
       sesionesPromedio,
       porDia,
-      maxDia,
       diasConAtencion,
       promedioPorDia,
       obraSocialRanking,
@@ -463,7 +477,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       maxSemana,
       sinTurnos: todos.length === 0,
     }
-  }, [turnosPorDia, libro, patients, currentMonth])
+  }, [turnosPorDia, libro, patients, currentMonth, pacienteDe])
 
   // Serie del gráfico de movimiento diario según la vista elegida (saldo/haber/debe/acumulado)
   const serieRecaud = useMemo(() => {
@@ -480,6 +494,16 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       max: Math.max(1, ...dias.map((d) => Math.abs(pick(d)))),
     }
   }, [metrics.recaudPorDia, vistaRecaud])
+
+  // Serie del gráfico "por día" según la métrica elegida (atenciones/ausencias/turnos)
+  const serieAtenc = useMemo(() => {
+    const pick = (d: (typeof metrics.porDia)[number]) =>
+      vistaAtenc === "ausente" ? d.ausente : vistaAtenc === "total" ? d.total : d.asistio
+    return {
+      puntos: metrics.porDia.map((d) => ({ dia: d.dia, fecha: d.fecha, weekday: d.weekday, val: pick(d) })),
+      max: Math.max(1, ...metrics.porDia.map(pick)),
+    }
+  }, [metrics.porDia, vistaAtenc])
 
   const mesNombre = format(currentMonth, "MMMM", { locale: es })
   const mesLabel = format(currentMonth, "MMMM yyyy", { locale: es })
@@ -628,46 +652,132 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
 
           {/* Actividad */}
           <SectionTitle>Actividad</SectionTitle>
-          {/* Atenciones por día (interactivo: hover por día) */}
+          {/* Por día (interactivo: toggle de métrica + hover + click → detalle del día) */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">
-            <div className="flex items-baseline justify-between gap-2 mb-3">
-              <p className="text-sm font-semibold text-slate-700">Atenciones por día</p>
-              {(() => {
-                const d = hoverAtenc != null ? metrics.porDia.find((x) => x.dia === hoverAtenc) : null
-                return d ? (
-                  <span className="text-[11px] text-slate-500 tabular-nums">
-                    {format(parseISO(d.fecha), "EEE d", { locale: es })} · <span className="font-medium text-[#001633]">{d.count}</span> atención{d.count !== 1 ? "es" : ""}
-                  </span>
-                ) : (
-                  <span className="text-[11px] text-slate-400 tabular-nums">{metrics.atenciones} en total</span>
-                )
-              })()}
+            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+              <p className="text-sm font-semibold text-slate-700">Por día</p>
+              <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px]">
+                {VISTAS_ATENC.map(({ k, label }) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setVistaAtenc(k)}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-[color,background-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${vistaAtenc === k ? "bg-white text-[#001633] shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
+            {(() => {
+              const noun = vistaAtenc === "ausente" ? "ausencia" : vistaAtenc === "total" ? "turno" : "atención"
+              const nounPl = vistaAtenc === "ausente" ? "ausencias" : vistaAtenc === "total" ? "turnos" : "atenciones"
+              const d = hoverAtenc != null ? serieAtenc.puntos.find((x) => x.dia === hoverAtenc) : null
+              const totalActivo = serieAtenc.puntos.reduce((s, p) => s + p.val, 0)
+              return (
+                <div className="flex items-baseline justify-between gap-2 mb-2 text-[11px]">
+                  <span className="text-slate-400">Tocá un día para ver el detalle</span>
+                  <span className="text-slate-500 tabular-nums whitespace-nowrap">
+                    {d ? (
+                      <>
+                        {format(parseISO(d.fecha), "EEE d", { locale: es })} ·{" "}
+                        <span className="font-medium text-[#001633]">{d.val}</span> {d.val === 1 ? noun : nounPl}
+                      </>
+                    ) : (
+                      <>{totalActivo} {nounPl} en total</>
+                    )}
+                  </span>
+                </div>
+              )
+            })()}
             <div className="flex items-end gap-[3px] h-32" onMouseLeave={() => setHoverAtenc(null)}>
-              {metrics.porDia.map(({ dia, fecha, weekday, count }) => {
-                const ratio = count === 0 ? 3 / 100 : Math.max(0.08, count / metrics.maxDia)
-                const base = count === 0 ? "bg-slate-200" : weekday === 0 || weekday === 6 ? "bg-[#001633]/40" : "bg-[#001633]"
-                const activo = hoverAtenc === dia
+              {serieAtenc.puntos.map(({ dia, fecha, weekday, val }) => {
+                const ratio = val === 0 ? 3 / 100 : Math.max(0.08, val / serieAtenc.max)
+                const color =
+                  val === 0
+                    ? "bg-slate-200"
+                    : vistaAtenc === "ausente"
+                    ? "bg-red-400"
+                    : weekday === 0 || weekday === 6
+                    ? "bg-[#001633]/40"
+                    : "bg-[#001633]"
+                const sel = diaSelAtenc === fecha
+                const activo = hoverAtenc === dia || sel
+                const dim = diaSelAtenc != null && !sel
                 return (
-                  <div
+                  <button
                     key={dia}
-                    className="flex-1 flex flex-col items-center gap-1 min-w-0"
+                    type="button"
+                    className="flex-1 flex flex-col items-center gap-1 min-w-0 cursor-pointer p-0"
                     onMouseEnter={() => setHoverAtenc(dia)}
-                    title={`${format(parseISO(fecha), "EEEE d", { locale: es })}: ${count} atención${count !== 1 ? "es" : ""}`}
+                    onClick={() => setDiaSelAtenc((cur) => (cur === fecha ? null : fecha))}
+                    title={`${format(parseISO(fecha), "EEEE d", { locale: es })}: ${val}`}
                   >
                     <div className="w-full flex items-end" style={{ height: "100px" }}>
                       <div
-                        className={`chart-bar w-full rounded-t origin-bottom ${base} ${activo ? "brightness-110" : ""}`}
+                        className={`chart-bar w-full rounded-t origin-bottom ${color} ${activo ? "brightness-110" : ""} ${dim ? "opacity-40" : ""}`}
                         style={{ height: "100px", transform: `scaleY(${mounted ? ratio : 0})` }}
                       />
                     </div>
-                    <span className={`text-[9px] tabular-nums ${activo ? "text-[#001633] font-semibold" : weekday === 0 ? "text-slate-300" : "text-slate-400"}`}>
+                    <span className={`text-[9px] tabular-nums ${sel ? "text-[#001633] font-bold" : activo ? "text-[#001633] font-semibold" : weekday === 0 ? "text-slate-300" : "text-slate-400"}`}>
                       {dia}
                     </span>
-                  </div>
+                  </button>
                 )
               })}
             </div>
+
+            {diaSelAtenc && (() => {
+              const ts = (turnosPorDia[diaSelAtenc] ?? [])
+                .filter((t) => t.estado !== "cancelado")
+                .slice()
+                .sort((a, b) => a.hora.localeCompare(b.hora))
+              const nA = ts.filter((t) => t.estado === "asistio").length
+              const nF = ts.filter((t) => t.estado === "ausente").length
+              const nP = ts.filter((t) => t.estado === "pendiente").length
+              return (
+                <div className="day-detail mt-3 pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-700 capitalize truncate">
+                        {format(parseISO(diaSelAtenc), "EEEE d 'de' MMMM", { locale: es })}
+                      </p>
+                      <p className="text-[11px] text-slate-400 tabular-nums">
+                        {nA} asistieron · {nF} faltaron{nP > 0 ? ` · ${nP} pendiente${nP !== 1 ? "s" : ""}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDiaSelAtenc(null)}
+                      className="text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                      title="Cerrar"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {ts.length === 0 ? (
+                    <p className="text-xs text-slate-400 py-2">Sin turnos ese día</p>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 gap-x-4 gap-y-0.5 max-h-56 overflow-y-auto -mx-1 px-1">
+                      {ts.map((t) => {
+                        const p = pacienteDe(t)
+                        const part = !p || esParticular(p.obraSocial)
+                        const dot = t.estado === "asistio" ? "bg-emerald-500" : t.estado === "ausente" ? "bg-red-400" : "bg-slate-300"
+                        return (
+                          <div key={t.id} className="flex items-center gap-2 py-1 text-xs min-w-0">
+                            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot}`} />
+                            <span className="text-slate-400 tabular-nums shrink-0">{t.hora}</span>
+                            <span className="text-slate-700 truncate flex-1 min-w-0">{t.nombre} {t.apellido}</span>
+                            {t.estado === "ausente" && t.justificado && <span className="text-[10px] text-slate-400 shrink-0">justif.</span>}
+                            <span className="text-[10px] text-slate-400 shrink-0 max-w-[88px] truncate">{part ? "Part." : p?.obraSocial}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           <div className="grid lg:grid-cols-2 gap-3 items-start">

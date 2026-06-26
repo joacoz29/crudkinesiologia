@@ -96,6 +96,18 @@ body {
   }
 }
 
+/* Barras de los gráficos de Datos: morfan y crecen con transform:scaleY (GPU,
+   interrumpible) usando la curva de salida fuerte de --ease-out, < 300ms. En
+   reduced-motion se quita el movimiento y se mantiene el color (guía de animación). */
+.chart-bar {
+  transition: transform 280ms var(--ease-out), background-color 200ms ease, filter 150ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-bar {
+    transition: background-color 200ms ease, filter 150ms ease;
+  }
+}
+
 /* Toast (sonner): botón X de cerrar a la DERECHA. Sonner lo pone a la izquierda
    en LTR vía variables con selector :where() (especificidad 0); este selector las
    sobreescribe. */

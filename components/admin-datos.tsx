@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, getDay, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
 import { jsPDF } from "jspdf"
@@ -181,6 +181,13 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
   // Estado del gráfico interactivo de recaudación (vista elegida + día en hover)
   const [vistaRecaud, setVistaRecaud] = useState<VistaRecaud>("saldo")
   const [hoverDia, setHoverDia] = useState<number | null>(null)
+  const [hoverAtenc, setHoverAtenc] = useState<number | null>(null)
+  // Crecimiento de las barras al abrir la pestaña (scaleY(0) → su valor)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    const r = requestAnimationFrame(() => setMounted(true))
+    return () => cancelAnimationFrame(r)
+  }, [])
 
   const mesKey = format(currentMonth, "yyyy-MM")
   const hoyMesKey = format(new Date(), "yyyy-MM")
@@ -621,29 +628,45 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
 
           {/* Actividad */}
           <SectionTitle>Actividad</SectionTitle>
-          {/* Atenciones por día */}
+          {/* Atenciones por día (interactivo: hover por día) */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">
-            <p className="text-sm font-semibold text-slate-700 mb-3">Atenciones por día</p>
-            <div className="flex items-end gap-[3px] h-32">
-              {metrics.porDia.map(({ dia, fecha, weekday, count }) => (
-                <div
-                  key={dia}
-                  className="flex-1 flex flex-col items-center gap-1 min-w-0"
-                  title={`${format(parseISO(fecha), "EEEE d", { locale: es })}: ${count} atención${count !== 1 ? "es" : ""}`}
-                >
-                  <div className="w-full flex items-end" style={{ height: "100px" }}>
-                    <div
-                      className={`w-full rounded-t transition-all ${
-                        count === 0 ? "bg-slate-100" : weekday === 0 || weekday === 6 ? "bg-[#001633]/40" : "bg-[#001633]"
-                      }`}
-                      style={{ height: count === 0 ? "3px" : `${Math.max(8, (count / metrics.maxDia) * 100)}px` }}
-                    />
-                  </div>
-                  <span className={`text-[9px] tabular-nums ${weekday === 0 ? "text-slate-300" : "text-slate-400"}`}>
-                    {dia}
+            <div className="flex items-baseline justify-between gap-2 mb-3">
+              <p className="text-sm font-semibold text-slate-700">Atenciones por día</p>
+              {(() => {
+                const d = hoverAtenc != null ? metrics.porDia.find((x) => x.dia === hoverAtenc) : null
+                return d ? (
+                  <span className="text-[11px] text-slate-500 tabular-nums">
+                    {format(parseISO(d.fecha), "EEE d", { locale: es })} · <span className="font-medium text-[#001633]">{d.count}</span> atención{d.count !== 1 ? "es" : ""}
                   </span>
-                </div>
-              ))}
+                ) : (
+                  <span className="text-[11px] text-slate-400 tabular-nums">{metrics.atenciones} en total</span>
+                )
+              })()}
+            </div>
+            <div className="flex items-end gap-[3px] h-32" onMouseLeave={() => setHoverAtenc(null)}>
+              {metrics.porDia.map(({ dia, fecha, weekday, count }) => {
+                const ratio = count === 0 ? 3 / 100 : Math.max(0.08, count / metrics.maxDia)
+                const base = count === 0 ? "bg-slate-200" : weekday === 0 || weekday === 6 ? "bg-[#001633]/40" : "bg-[#001633]"
+                const activo = hoverAtenc === dia
+                return (
+                  <div
+                    key={dia}
+                    className="flex-1 flex flex-col items-center gap-1 min-w-0"
+                    onMouseEnter={() => setHoverAtenc(dia)}
+                    title={`${format(parseISO(fecha), "EEEE d", { locale: es })}: ${count} atención${count !== 1 ? "es" : ""}`}
+                  >
+                    <div className="w-full flex items-end" style={{ height: "100px" }}>
+                      <div
+                        className={`chart-bar w-full rounded-t origin-bottom ${base} ${activo ? "brightness-110" : ""}`}
+                        style={{ height: "100px", transform: `scaleY(${mounted ? ratio : 0})` }}
+                      />
+                    </div>
+                    <span className={`text-[9px] tabular-nums ${activo ? "text-[#001633] font-semibold" : weekday === 0 ? "text-slate-300" : "text-slate-400"}`}>
+                      {dia}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </div>
 
@@ -745,7 +768,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
                     key={k}
                     type="button"
                     onClick={() => setVistaRecaud(k)}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-colors ${vistaRecaud === k ? "bg-white text-[#001633] shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-[color,background-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${vistaRecaud === k ? "bg-white text-[#001633] shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
                   >
                     {label}
                   </button>
@@ -775,9 +798,9 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
             <div className="flex items-end gap-[3px] h-28" onMouseLeave={() => setHoverDia(null)}>
               {serieRecaud.puntos.map(({ dia, fecha, val }) => {
                 const cero = val === 0
-                const altura = cero ? 3 : Math.max(8, (Math.abs(val) / serieRecaud.max) * 90)
+                const ratio = cero ? 3 / 90 : Math.max(0.09, Math.abs(val) / serieRecaud.max)
                 const color = cero
-                  ? "bg-slate-100"
+                  ? "bg-slate-200"
                   : vistaRecaud === "saldo"
                   ? val > 0
                     ? "bg-emerald-500"
@@ -795,10 +818,11 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
                     onMouseEnter={() => setHoverDia(dia)}
                     title={`${format(parseISO(fecha), "EEEE d", { locale: es })}: ${formatMoney(val)}`}
                   >
+                    {/* Morfa con transform:scaleY al togglear la vista (GPU, interrumpible) */}
                     <div className="w-full flex items-end" style={{ height: "90px" }}>
                       <div
-                        className={`w-full rounded-t transition-all ${color} ${activo ? "ring-2 ring-[#001633]/30" : ""}`}
-                        style={{ height: `${altura}px` }}
+                        className={`chart-bar w-full rounded-t origin-bottom ${color} ${activo ? "brightness-110" : ""}`}
+                        style={{ height: "90px", transform: `scaleY(${mounted ? ratio : 0})` }}
                       />
                     </div>
                     <span className={`text-[9px] tabular-nums ${activo ? "text-[#001633] font-semibold" : "text-slate-400"}`}>{dia}</span>

@@ -80,6 +80,14 @@ function fechaLegible(dateKey: string): string {
   return `${d}/${m}/${y}`
 }
 
+// Monto para mostrar: el dato se guarda siempre con centavos, pero como no
+// trabajamos con centavos en el día a día se ocultan cuando es redondo; si justo
+// los tiene (caso raro) se muestran. El redondeo a 2 normaliza el ruido de float.
+function montoLibro(n: number): string {
+  const r = Math.round((Number(n) || 0) * 100) / 100
+  return Number.isInteger(r) ? String(r) : r.toFixed(2)
+}
+
 // Forma canónica y estable de una entrada (mismo orden de claves para comparar
 // JSON entre baseline y estado actual). El `id` es la clave bajo `entradas/`.
 function sanitizeEntry(e: Partial<EntradaLibroDiario>): EntradaLibroDiario {
@@ -485,14 +493,14 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
             e.nombreApellido,
             esPaciente ? e.cobertura : "—",
             esPaciente ? e.obraSocial : (e.detalle || "—"),
-            `$${(Number(e.debe) || 0).toFixed(2)}`,
-            `$${(Number(e.haber) || 0).toFixed(2)}`,
+            `$${montoLibro(Number(e.debe) || 0)}`,
+            `$${montoLibro(Number(e.haber) || 0)}`,
           ]
         }),
         foot: [
-          ["", "", "", "", "", "Total Haber", `$${totalHaber.toFixed(2)}`],
-          ["", "", "", "", "", "Total Debe", `$${totalDebe.toFixed(2)}`],
-          [{ content: `Saldo de caja: $${saldo.toFixed(2)}`, colSpan: 7, styles: { halign: "right" as const, fontStyle: "bold" as const } }],
+          ["", "", "", "", "", "Total Haber", `$${montoLibro(totalHaber)}`],
+          ["", "", "", "", "", "Total Debe", `$${montoLibro(totalDebe)}`],
+          [{ content: `Saldo de caja: $${montoLibro(saldo)}`, colSpan: 7, styles: { halign: "right" as const, fontStyle: "bold" as const } }],
         ],
         footStyles: { fillColor: [248, 250, 252] as [number, number, number], textColor: [30, 30, 30] as [number, number, number] },
       })
@@ -850,18 +858,18 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
         <div className="flex w-full sm:w-auto items-stretch rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
           <div className="flex flex-col items-center justify-center flex-1 sm:flex-none px-4 py-2.5">
             <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Haber</span>
-            <span className="font-semibold text-green-600 text-lg leading-tight">${totalHaber.toFixed(2)}</span>
+            <span className="font-semibold text-green-600 text-lg leading-tight">${montoLibro(totalHaber)}</span>
           </div>
           <div className="border-l border-gray-200" />
           <div className="flex flex-col items-center justify-center flex-1 sm:flex-none px-4 py-2.5">
             <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Debe</span>
-            <span className="font-semibold text-orange-600 text-lg leading-tight">${totalDebe.toFixed(2)}</span>
+            <span className="font-semibold text-orange-600 text-lg leading-tight">${montoLibro(totalDebe)}</span>
           </div>
           <div className="border-l border-gray-200" />
           <div className="flex flex-col items-center justify-center flex-1 sm:flex-none px-4 py-2.5 bg-white">
             <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Saldo</span>
             <span className={`font-bold text-xl leading-tight ${saldo >= 0 ? "text-green-700" : "text-red-600"}`}>
-              ${saldo.toFixed(2)}
+              ${montoLibro(saldo)}
             </span>
           </div>
         </div>

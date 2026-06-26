@@ -115,6 +115,15 @@ export function normalizeLibroEntradas(raw: unknown): (LibroDiarioEntry & { id: 
   return entries.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
 }
 
+// "Particular" se identifica por la obra social: vacío, "-" o el texto
+// "particular" (cualquier mayúscula). Así un paciente cuya obra social quedó
+// cargada como "PARTICULAR" se trata como particular y no como una obra social
+// real (de ahí salía el desfase cobertura "Obra Social" / obraSocial "PARTICULAR").
+export function esParticular(obraSocial: string | undefined | null): boolean {
+  const t = (obraSocial ?? "").trim().toLowerCase()
+  return t === "" || t === "-" || t === "particular"
+}
+
 // Prepara UNA entrada de paciente para el libro diario del día, o null si el
 // paciente ya tiene entrada ese día. Devuelve solo la entrada + su id para
 // escribirla de forma puntual (`entradas/{id}`), sin tocar las demás entradas
@@ -131,12 +140,13 @@ async function buildLibroDiarioEntry(
   if (entradas.some((e) => e.nombreApellido === nombreApellido)) return null
 
   const entryId = crypto.randomUUID()
+  const particular = esParticular(obraSocial)
   const entry: LibroDiarioEntry = {
     id: entryId,
     tipo: "Paciente",
     nombreApellido,
-    cobertura: obraSocial === "-" ? "Particular" : "Obra Social",
-    obraSocial,
+    cobertura: particular ? "Particular" : "Obra Social",
+    obraSocial: particular ? "-" : obraSocial,
     debe: 0,
     haber: 0,
     createdAt: Date.now(),
@@ -265,7 +275,7 @@ export async function fetchLibroDiarioPorRango(
         const tipo = e.tipo ?? "Paciente"
         if (tipo === "Ingreso") haberIngreso += h
         else if (tipo === "Gasto") debeGasto += d
-        else if (e.cobertura === "Obra Social") haberObraSocial += h
+        else if (!esParticular(e.obraSocial)) haberObraSocial += h
         else haberParticular += h
       }
       porDia[fecha] = { haber, debe }

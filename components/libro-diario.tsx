@@ -21,7 +21,7 @@ import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { ref, get, update } from "firebase/database"
 import { db } from "@/lib/firebase"
-import { writeLog, LogCambio, normalizeLibroEntradas } from "@/lib/helpers"
+import { writeLog, LogCambio, normalizeLibroEntradas, esParticular } from "@/lib/helpers"
 import { toast } from "sonner"
 import { format } from "date-fns-tz"
 import { ChevronLeft, ChevronRight, ChevronsDown, ClipboardCopy, Loader2, Trash2 } from "lucide-react"
@@ -91,12 +91,16 @@ function montoLibro(n: number): string {
 // Forma canónica y estable de una entrada (mismo orden de claves para comparar
 // JSON entre baseline y estado actual). El `id` es la clave bajo `entradas/`.
 function sanitizeEntry(e: Partial<EntradaLibroDiario>): EntradaLibroDiario {
+  // Coherencia cobertura/obra social: si la OS es "particular" (incluye "-"/vacío),
+  // la cobertura es Particular y la OS se normaliza a "-". Corrige al cargar y al
+  // guardar el caso de pacientes con OS "PARTICULAR" y cobertura "Obra Social".
+  const particular = esParticular(e.obraSocial)
   return {
     id: e.id as string,
     tipo: (e.tipo as TipoEntrada) ?? "Paciente",
     nombreApellido: e.nombreApellido ?? "",
-    cobertura: (e.cobertura as "Particular" | "Obra Social") ?? "Particular",
-    obraSocial: e.obraSocial ?? "-",
+    cobertura: particular ? "Particular" : ((e.cobertura as "Particular" | "Obra Social") ?? "Particular"),
+    obraSocial: particular ? "-" : (e.obraSocial ?? "-"),
     detalle: e.detalle ?? "",
     debe: Number(e?.debe) || 0,
     haber: Number(e?.haber) || 0,
@@ -635,7 +639,14 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                       </SelectContent>
                     </Select>
                     <Input
-                      {...register(`entradas.${index}.obraSocial`)}
+                      {...register(`entradas.${index}.obraSocial`, {
+                        onBlur: (ev) => {
+                          if (esParticular((ev.target as HTMLInputElement).value)) {
+                            setValue(`entradas.${index}.cobertura`, "Particular")
+                            setValue(`entradas.${index}.obraSocial`, "-")
+                          }
+                        },
+                      })}
                       disabled={watchEntradas?.[index]?.cobertura === "Particular"}
                       placeholder="Obra social..."
                       className={`border-gray-300 focus:border-[#001633] h-8 text-sm disabled:bg-gray-100 disabled:text-gray-400 ${obraSocialVacia ? "border-red-400 bg-red-50" : ""}`}
@@ -757,7 +768,14 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                           </TableCell>
                           <TableCell>
                             <Input
-                              {...register(`entradas.${index}.obraSocial`)}
+                              {...register(`entradas.${index}.obraSocial`, {
+                                onBlur: (ev) => {
+                                  if (esParticular((ev.target as HTMLInputElement).value)) {
+                                    setValue(`entradas.${index}.cobertura`, "Particular")
+                                    setValue(`entradas.${index}.obraSocial`, "-")
+                                  }
+                                },
+                              })}
                               disabled={watchEntradas?.[index]?.cobertura === "Particular"}
                               className={`border-gray-300 focus:border-[#001633] disabled:bg-gray-100 disabled:text-gray-400 ${obraSocialVacia ? "border-red-400 bg-red-50" : ""}`}
                             />

@@ -6,7 +6,7 @@ import { es } from "date-fns/locale"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity, Users, Stethoscope, Download, X } from "lucide-react"
-import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, type Opinion, type LibroResumen } from "@/lib/helpers"
+import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, esParticular, type Opinion, type LibroResumen } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { rankDerivantes } from "@/lib/doctores"
@@ -103,12 +103,6 @@ const DIAS_SEMANA = [
   { label: "Sáb", value: 6 },
 ]
 const HORAS = Array.from({ length: 12 }, (_, i) => 8 + i) // 8:00 a 19:00 (agenda diaria)
-
-// "-" o vacío es la convención de paciente particular (misma regla que el libro diario)
-function esParticular(obraSocial: string | undefined): boolean {
-  const t = (obraSocial ?? "").trim()
-  return !t || t === "-"
-}
 
 function StatCard({
   icon: Icon,

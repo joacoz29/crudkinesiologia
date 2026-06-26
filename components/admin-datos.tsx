@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, getDay, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
 import { jsPDF } from "jspdf"
@@ -14,6 +14,15 @@ import { Button } from "@/components/ui/button"
 import { Patient, Turno } from "@/types"
 
 const EMPTY_LIBRO: LibroResumen = { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 }
+
+// Vistas del gráfico de movimiento diario (toggle interactivo)
+const VISTAS_RECAUD = [
+  { k: "saldo", label: "Saldo" },
+  { k: "haber", label: "Recaudado" },
+  { k: "debe", label: "Egresos" },
+  { k: "acum", label: "Acumulado" },
+] as const
+type VistaRecaud = (typeof VISTAS_RECAUD)[number]["k"]
 
 // Variación porcentual vs mes anterior (null si no hay base de comparación)
 function pctCambio(actual: number, anterior: number): number | null {
@@ -51,7 +60,7 @@ function formatMoney(n: number): string {
 function resumenMes(
   turnosPorDia: Record<string, Turno[]>,
   libroPorDia: Record<string, { haber: number; debe: number }>,
-): { atenciones: number; ausentismo: number; recaudado: number; activos: number } {
+): { atenciones: number; ausentismo: number; recaudado: number; egresos: number; saldo: number; activos: number } {
   let asistidos = 0
   let ausentes = 0
   const activos = new Set<string>()
@@ -65,11 +74,14 @@ function resumenMes(
   }
   const concluidos = asistidos + ausentes
   let haber = 0
-  for (const l of Object.values(libroPorDia)) haber += l.haber
+  let debe = 0
+  for (const l of Object.values(libroPorDia)) { haber += l.haber; debe += l.debe }
   return {
     atenciones: asistidos,
     ausentismo: concluidos ? (ausentes / concluidos) * 100 : 0,
     recaudado: haber,
+    egresos: debe,
+    saldo: haber - debe,
     activos: activos.size,
   }
 }
@@ -165,6 +177,10 @@ function MoneyCard({
 export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
   // Caché compartida: reusa la suscripción live de pacientes (no baja la colección de nuevo)
   const { patients, isLoading: isLoadingPatients } = usePatients()
+
+  // Estado del gráfico interactivo de recaudación (vista elegida + día en hover)
+  const [vistaRecaud, setVistaRecaud] = useState<VistaRecaud>("saldo")
+  const [hoverDia, setHoverDia] = useState<number | null>(null)
 
   const mesKey = format(currentMonth, "yyyy-MM")
   const hoyMesKey = format(new Date(), "yyyy-MM")
@@ -401,6 +417,13 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
     )
     const hayRecaudacion = totalHaber !== 0 || totalDebe !== 0
 
+    // Ticket promedio (recaudado por atención) y recaudación por día de semana
+    const ticketPromedio = asistidos.length ? totalHaber / asistidos.length : 0
+    const haberPorWeekday = new Map<number, number>()
+    for (const d of recaudPorDia) haberPorWeekday.set(d.weekday, (haberPorWeekday.get(d.weekday) ?? 0) + d.haber)
+    const recaudSemana = DIAS_SEMANA.map(({ label, value }) => ({ label, haber: haberPorWeekday.get(value) ?? 0 }))
+    const maxSemana = Math.max(1, ...recaudSemana.map((s) => s.haber))
+
     return {
       atenciones: asistidos.length,
       ausencias: ausentes.length,
@@ -428,9 +451,28 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       maxSaldoAbs,
       mejorDia,
       hayRecaudacion,
+      ticketPromedio,
+      recaudSemana,
+      maxSemana,
       sinTurnos: todos.length === 0,
     }
   }, [turnosPorDia, libro, patients, currentMonth])
+
+  // Serie del gráfico de movimiento diario según la vista elegida (saldo/haber/debe/acumulado)
+  const serieRecaud = useMemo(() => {
+    const dias = metrics.recaudPorDia
+    if (vistaRecaud === "acum") {
+      let acc = 0
+      const vals = dias.map((d) => (acc += d.haber))
+      return { puntos: dias.map((d, i) => ({ dia: d.dia, fecha: d.fecha, val: vals[i] })), max: Math.max(1, ...vals) }
+    }
+    const pick = (d: (typeof dias)[number]) =>
+      vistaRecaud === "haber" ? d.haber : vistaRecaud === "debe" ? d.debe : d.saldo
+    return {
+      puntos: dias.map((d) => ({ dia: d.dia, fecha: d.fecha, val: pick(d) })),
+      max: Math.max(1, ...dias.map((d) => Math.abs(pick(d)))),
+    }
+  }, [metrics.recaudPorDia, vistaRecaud])
 
   const mesNombre = format(currentMonth, "MMMM", { locale: es })
   const mesLabel = format(currentMonth, "MMMM yyyy", { locale: es })
@@ -473,6 +515,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
             ["Recaudado (Haber)", formatMoney(metrics.totalHaber)],
             ["Egresos (Debe)", formatMoney(metrics.totalDebe)],
             ["Saldo neto", formatMoney(metrics.saldoMes)],
+            ["Ticket promedio", formatMoney(metrics.ticketPromedio)],
             ["— Particular", formatMoney(libro.haberParticular)],
             ["— Obra Social", formatMoney(libro.haberObraSocial)],
             ["— Ingresos varios", formatMoney(libro.haberIngreso)],
@@ -678,14 +721,6 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       {/* Recaudación (libro diario) */}
       <SectionTitle>Recaudación</SectionTitle>
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4">
-        {metrics.mejorDia && (
-          <div className="flex justify-end mb-3">
-            <p className="text-[11px] text-slate-400 truncate">
-              Mejor día: {format(parseISO(metrics.mejorDia.fecha), "d 'de' MMM", { locale: es })} · {formatMoney(metrics.mejorDia.saldo)}
-            </p>
-          </div>
-        )}
-
         {!metrics.hayRecaudacion ? (
           <div className="py-8 text-center">
             <Coins className="h-8 w-8 text-slate-200 mx-auto mb-2" />
@@ -696,50 +731,125 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               <MoneyCard icon={Banknote} label="Recaudado" value={formatMoney(metrics.totalHaber)} detail="ingresos (Haber)" tone="green" trend={<Trend pct={pctCambio(metrics.totalHaber, prev.recaudado)} />} />
-              <MoneyCard icon={ArrowDownCircle} label="Egresos" value={formatMoney(metrics.totalDebe)} detail="gastos (Debe)" tone="orange" />
-              <MoneyCard icon={Coins} label="Saldo neto" value={formatMoney(metrics.saldoMes)} detail={`en ${mesNombre}`} tone={metrics.saldoMes >= 0 ? "green" : "red"} />
-              <MoneyCard icon={TrendingUp} label="Promedio diario" value={formatMoney(metrics.promedioRecaud)} detail={`${metrics.diasConMovimiento} día${metrics.diasConMovimiento !== 1 ? "s" : ""} con caja`} tone="slate" />
+              <MoneyCard icon={ArrowDownCircle} label="Egresos" value={formatMoney(metrics.totalDebe)} detail="gastos (Debe)" tone="orange" trend={<Trend pct={pctCambio(metrics.totalDebe, prev.egresos)} higherIsBetter={false} />} />
+              <MoneyCard icon={Coins} label="Saldo neto" value={formatMoney(metrics.saldoMes)} detail={`en ${mesNombre}`} tone={metrics.saldoMes >= 0 ? "green" : "red"} trend={<Trend pct={pctCambio(metrics.saldoMes, prev.saldo)} />} />
+              <MoneyCard icon={Wallet} label="Ticket promedio" value={formatMoney(metrics.ticketPromedio)} detail="por atención" tone="slate" />
             </div>
 
-            <p className="text-xs font-medium text-slate-500 mb-2">Saldo por día</p>
-            <div className="flex items-end gap-[3px] h-28">
-              {metrics.recaudPorDia.map(({ dia, fecha, saldo }) => {
-                const cero = saldo === 0
-                const altura = cero ? 3 : Math.max(8, (Math.abs(saldo) / metrics.maxSaldoAbs) * 90)
+            {/* Movimiento diario — interactivo (toggle de vista + hover por día) */}
+            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+              <p className="text-xs font-medium text-slate-500">Movimiento diario</p>
+              <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px]">
+                {VISTAS_RECAUD.map(({ k, label }) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setVistaRecaud(k)}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors ${vistaRecaud === k ? "bg-white text-[#001633] shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {(() => {
+              const d = hoverDia != null ? metrics.recaudPorDia.find((x) => x.dia === hoverDia) : null
+              const haber = d ? d.haber : metrics.totalHaber
+              const debe = d ? d.debe : metrics.totalDebe
+              const saldo = d ? d.saldo : metrics.saldoMes
+              return (
+                <div className="flex items-baseline justify-between gap-2 mb-2 text-[11px]">
+                  <span className="font-medium text-slate-600 truncate">
+                    {d ? format(parseISO(d.fecha), "EEEE d 'de' MMM", { locale: es }) : `Total de ${mesNombre}`}
+                  </span>
+                  <span className="text-slate-400 tabular-nums whitespace-nowrap">
+                    Haber <span className="font-medium text-emerald-600">{formatMoney(haber)}</span>
+                    {"  ·  "}Debe <span className="font-medium text-orange-600">{formatMoney(debe)}</span>
+                    {"  ·  "}Saldo <span className={`font-medium ${saldo >= 0 ? "text-slate-700" : "text-red-600"}`}>{formatMoney(saldo)}</span>
+                  </span>
+                </div>
+              )
+            })()}
+
+            <div className="flex items-end gap-[3px] h-28" onMouseLeave={() => setHoverDia(null)}>
+              {serieRecaud.puntos.map(({ dia, fecha, val }) => {
+                const cero = val === 0
+                const altura = cero ? 3 : Math.max(8, (Math.abs(val) / serieRecaud.max) * 90)
+                const color = cero
+                  ? "bg-slate-100"
+                  : vistaRecaud === "saldo"
+                  ? val > 0
+                    ? "bg-emerald-500"
+                    : "bg-red-400"
+                  : vistaRecaud === "debe"
+                  ? "bg-orange-400"
+                  : vistaRecaud === "acum"
+                  ? "bg-[#001633]"
+                  : "bg-emerald-500"
+                const activo = hoverDia === dia
                 return (
                   <div
                     key={dia}
                     className="flex-1 flex flex-col items-center gap-1 min-w-0"
-                    title={`${format(parseISO(fecha), "EEEE d", { locale: es })}: ${formatMoney(saldo)}`}
+                    onMouseEnter={() => setHoverDia(dia)}
+                    title={`${format(parseISO(fecha), "EEEE d", { locale: es })}: ${formatMoney(val)}`}
                   >
                     <div className="w-full flex items-end" style={{ height: "90px" }}>
                       <div
-                        className={`w-full rounded-t transition-all ${cero ? "bg-slate-100" : saldo > 0 ? "bg-emerald-500" : "bg-red-400"}`}
+                        className={`w-full rounded-t transition-all ${color} ${activo ? "ring-2 ring-[#001633]/30" : ""}`}
                         style={{ height: `${altura}px` }}
                       />
                     </div>
-                    <span className="text-[9px] tabular-nums text-slate-400">{dia}</span>
+                    <span className={`text-[9px] tabular-nums ${activo ? "text-[#001633] font-semibold" : "text-slate-400"}`}>{dia}</span>
                   </div>
                 )
               })}
             </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              Promedio {formatMoney(metrics.promedioRecaud)} · {metrics.diasConMovimiento} día{metrics.diasConMovimiento !== 1 ? "s" : ""} con caja
+              {metrics.mejorDia && <> · mejor día {format(parseISO(metrics.mejorDia.fecha), "d 'de' MMM", { locale: es })} ({formatMoney(metrics.mejorDia.saldo)})</>}
+            </p>
 
-            {fuentesRecaud.fuentes.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-slate-100">
-                <p className="text-xs font-medium text-slate-500 mb-2">Origen de la recaudación</p>
+            {/* Origen de la recaudación + recaudación por día de semana */}
+            <div className="grid lg:grid-cols-2 gap-x-6 gap-y-4 mt-4 pt-4 border-t border-slate-100">
+              {fuentesRecaud.fuentes.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 mb-2">Origen de la recaudación</p>
+                  <div className="space-y-2">
+                    {fuentesRecaud.fuentes.map(({ label, monto, color }) => {
+                      const total = fuentesRecaud.fuentes.reduce((s, f) => s + f.monto, 0)
+                      const pct = total ? (monto / total) * 100 : 0
+                      return (
+                        <div key={label} className="flex items-center gap-2 text-xs">
+                          <span className="w-24 truncate text-slate-600">{label}</span>
+                          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${color}`} style={{ width: `${(monto / fuentesRecaud.max) * 100}%` }} />
+                          </div>
+                          <span className="w-9 text-right text-slate-400 tabular-nums">{pct.toFixed(0)}%</span>
+                          <span className="w-24 text-right text-slate-500 tabular-nums">{formatMoney(monto)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-2">Recaudación por día de semana</p>
                 <div className="space-y-2">
-                  {fuentesRecaud.fuentes.map(({ label, monto, color }) => (
+                  {metrics.recaudSemana.map(({ label, haber }) => (
                     <div key={label} className="flex items-center gap-2 text-xs">
-                      <span className="w-28 truncate text-slate-600">{label}</span>
+                      <span className="w-10 text-slate-600">{label}</span>
                       <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${color}`} style={{ width: `${(monto / fuentesRecaud.max) * 100}%` }} />
+                        <div className="h-full rounded-full bg-[#001633]" style={{ width: `${(haber / metrics.maxSemana) * 100}%` }} />
                       </div>
-                      <span className="w-24 text-right text-slate-500 tabular-nums">{formatMoney(monto)}</span>
+                      <span className="w-24 text-right text-slate-500 tabular-nums">{formatMoney(haber)}</span>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
+            </div>
           </>
         )}
       </div>

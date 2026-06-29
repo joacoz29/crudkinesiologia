@@ -12,8 +12,84 @@ import { Tratamiento } from "@/types"
 import { usePatients } from "@/lib/patients-store"
 import { sugerenciasDoctores } from "@/lib/doctores"
 
-// id del <datalist> de médicos, compartido por los dos inputs de doctor
-const DATALIST_DOCTORES = "doctores-derivantes"
+// Autocompletado de médico: input + dropdown propio (mismo look que el buscador de
+// pacientes) con teclado (↑↓/Enter/Esc). Permite texto libre (cargar un médico
+// nuevo) y sugiere los existentes ya fusionados. Sin dependencias ni lecturas extra.
+function DoctorAutocomplete({
+  value,
+  onChange,
+  sugerencias,
+  placeholder,
+  className,
+}: {
+  value: string
+  onChange: (v: string) => void
+  sugerencias: string[]
+  placeholder?: string
+  className?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [highlight, setHighlight] = useState(-1)
+
+  const filtered = useMemo(() => {
+    const q = value.trim().toLowerCase()
+    const base = q
+      ? sugerencias.filter((s) => s.toLowerCase().includes(q) && s.toLowerCase() !== q)
+      : sugerencias
+    return base.slice(0, 8)
+  }, [value, sugerencias])
+
+  const pick = (s: string) => {
+    onChange(s)
+    setOpen(false)
+    setHighlight(-1)
+  }
+
+  return (
+    <div className="relative">
+      <Input
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setHighlight(-1) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") {
+            if (!open) { setOpen(true); return }
+            e.preventDefault()
+            setHighlight((h) => Math.min(h + 1, filtered.length - 1))
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault()
+            setHighlight((h) => Math.max(h - 1, 0))
+          } else if (e.key === "Enter") {
+            if (open && highlight >= 0 && filtered[highlight]) { e.preventDefault(); pick(filtered[highlight]) }
+          } else if (e.key === "Escape") {
+            setOpen(false)
+          }
+        }}
+        placeholder={placeholder}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        className={className}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-52 overflow-y-auto">
+          {filtered.map((s, i) => (
+            <button
+              key={s}
+              type="button"
+              className={`w-full text-left px-3 py-2 text-sm transition-colors ${i === highlight ? "bg-[#001633]/5 text-[#001633]" : "hover:bg-gray-50"}`}
+              onMouseDown={(e) => { e.preventDefault(); pick(s) }}
+              onMouseEnter={() => setHighlight(i)}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function getCurrentArgentinaDateTime() {
   return formatTZ(new Date(), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
@@ -110,13 +186,6 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
 
   return (
     <div className="space-y-4 border-t border-slate-100 pt-5">
-      {/* Sugerencias de médicos ya cargados (los dos inputs de doctor lo comparten) */}
-      <datalist id={DATALIST_DOCTORES}>
-        {doctoresSugeridos.map((d) => (
-          <option key={d} value={d} />
-        ))}
-      </datalist>
-
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tratamientos</h3>
         <Button
@@ -169,12 +238,11 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-gray-500">Doctor</Label>
-              <Input
+              <DoctorAutocomplete
                 value={newDoctor}
-                onChange={(e) => setNewDoctor(e.target.value)}
+                onChange={setNewDoctor}
+                sugerencias={doctoresSugeridos}
                 placeholder="Nombre del médico"
-                list={DATALIST_DOCTORES}
-                autoComplete="off"
                 className="h-8 text-sm border-slate-200 focus:border-[#001633]"
               />
             </div>
@@ -214,12 +282,12 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
             const fechaLabel = isValid(fechaDate) ? format(fechaDate, "dd/MM/yyyy") : ""
 
             return (
-              <div key={trat.id} className="border border-gray-200 rounded-lg overflow-hidden">
+              <div key={trat.id} className="border border-gray-200 rounded-lg">
                 {/* Header accordion */}
                 <button
                   type="button"
                   onClick={() => toggleExpanded(trat.id)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                  className={`w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left ${isExpanded ? "rounded-t-lg" : "rounded-lg"}`}
                 >
                   <div className="flex items-center gap-2 flex-wrap">
                     <ChevronDown
@@ -275,12 +343,11 @@ export function TratamientosAccordion({ tratamientos, onChange, onSessionAdded }
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs text-gray-500">Doctor</Label>
-                        <Input
+                        <DoctorAutocomplete
                           value={trat.doctor ?? ""}
-                          onChange={(e) => updateTrat(trat.id, { doctor: e.target.value })}
+                          onChange={(v) => updateTrat(trat.id, { doctor: v })}
+                          sugerencias={doctoresSugeridos}
                           placeholder="—"
-                          list={DATALIST_DOCTORES}
-                          autoComplete="off"
                           className="h-7 text-sm border-slate-200 focus:border-[#001633]"
                         />
                       </div>

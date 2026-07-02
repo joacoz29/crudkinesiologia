@@ -157,7 +157,7 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fechaNacimiento">Fecha de nacimiento</Label>
-                <Input id="fechaNacimiento" type="date" autoComplete="off" min="1900-01-01" max={new Date().toISOString().slice(0, 10)} value={patient.fechaNacimiento} onChange={(e) => setPatient({ ...patient, fechaNacimiento: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+                <Input id="fechaNacimiento" type="date" autoComplete="off" required min="1900-01-01" max={new Date().toISOString().slice(0, 10)} value={patient.fechaNacimiento} onChange={(e) => setPatient({ ...patient, fechaNacimiento: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
                 {edadDesdeFecha(patient.fechaNacimiento) !== null && (
                   <p className="text-xs text-slate-400">{edadDesdeFecha(patient.fechaNacimiento)} años</p>
                 )}

@@ -10,6 +10,7 @@ import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetch
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { rankDerivantes } from "@/lib/doctores"
+import { edadActual } from "@/lib/edad"
 import { Button } from "@/components/ui/button"
 import { Patient, Turno } from "@/types"
 
@@ -295,8 +296,8 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
       else if (s.startsWith("f")) femenino++
       else if (s) otroSexo++
 
-      const edad = parseInt(p.edad, 10)
-      if (Number.isNaN(edad) || edad <= 0) sinEdad++
+      const edad = edadActual(p)
+      if (edad === null) sinEdad++
       else (edadBuckets.find((b) => edad >= b.min && edad <= b.max) ?? edadBuckets[4]).count++
 
       if (p.doctor) docList.push(p.doctor)

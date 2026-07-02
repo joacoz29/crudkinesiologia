@@ -29,6 +29,7 @@ export interface Patient {
   nombre: string
   apellido: string
   edad: string
+  fechaNacimiento?: string // "yyyy-MM-dd"; la edad mostrada se deriva de acá (edad queda como snapshot legacy)
   dni: string
   obraSocial: string
   nroAFL: string

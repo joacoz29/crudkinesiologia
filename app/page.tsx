@@ -14,6 +14,7 @@ import { db, auth } from "@/lib/firebase"
 import { ref, update } from "firebase/database"
 import { countSesionesEnHistorial, fetchTurnosPorPaciente, writeLog } from "@/lib/helpers"
 import { usePatients, queryPatients } from "@/lib/patients-store"
+import { edadActual } from "@/lib/edad"
 import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
@@ -521,7 +522,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
                               </TableCell>
                               <TableCell className="py-3 font-semibold text-slate-900">{patient.nombre}</TableCell>
                               <TableCell className="py-3 font-semibold text-slate-900">{patient.apellido}</TableCell>
-                              <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{patient.edad}</TableCell>
+                              <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{edadActual(patient) ?? "—"}</TableCell>
                               <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{patient.dni}</TableCell>
                               <TableCell className="py-3 text-sm text-slate-600 font-medium hidden sm:table-cell">{patient.obraSocial}</TableCell>
                               <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{patient.nroAFL}</TableCell>

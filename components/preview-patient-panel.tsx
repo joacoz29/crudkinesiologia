@@ -6,6 +6,7 @@ import { format, isValid } from "date-fns"
 import { format as formatTZ } from "date-fns-tz"
 import { Eye, X } from "lucide-react"
 import { parseTratamientosRaw } from "@/lib/helpers"
+import { edadActual } from "@/lib/edad"
 import { sessionBadgeClass } from "@/components/tratamientos-accordion"
 import { Patient } from "@/types"
 import { cn } from "@/lib/utils"
@@ -117,7 +118,7 @@ export function PreviewPatientPanel({ patient, onClose }: PreviewPatientPanelPro
                     <Field label="Nombre" value={display.nombre} />
                     <Field label="Apellido" value={display.apellido} />
                     <Field label="Sexo" value={display.sexo ? cap(display.sexo) : ""} />
-                    <Field label="Edad" value={display.edad} />
+                    <Field label="Edad" value={edadActual(display)?.toString()} />
                     <Field label="DNI" value={display.dni} />
                     <Field label="Teléfono" value={display.telefono} />
                     <Field label="Domicilio" value={display.domicilio} className="col-span-2" />

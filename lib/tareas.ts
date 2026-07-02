@@ -1,5 +1,6 @@
 import { Patient, Turno } from "@/types"
 import { getSessionStats, parseTratamientosRaw, horaToMin } from "@/lib/helpers"
+import { edadActual } from "@/lib/edad"
 
 // ───────────────────────────────────────────────────────────────────────────
 // Pestaña "Pendientes" (v1) — tareas DERIVADAS de datos ya cacheados.
@@ -40,12 +41,14 @@ const CAMPOS_BASICOS: {
   severidad: TareaSeveridad
   /** El dni puede venir como número legacy: se chequea por dígitos, no por string */
   digits?: boolean
+  /** Chequeo custom de "faltante" (edad falta si no hay ni fecha de nacimiento ni edad legacy) */
+  check?: (p: Patient) => boolean
 }[] = [
   { key: "telefono", label: "teléfono", severidad: "media" },
   { key: "dni", label: "DNI", severidad: "media", digits: true },
   { key: "obraSocial", label: "obra social", severidad: "baja" },
   { key: "diagnostico", label: "diagnóstico", severidad: "media" },
-  { key: "edad", label: "edad", severidad: "baja" },
+  { key: "edad", label: "edad", severidad: "baja", check: (p) => edadActual(p) === null },
 ]
 
 const esVacio = (v: unknown): boolean => String(v ?? "").trim() === ""
@@ -79,7 +82,9 @@ export function computeTareasPacientes(patients: Patient[]): Tarea[] {
 
     // 1) Datos básicos faltantes
     for (const campo of CAMPOS_BASICOS) {
-      const faltante = campo.digits
+      const faltante = campo.check
+        ? campo.check(p)
+        : campo.digits
         ? soloDigitos(p[campo.key]) === ""
         : esVacio(p[campo.key])
       if (faltante) {

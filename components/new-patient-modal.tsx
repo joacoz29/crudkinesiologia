@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import { db, auth } from "@/lib/firebase"
 import { ref, push } from "firebase/database"
 import { writeLog, appendSesionAlHistorial } from "@/lib/helpers"
+import { edadDesdeFecha } from "@/lib/edad"
 import { usePatients } from "@/lib/patients-store"
 import { TratamientosAccordion } from "@/components/tratamientos-accordion"
 import { Tratamiento } from "@/types"
@@ -36,6 +37,7 @@ const EMPTY_PATIENT = {
   sexo: "masculino",
   dni: "",
   edad: "",
+  fechaNacimiento: "",
   domicilio: "",
   obraSocial: "",
   nroAFL: "",
@@ -83,9 +85,12 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
     try {
       const currentUser = auth.currentUser
       const latestTrat = tratamientos.length > 0 ? tratamientos[tratamientos.length - 1] : null
+      // Si cargaron fecha de nacimiento, la edad guardada es el snapshot calculado
+      const edadSnap = patient.fechaNacimiento ? String(edadDesdeFecha(patient.fechaNacimiento) ?? "") : patient.edad
 
       const newRef = await push(ref(db, "pacientes"), {
         ...patient,
+        edad: edadSnap,
         sesiones: sesionesText ? [sesionesText] : [],
         ...(tratamientos.length > 0 && { tratamientos }),
         ...(latestTrat && { sesionesAutorizadas: latestTrat.sesionesAutorizadas }),
@@ -151,8 +156,11 @@ export function NewPatientModal({ open, onOpenChange }: NewPatientModalProps) {
                 <Input id="dni" inputMode="numeric" autoComplete="off" value={patient.dni} onChange={(e) => setPatient({ ...patient, dni: e.target.value })} required className="border-slate-200 focus:border-[#001633]" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edad">Edad</Label>
-                <Input id="edad" inputMode="numeric" autoComplete="off" value={patient.edad} onChange={(e) => setPatient({ ...patient, edad: e.target.value })} required className="border-slate-200 focus:border-[#001633]" />
+                <Label htmlFor="fechaNacimiento">Fecha de nacimiento</Label>
+                <Input id="fechaNacimiento" type="date" autoComplete="off" min="1900-01-01" max={new Date().toISOString().slice(0, 10)} value={patient.fechaNacimiento} onChange={(e) => setPatient({ ...patient, fechaNacimiento: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+                {edadDesdeFecha(patient.fechaNacimiento) !== null && (
+                  <p className="text-xs text-slate-400">{edadDesdeFecha(patient.fechaNacimiento)} años</p>
+                )}
               </div>
             </div>
             <div className="space-y-2">

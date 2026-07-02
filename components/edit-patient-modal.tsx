@@ -14,6 +14,7 @@ import { es } from "date-fns/locale"
 import { ref, remove, update, get } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
 import { addToLibroDiario, appendSesionAlHistorial, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog, LogCambio } from "@/lib/helpers"
+import { edadDesdeFecha, edadActual } from "@/lib/edad"
 import { TratamientosAccordion } from "@/components/tratamientos-accordion"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
 import { toast } from "sonner"
@@ -53,7 +54,7 @@ function formatSesiones(text: string): string {
 // A nivel módulo para compartirlos entre handleSave y la detección de "cambios sin
 // guardar" (isDirty).
 const CAMPOS_LABEL: Partial<Record<keyof Patient, string>> = {
-  nombre: "Nombre", apellido: "Apellido", edad: "Edad", dni: "DNI",
+  nombre: "Nombre", apellido: "Apellido", edad: "Edad", fechaNacimiento: "Fecha de nacimiento", dni: "DNI",
   obraSocial: "Obra Social", nroAFL: "N°AFL", telefono: "Teléfono",
   domicilio: "Domicilio", anotaciones: "Anotaciones", sexo: "Sexo",
 }
@@ -354,6 +355,11 @@ export function EditPatientModal({
           usuario: auth.currentUser?.displayName || auth.currentUser?.email || "Unknown",
         },
       }
+      // Edad guardada = snapshot calculado desde la fecha de nacimiento, si hay
+      if (updatedPatient.fechaNacimiento) {
+        const snap = edadDesdeFecha(updatedPatient.fechaNacimiento)
+        if (snap !== null) updatedPatient.edad = String(snap)
+      }
 
       const cambios: LogCambio = {}
       for (const campo of Object.keys(CAMPOS_LABEL) as (keyof Patient)[]) {
@@ -491,8 +497,13 @@ export function EditPatientModal({
                   <Input id="dni" inputMode="numeric" autoComplete="off" value={editedPatient.dni} onChange={(e) => setEditedPatient({ ...editedPatient, dni: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edad">Edad</Label>
-                  <Input id="edad" inputMode="numeric" autoComplete="off" value={editedPatient.edad} onChange={(e) => setEditedPatient({ ...editedPatient, edad: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+                  <Label htmlFor="fechaNacimiento">Fecha de nacimiento</Label>
+                  <Input id="fechaNacimiento" type="date" autoComplete="off" min="1900-01-01" max={new Date().toISOString().slice(0, 10)} value={editedPatient.fechaNacimiento ?? ""} onChange={(e) => setEditedPatient({ ...editedPatient, fechaNacimiento: e.target.value })} className="border-slate-200 focus:border-[#001633]" />
+                  <p className="text-xs text-slate-400">
+                    {edadActual(editedPatient) !== null
+                      ? `${edadActual(editedPatient)} años${!editedPatient.fechaNacimiento ? " · edad cargada; agregá la fecha para que se actualice sola" : ""}`
+                      : "Sin edad ni fecha de nacimiento"}
+                  </p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -749,7 +760,7 @@ export function EditPatientModal({
             <h2 className="text-xl font-bold">{editedPatient.nombre} {editedPatient.apellido}</h2>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-3 text-sm">
               <div><span className="font-semibold">DNI:</span> {editedPatient.dni || "—"}</div>
-              <div><span className="font-semibold">Edad:</span> {editedPatient.edad || "—"}</div>
+              <div><span className="font-semibold">Edad:</span> {edadActual(editedPatient) ?? "—"}</div>
               <div><span className="font-semibold">Sexo:</span> {editedPatient.sexo || "—"}</div>
               <div><span className="font-semibold">Teléfono:</span> {editedPatient.telefono || "—"}</div>
               <div className="col-span-2"><span className="font-semibold">Domicilio:</span> {editedPatient.domicilio || "—"}</div>

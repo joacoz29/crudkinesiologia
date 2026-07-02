@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
-import { MessageCircle, RefreshCw, Trash2, Loader2, Printer } from "lucide-react"
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { MessageCircle, RefreshCw, Trash2, Loader2, Printer, ChevronDown } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { format as formatTZ } from "date-fns-tz"
 import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
@@ -115,6 +115,15 @@ export function EditPatientModal({
 }: EditPatientModalProps) {
   const [editedPatient, setEditedPatient] = useState<Patient | null>(null)
   const [sesionesText, setSesionesText] = useState("")
+  // Historial libre colapsable (cerrado por default). `inert` saca el textarea del
+  // foco de teclado mientras está cerrado (mismo patrón que la pestaña Pendientes).
+  const [historialOpen, setHistorialOpen] = useState(false)
+  const historialRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (historialRef.current) historialRef.current.inert = !historialOpen
+  }, [historialOpen])
+  // Cerrado por default cada vez que se abre la ficha o cambia el paciente
+  useEffect(() => { setHistorialOpen(false) }, [open, patient?.id])
   const [isSaving, setIsSaving] = useState(false)
   const [turnos, setTurnos] = useState<TurnoConFecha[]>([])
   const [isLoadingTurnos, setIsLoadingTurnos] = useState(false)
@@ -527,15 +536,30 @@ export function EditPatientModal({
               onSessionAdded={(fechaHora) => setSesionesText((prev) => appendSesionAlHistorial(prev, fechaHora))}
             />
 
-            {/* Historial libre */}
-            <div className="space-y-2 border-t border-slate-100 pt-5">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Historial libre</h3>
-              <Textarea
-                value={sesionesText}
-                onChange={(e) => setSesionesText(e.target.value)}
-                className="min-h-[100px] border-slate-200 focus:border-[#001633] font-mono text-sm"
-                placeholder="Ej: 1-28/3/23 2-30/3/23 3-3/4/23"
-              />
+            {/* Historial libre — colapsable, cerrado por default */}
+            <div className="border-t border-slate-100 pt-5">
+              <button
+                type="button"
+                onClick={() => setHistorialOpen((v) => !v)}
+                aria-expanded={historialOpen}
+                className="group w-full flex items-center gap-2 text-left"
+              >
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 group-hover:text-slate-600 transition-colors">Historial libre</h3>
+                {sesionesText.trim() && !historialOpen && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#001633]/40 shrink-0" title="Tiene contenido" />
+                )}
+                <ChevronDown className={`ml-auto h-4 w-4 text-slate-400 transition-transform duration-200 motion-reduce:transition-none ${historialOpen ? "" : "-rotate-90"}`} />
+              </button>
+              <div className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${historialOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                <div ref={historialRef} className="overflow-hidden">
+                  <Textarea
+                    value={sesionesText}
+                    onChange={(e) => setSesionesText(e.target.value)}
+                    className="mt-2 min-h-[100px] border-slate-200 focus:border-[#001633] font-mono text-sm"
+                    placeholder="Ej: 1-28/3/23 2-30/3/23 3-3/4/23"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Turnos agendados */}

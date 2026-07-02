@@ -259,6 +259,15 @@ flowchart LR
 
 Hallazgos verificados contra el código (no asumidos). Ordenados por impacto aproximado.
 
+> **Actualización (jun 2026).** Cambios materiales desde esta revisión: **obs #8 resuelta**
+> (código muerto de auth borrado). Nuevos módulos puros: `lib/edad.ts` (la edad se deriva de un
+> nuevo campo `fechaNacimiento`; la `edad` guardada queda como snapshot legacy) y `lib/doctores.ts`
+> (dedup/canonicalización de médicos derivantes). Se centralizó `esParticular` (vacío / `-` /
+> `particular`) como criterio único de "cobertura particular", usado en el libro y en Datos. La
+> pestaña **"Pendientes" pasó a llamarse "Recepción"** (solo la etiqueta; el key interno
+> `pendientes` y `?tab=pendientes` no cambian). Se removió la cadena de toast de Radix sin usar (la
+> app usa `sonner`). Los cuellos de botella #1–#7 y #9 siguen vigentes.
+
 ### Cuellos de botella
 1. **`usePatients()` baja y mantiene en memoria la colección `pacientes` entera.** Filtrado,
    orden y paginación son en memoria. Es la decisión correcta para el costo de datos de **un**
@@ -300,13 +309,12 @@ Hallazgos verificados contra el código (no asumidos). Ordenados por impacto apr
    subcomponentes presentacionales y hooks (`useLibroDiario`, `useTurnoForm`).
 
 ### Seguridad / código muerto
-8. **Verificación de token server-side que no existe.** `getAuthHeaders()` en `auth-helper.ts`
-   está definido pero **nunca se usa**; su comentario ("verificado server-side con
-   `verifyIdToken`") y el skill `kine-dev` ("los endpoints autenticados verifican el ID token")
-   describen un control que **no está implementado**: las únicas dos API routes son **públicas**
-   y `verifyIdToken` no se llama en ningún lado. `adminAuth` de `firebase-admin.ts` también se
-   inicializa pero no se usa. **Acción:** borrar el código y los comentarios muertos, o
-   implementar la verificación si se planeaba.
+8. **✅ Resuelto (jun 2026) — código muerto de "auth verification".** Se borró `getAuthHeaders()`
+   (`auth-helper.ts`) y `adminAuth` (`firebase-admin.ts`), y se corrigió el skill `kine-dev` que
+   describía un control inexistente. Las dos API routes siguen siendo **públicas** y **no hay**
+   verificación de ID token server-side — pero ahora **ningún código finge tenerla**. Si a futuro
+   se agrega un endpoint autenticado que use identidad de usuario, implementar `verifyIdToken`
+   (admin SDK) ahí.
 9. **La seguridad de escritura depende 100% de reglas RTDB groseras.** Para
    `pacientes`/`turnos`/`libroDiario` la regla es solo `auth != null`: **cualquier** usuario
    autenticado (cualquier rol) puede escribir **cualquier forma** en esos nodos — sin validación
@@ -321,8 +329,8 @@ Hallazgos verificados contra el código (no asumidos). Ordenados por impacto apr
   *(Resuelve #3 y #4.)*
 - Partir `helpers.ts` y los componentes grandes; extraer un módulo de (de)serialización de
   dominio. *(Resuelve #5, #6, #7.)*
-- Limpiar `getAuthHeaders`/`adminAuth` y corregir los comentarios/skill, o implementar la
-  verificación. *(Resuelve #8.)*
+- ✅ **Hecho:** borrados `getAuthHeaders`/`adminAuth` y corregido el skill. *(Resuelve #8.)* La
+  verificación server-side solo hace falta si se agrega un endpoint autenticado.
 - Endurecer reglas RTDB (validación de forma + rol) en el roadmap de seguridad. *(Resuelve #9.)*
 
 ---

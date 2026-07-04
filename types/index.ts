@@ -1,5 +1,7 @@
 export type TurnoEstado = "pendiente" | "asistio" | "ausente" | "cancelado"
 
+export type Especialidad = "kinesiologia" | "traumatologia"
+
 export interface Tratamiento {
   id: string
   nroAutorizacion: string
@@ -20,6 +22,7 @@ export interface Turno {
   notas?: string
   estado: TurnoEstado
   justificado?: boolean
+  especialidad?: Especialidad // ausente = kinesiología (retrocompat)
 }
 
 export type TurnoConFecha = Turno & { fecha: string }

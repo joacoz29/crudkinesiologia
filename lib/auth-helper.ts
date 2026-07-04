@@ -1,8 +1,9 @@
 import { User } from 'firebase/auth'
+import { Especialidad } from '@/types'
 
 export const ADMIN_EMAIL = 'joaco@joaco.com.ar'
 
-export type UserRole = 'admin' | 'kinesiologo' | 'asistente'
+export type UserRole = 'admin' | 'kinesiologo' | 'asistente' | 'traumatologo'
 
 // Roles por cuenta. Admin ve todo; asistentes ven libro diario; kinesiólogos no.
 // Cuentas no mapeadas: sin rol → acceso mínimo (pacientes y calendario).
@@ -16,6 +17,8 @@ const ROLE_MAP: Record<string, UserRole> = {
   // Kinesiólogos
   'gonzalogonzalez@kinesiologia.com.ar': 'kinesiologo',
   'camilabaldi@kinesiologia.com.ar': 'kinesiologo',
+  // Traumatólogo (2da especialidad): agenda propia; ve la historia de kine read-only
+  'gustavogurpide@kinesiologia.com.ar': 'traumatologo',
   // Asistentes
   'karina@kinesiologia.com.ar': 'asistente',
   'karinadiaz@kinesiologia.com.ar': 'asistente',
@@ -47,6 +50,7 @@ const userNameMap: Record<string, string> = {
   'karinadiaz@kinesiologia.com.ar': 'Karina Díaz',
   'camilabaldi@kinesiologia.com.ar': 'Camila Baldi',
   'gonzalogonzalez@kinesiologia.com.ar': 'Gonzalo González',
+  'gustavogurpide@kinesiologia.com.ar': 'Gustavo Gurpide',
   'anatullio@kinesiologia.com.ar': 'Ana Tullio',
   'alanmartineztullio@kinesiologia.com.ar': 'Alan Martinez Tullio',
   'sofianussli@kinesiologia.com.ar': 'Sofia Nussli',
@@ -62,4 +66,15 @@ export function getUserDisplayName(user: User | null): string {
 
 export function isAdmin(user: User | null): boolean {
   return getUserRole(user) === 'admin'
+}
+
+// Especialidad "propia" del usuario: el traumatólogo trabaja en traumatología;
+// el resto (kine/asistente/admin/sin rol) en kinesiología por default.
+export function especialidadDe(user: User | null): Especialidad {
+  return getUserRole(user) === 'traumatologo' ? 'traumatologia' : 'kinesiologia'
+}
+
+// El admin puede alternar entre especialidades (ve las dos); el resto queda fijo.
+export function puedeCambiarEspecialidad(user: User | null): boolean {
+  return isAdmin(user)
 }

@@ -18,8 +18,8 @@ import { edadActual } from "@/lib/edad"
 import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
-import { Patient, Turno } from "@/types"
-import { getUserDisplayName, isAdmin, canAccessLibroDiario } from "@/lib/auth-helper"
+import { Patient, Turno, Especialidad } from "@/types"
+import { getUserDisplayName, isAdmin, canAccessLibroDiario, especialidadDe, puedeCambiarEspecialidad } from "@/lib/auth-helper"
 import { AdminPanel } from "@/components/admin-panel"
 import { TareasPendientes } from "@/components/tareas-pendientes"
 import { ConnectionStatus } from "@/components/connection-status"
@@ -79,6 +79,9 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   const [currentUser, setCurrentUser] = useState<string | null>(null)
   const [isAdminUser, setIsAdminUser] = useState(false)
   const [canSeeLibroDiario, setCanSeeLibroDiario] = useState(false)
+  // Contexto de especialidad activa (Fase 1). Fijo por rol; el admin puede alternar.
+  const [especialidad, setEspecialidad] = useState<Especialidad>("kinesiologia")
+  const [puedeElegirEsp, setPuedeElegirEsp] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -147,6 +150,8 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
         setCurrentUser(displayName)
         setIsAdminUser(isAdmin(user))
         setCanSeeLibroDiario(canAccessLibroDiario(user))
+        setEspecialidad(especialidadDe(user))
+        setPuedeElegirEsp(puedeCambiarEspecialidad(user))
       } else {
         router.push("/login")
       }
@@ -301,6 +306,24 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
               <p className="text-xs text-white/50 mt-0.5">Lic. Ana Patricia Tullio</p>
             </div>
             <div className="flex items-center gap-4">
+              {/* Contexto de especialidad (Fase 1): selector para admin, chip para el traumatólogo.
+                  Todavía no filtra la agenda — eso llega en la Fase 2. */}
+              {puedeElegirEsp ? (
+                <div className="inline-flex rounded-full bg-white/10 p-0.5 text-xs">
+                  {([["kinesiologia", "Kinesiología"], ["traumatologia", "Traumatología"]] as const).map(([e, label]) => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => setEspecialidad(e)}
+                      className={`px-3 py-1 rounded-full font-medium transition-colors ${especialidad === e ? "bg-white text-[#001633]" : "text-white/70 hover:text-white"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : especialidad === "traumatologia" ? (
+                <span className="px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-medium">Traumatología</span>
+              ) : null}
               <div className="bg-white text-[#001633] py-2 px-4 rounded-full flex items-center">
                 <span className="mr-2">
                   <User2 className="w-4 h-4" />

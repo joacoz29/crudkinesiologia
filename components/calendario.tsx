@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import {
   format,
   startOfMonth,
@@ -18,8 +18,8 @@ import {
 import { es } from "date-fns/locale"
 import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Turno, TurnoEstado } from "@/types"
-import { fetchTurnosPorRango, confirmarAsistencia, desconfirmarAsistencia } from "@/lib/helpers"
+import { Turno, TurnoEstado, Especialidad } from "@/types"
+import { fetchTurnosPorRango, confirmarAsistencia, desconfirmarAsistencia, esDeEspecialidad } from "@/lib/helpers"
 import { getCachedMonth, setCachedMonth, clearCachePrefix } from "@/lib/monthly-cache"
 import { fetchFeriados } from "@/lib/feriados"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
@@ -73,12 +73,15 @@ export function Calendario({
   refreshTrigger = 0,
   irAFecha,
   irAFechaNonce = 0,
+  especialidad = "kinesiologia",
 }: {
   refreshTrigger?: number
   /** Fecha (yyyy-MM-dd) a la que saltar (deep-link desde Pendientes) */
   irAFecha?: string
   /** Cambia cada vez que se pide saltar, para re-disparar aunque sea la misma fecha */
   irAFechaNonce?: number
+  /** Especialidad activa: filtra la agenda y taggea los turnos nuevos */
+  especialidad?: Especialidad
 }) {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()))
   const [turnosPorFecha, setTurnosPorFecha] = useState<Record<string, Turno[]>>({})
@@ -141,31 +144,32 @@ export function Calendario({
     [loadTurnos],
   )
 
-  // Turnos pendientes sin confirmar de los últimos 45 días (independiente del mes visible)
-  const [pendientesPasados, setPendientesPasados] = useState<{ count: number; fechaMasAntigua: string | null }>({
-    count: 0,
-    fechaMasAntigua: null,
-  })
+  // Turnos pendientes sin confirmar de los últimos 45 días (independiente del mes visible).
+  // Se guarda el crudo y el conteo se deriva por especialidad en memoria (sin re-fetch al togglear).
+  const [pendientesPasadosRaw, setPendientesPasadosRaw] = useState<Record<string, Turno[]>>({})
 
   const loadPendientesPasados = useCallback(async () => {
     try {
       const desde = format(subDays(new Date(), 45), "yyyy-MM-dd")
       const ayer = format(subDays(new Date(), 1), "yyyy-MM-dd")
-      const data = await fetchTurnosPorRango(desde, ayer)
-      let count = 0
-      let oldest: string | null = null
-      for (const [fecha, turnos] of Object.entries(data)) {
-        const pend = turnos.filter((t) => t.estado === "pendiente").length
-        if (pend > 0) {
-          count += pend
-          if (!oldest || fecha < oldest) oldest = fecha
-        }
-      }
-      setPendientesPasados({ count, fechaMasAntigua: oldest })
+      setPendientesPasadosRaw(await fetchTurnosPorRango(desde, ayer))
     } catch {
       // no crítico: el banner simplemente no se muestra
     }
   }, [])
+
+  const pendientesPasados = useMemo(() => {
+    let count = 0
+    let fechaMasAntigua: string | null = null
+    for (const [fecha, turnos] of Object.entries(pendientesPasadosRaw)) {
+      const pend = turnos.filter((t) => t.estado === "pendiente" && esDeEspecialidad(t, especialidad)).length
+      if (pend > 0) {
+        count += pend
+        if (!fechaMasAntigua || fecha < fechaMasAntigua) fechaMasAntigua = fecha
+      }
+    }
+    return { count, fechaMasAntigua }
+  }, [pendientesPasadosRaw, especialidad])
 
   // Navegación de mes usa la caché; un cambio de refreshTrigger (re-entrar a la
   // pestaña o un cambio externo) invalida y baja fresco.
@@ -309,9 +313,19 @@ export function Calendario({
     weeks.push(days.slice(i, i + 7))
   }
 
-  // Solo el mes visible: turnosPorFecha también trae días de meses adyacentes de la grilla
+  // Filtra por la especialidad activa (en memoria, sin re-fetch). Legacy sin
+  // especialidad = kinesiología. Todos los consumidores usan esta versión.
+  const turnosVisibles = useMemo(() => {
+    const out: Record<string, Turno[]> = {}
+    for (const [fecha, ts] of Object.entries(turnosPorFecha)) {
+      out[fecha] = ts.filter((t) => esDeEspecialidad(t, especialidad))
+    }
+    return out
+  }, [turnosPorFecha, especialidad])
+
+  // Solo el mes visible: turnosVisibles también trae días de meses adyacentes de la grilla
   const monthPrefix = format(currentMonth, "yyyy-MM")
-  const allTurnos = Object.entries(turnosPorFecha)
+  const allTurnos = Object.entries(turnosVisibles)
     .filter(([fecha]) => fecha.startsWith(monthPrefix))
     .flatMap(([, turnos]) => turnos)
   const totalTurnos = allTurnos.filter((t) => t.estado !== "cancelado").length
@@ -319,7 +333,7 @@ export function Calendario({
   const asistieron = allTurnos.filter((t) => t.estado === "asistio").length
   const ausentes = allTurnos.filter((t) => t.estado === "ausente").length
   const selectedDateKey = format(selectedDate, "yyyy-MM-dd")
-  const selectedDateTurnos = turnosPorFecha[selectedDateKey] ?? []
+  const selectedDateTurnos = turnosVisibles[selectedDateKey] ?? []
 
   return (
     <div className="flex flex-col lg:flex-row lg:items-start">
@@ -424,7 +438,7 @@ export function Calendario({
                 const isSelected = isSameDay(day, selectedDate)
                 const isWeekend = getDay(day) === 0 || getDay(day) === 6
                 const dateKey = format(day, "yyyy-MM-dd")
-                const turnos = turnosPorFecha[dateKey] ?? []
+                const turnos = turnosVisibles[dateKey] ?? []
                 const turnosActivos = turnos.filter((t) => t.estado !== "cancelado")
                 const esFeriado = feriados[dateKey]
 
@@ -558,8 +572,9 @@ export function Calendario({
         fecha={selectedDate}
         horaInicial={nuevoTurnoHora}
         onSaved={handleTurnoSaved}
-        turnosPorFecha={turnosPorFecha}
+        turnosPorFecha={turnosVisibles}
         feriados={feriados}
+        especialidad={especialidad}
       />
 
       {/* Editar turno modal */}

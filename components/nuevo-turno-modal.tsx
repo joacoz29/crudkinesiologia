@@ -24,7 +24,7 @@ import { ref, push, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { writeLog, getSessionStats, horaToMin, minToHora } from "@/lib/helpers"
 import { usePatients, queryPatients } from "@/lib/patients-store"
-import { Patient, Turno } from "@/types"
+import { Patient, Turno, Especialidad } from "@/types"
 import { toast } from "sonner"
 import { AlertTriangle } from "lucide-react"
 
@@ -123,6 +123,8 @@ interface NuevoTurnoModalProps {
   onSaved: () => void
   turnosPorFecha: Record<string, Turno[]>
   feriados?: Record<string, string>
+  /** Especialidad con la que se crean los turnos (default kinesiología) */
+  especialidad?: Especialidad
   /** Paciente preseleccionado (p. ej. al agendar desde la pestaña Pendientes) */
   pacienteInicial?: Patient | null
   /** Mostrar un selector de fecha dentro del modal (cuando no se abre desde un día del calendario) */
@@ -139,6 +141,7 @@ export function NuevoTurnoModal({
   feriados = {},
   pacienteInicial = null,
   permitirElegirFecha = false,
+  especialidad = "kinesiologia",
 }: NuevoTurnoModalProps) {
   // Caché compartida: la búsqueda de pacientes se resuelve en memoria
   const { patients: allPatients, isLoading: isLoadingPatients } = usePatients()
@@ -283,6 +286,7 @@ export function NuevoTurnoModal({
       apellido: selectedPatient!.apellido,
       hora,
       estado: "pendiente",
+      especialidad,
     }
     if (notas.trim()) turnoBase.notas = notas.trim()
 

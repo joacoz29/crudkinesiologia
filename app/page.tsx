@@ -669,6 +669,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
             refreshTrigger={calendarioRefreshTrigger}
             irAFecha={calTarget?.fecha}
             irAFechaNonce={calTarget?.nonce}
+            especialidad={especialidad}
           />
         ) : activeTab === "pendientes" ? (
           (isAdminUser || canSeeLibroDiario)
@@ -704,6 +705,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
           turnosPorFecha={sinTurnos}
           feriados={agendaFeriados}
           onSaved={() => setCalendarioRefreshTrigger((t) => t + 1)}
+          especialidad={especialidad}
         />
       )}
 

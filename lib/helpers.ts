@@ -1,7 +1,7 @@
 import { ref, get, push, update, query, orderByKey, startAt, endAt } from "firebase/database"
 import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
-import { Patient, Tratamiento, Turno, TurnoConFecha, TurnoEstado } from "@/types"
+import { Patient, Tratamiento, Turno, TurnoConFecha, TurnoEstado, Especialidad } from "@/types"
 import { getUserDisplayName } from "@/lib/auth-helper"
 
 const TZ = "America/Argentina/Buenos_Aires"
@@ -25,6 +25,14 @@ export function horaToMin(h: string): number {
 export function minToHora(m: number): string {
   const c = Math.max(0, Math.min(24 * 60 - 1, m))
   return `${String(Math.floor(c / 60)).padStart(2, "0")}:${String(c % 60).padStart(2, "0")}`
+}
+
+// Un turno pertenece a una especialidad. Los turnos legacy sin `especialidad` se
+// tratan como kinesiología (retrocompat).
+export function esDeEspecialidad(t: { especialidad?: Especialidad }, esp: Especialidad): boolean {
+  return esp === "traumatologia"
+    ? t.especialidad === "traumatologia"
+    : (t.especialidad ?? "kinesiologia") === "kinesiologia"
 }
 
 export function parseTratamientosRaw(val: unknown): Tratamiento[] {
@@ -353,6 +361,16 @@ export async function confirmarAsistencia(params: {
   if (!turnoSnap.exists()) throw new Error("TURNO_NO_ENCONTRADO")
   const estadoPrevio = (turnoSnap.val() as Turno).estado
   if (estadoPrevio === "asistio") return { alreadyConfirmed: true }
+
+  // Turno de traumatología: confirmar solo marca el estado. NO registra sesión ni
+  // toca tratamientos/libro de kinesiología (trauma tiene su propio modelo — Fase 3).
+  if ((turnoSnap.val() as Turno).especialidad === "traumatologia") {
+    const upd: Record<string, unknown> = { [`turnos/${fecha}/${turnoId}/estado`]: "asistio" }
+    const rev: Record<string, unknown> = { [`turnos/${fecha}/${turnoId}/estado`]: estadoPrevio }
+    await update(ref(db), upd)
+    await writeLog({ accion: "confirmar_asistencia", detalle: `Confirmó asistencia (traumatología) de ${nombre} ${apellido} (${fecha} ${hora})`, entidadId: patientId })
+    return { alreadyConfirmed: false, revert: rev }
+  }
 
   const snap = await get(ref(db, `pacientes/${patientId}`))
   if (!snap.exists()) throw new Error("PACIENTE_NO_ENCONTRADO")

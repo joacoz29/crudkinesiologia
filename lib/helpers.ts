@@ -616,6 +616,7 @@ export async function deshacerAusente(
 export type LogAccion =
   | "crear_paciente"
   | "editar_paciente"
+  | "editar_traumatologia"
   | "eliminar_paciente"
   | "fusionar_pacientes"
   | "deshacer_fusion"

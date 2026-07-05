@@ -27,6 +27,18 @@ export interface Turno {
 
 export type TurnoConFecha = Turno & { fecha: string }
 
+// Sección de traumatología dentro de la ficha compartida. La escribe el
+// traumatólogo (y el admin); el resto la ve solo lectura. No toca los
+// tratamientos/sesiones de kinesiología (modelo propio, ver [[traumatologia-feature]]).
+export interface TraumatologiaFicha {
+  diagnostico?: string
+  notas?: string
+  ultima_actualizacion?: {
+    fecha: string
+    usuario: string
+  }
+}
+
 export interface Patient {
   id: string
   nombre: string
@@ -52,4 +64,5 @@ export interface Patient {
     fecha: string
     usuario: string
   }
+  traumatologia?: TraumatologiaFicha // sección del traumatólogo (2da especialidad)
 }

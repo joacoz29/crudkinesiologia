@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { NewPatientModal } from "@/components/new-patient-modal"
 import { EditPatientModal } from "@/components/edit-patient-modal"
+import { TraumaFichaModal } from "@/components/trauma-ficha-modal"
 import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
@@ -73,6 +74,7 @@ const TAB_LABELS: Record<string, string> = {
 export default function Page({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
+  const [traumaFichaOpen, setTraumaFichaOpen] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -191,15 +193,21 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   // (no por la metadata estática del layout).
   useEffect(() => {
     const fichaAbierta =
-      editModalOpen && selectedPatient ? `${selectedPatient.nombre} ${selectedPatient.apellido}` : null
+      (editModalOpen || traumaFichaOpen) && selectedPatient ? `${selectedPatient.nombre} ${selectedPatient.apellido}` : null
     const seccion = fichaAbierta ?? TAB_LABELS[activeTab] ?? ""
     const prefijo = activeTab === "pendientes" && pendientesCount > 0 ? `(${pendientesCount}) ` : ""
     document.title = seccion ? `${prefijo}${seccion} · Kinesiología Integral` : "Kinesiología Integral"
-  }, [activeTab, editModalOpen, selectedPatient, pendientesCount])
+  }, [activeTab, editModalOpen, traumaFichaOpen, selectedPatient, pendientesCount])
 
   const handleEdit = (patient: Patient) => {
     setSelectedPatient(patient)
-    setEditModalOpen(true)
+    // En contexto traumatología (el traumatólogo, o el admin con el selector en
+    // trauma) la ficha se abre en modo trauma: kine read-only + sección de trauma.
+    if (especialidad === "traumatologia") {
+      setTraumaFichaOpen(true)
+    } else {
+      setEditModalOpen(true)
+    }
   }
 
   // Abre la ficha del paciente desde cualquier pestaña (el EditPatientModal está
@@ -689,6 +697,14 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
         patient={selectedPatient}
         onSave={handleSaveEdit}
         setLibroDiarioUpdateTrigger={setLibroDiarioUpdateTrigger}
+      />
+
+      {/* Ficha en modo traumatología (kine solo lectura + sección de trauma editable).
+          Se abre desde la grilla cuando la especialidad activa es traumatología. */}
+      <TraumaFichaModal
+        open={traumaFichaOpen}
+        onOpenChange={setTraumaFichaOpen}
+        patient={selectedPatient}
       />
 
       {/* Agendar turno desde la grilla de pacientes (paciente preseleccionado) */}

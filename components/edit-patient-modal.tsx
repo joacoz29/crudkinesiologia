@@ -573,6 +573,31 @@ export function EditPatientModal({
               </div>
             </div>
 
+            {/* Traumatología — solo lectura acá; la edita el traumatólogo desde su ficha.
+                Se muestra solo si tiene contenido, para no ensuciar la ficha de kine. */}
+            {(editedPatient.traumatologia?.diagnostico?.trim() || editedPatient.traumatologia?.notas?.trim()) && (
+              <div className="border-t border-slate-100 pt-5">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Traumatología</h3>
+                  <span className="text-[10px] text-slate-400">· solo lectura</span>
+                </div>
+                <div className="mt-2 space-y-2 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+                  {editedPatient.traumatologia?.diagnostico?.trim() && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-400">Diagnóstico</p>
+                      <p className="text-sm text-slate-700">{editedPatient.traumatologia.diagnostico}</p>
+                    </div>
+                  )}
+                  {editedPatient.traumatologia?.notas?.trim() && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-400">Notas / evolución</p>
+                      <p className="whitespace-pre-wrap break-words text-sm text-slate-600">{editedPatient.traumatologia.notas}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Turnos agendados */}
             <div className="space-y-4 border-t border-slate-100 pt-5">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Turnos agendados</h3>

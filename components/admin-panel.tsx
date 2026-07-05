@@ -30,6 +30,7 @@ function Estrellas({ rating, size = "h-4 w-4" }: { rating: number; size?: string
 const ACCION_LABEL: Record<string, string> = {
   crear_paciente: "Crear paciente",
   editar_paciente: "Editar paciente",
+  editar_traumatologia: "Editar traumatología",
   eliminar_paciente: "Eliminar paciente",
   fusionar_pacientes: "Fusionar pacientes",
   deshacer_fusion: "Deshacer fusión",
@@ -58,6 +59,8 @@ function accionTheme(accion: string): { badge: string; dot: string } {
     return { badge: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" }
   if (accion === "reprogramar_turno")
     return { badge: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" }
+  if (accion === "editar_traumatologia")
+    return { badge: "bg-indigo-50 text-indigo-700 border-indigo-200", dot: "bg-indigo-500" }
   if (accion.startsWith("crear"))
     return { badge: "bg-green-50 text-green-700 border-green-200", dot: "bg-green-500" }
   if (accion.startsWith("editar"))

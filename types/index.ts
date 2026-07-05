@@ -27,10 +27,25 @@ export interface Turno {
 
 export type TurnoConFecha = Turno & { fecha: string }
 
+// Una consulta puntual de traumatología (una visita). El historial es la lista
+// de estas entradas: cada vez que el paciente vuelve se agrega una nueva, no se
+// pisa la anterior.
+export interface TraumatologiaConsulta {
+  id: string
+  fecha: string // "yyyy-MM-dd" de la consulta
+  diagnostico?: string
+  notas: string
+  usuario: string // quién la registró
+  createdAt: number // epoch ms; ordena el historial
+}
+
 // Sección de traumatología dentro de la ficha compartida. La escribe el
 // traumatólogo (y el admin); el resto la ve solo lectura. No toca los
 // tratamientos/sesiones de kinesiología (modelo propio, ver [[traumatologia-feature]]).
 export interface TraumatologiaFicha {
+  consultas?: TraumatologiaConsulta[]
+  // Legacy (previo al historial): un diagnóstico/nota plano que se pisaba en cada
+  // visita. Al leer se pliega como una consulta más (ver parseConsultasTrauma).
   diagnostico?: string
   notas?: string
   ultima_actualizacion?: {

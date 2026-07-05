@@ -1,7 +1,7 @@
 import { ref, get, push, update, query, orderByKey, startAt, endAt } from "firebase/database"
 import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
-import { Patient, Tratamiento, Turno, TurnoConFecha, TurnoEstado, Especialidad } from "@/types"
+import { Patient, Tratamiento, Turno, TurnoConFecha, TurnoEstado, Especialidad, TraumatologiaFicha, TraumatologiaConsulta } from "@/types"
 import { getUserDisplayName } from "@/lib/auth-helper"
 
 const TZ = "America/Argentina/Buenos_Aires"
@@ -57,6 +57,40 @@ export function parseTratamientosRaw(val: unknown): Tratamiento[] {
       ...(t.doctor != null && { doctor: String(t.doctor) }),
     }
   })
+}
+
+function normalizeConsultaTrauma(item: unknown): TraumatologiaConsulta {
+  const c = item as Record<string, unknown>
+  return {
+    id: String(c.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    fecha: String(c.fecha ?? ""),
+    ...(!!(c.diagnostico != null && String(c.diagnostico).trim()) && { diagnostico: String(c.diagnostico) }),
+    notas: String(c.notas ?? ""),
+    usuario: String(c.usuario ?? ""),
+    createdAt: Number(c.createdAt ?? 0),
+  }
+}
+
+// Historial de consultas de traumatología, más nuevas primero. Acepta la lista
+// como array u objeto (retrocompat RTDB) y pliega el formato legacy plano
+// ({diagnostico, notas} sueltos) como una consulta, para no perder lo ya cargado.
+export function parseConsultasTrauma(ficha: TraumatologiaFicha | undefined | null): TraumatologiaConsulta[] {
+  if (!ficha) return []
+  const raw: unknown = ficha.consultas
+  let list: TraumatologiaConsulta[] = []
+  if (Array.isArray(raw)) list = raw.filter(Boolean).map(normalizeConsultaTrauma)
+  else if (raw && typeof raw === "object") list = Object.values(raw as object).filter(Boolean).map(normalizeConsultaTrauma)
+  if (list.length === 0 && ((ficha.diagnostico ?? "").trim() || (ficha.notas ?? "").trim())) {
+    list = [{
+      id: "legacy",
+      fecha: (ficha.ultima_actualizacion?.fecha ?? "").slice(0, 10),
+      ...(!!(ficha.diagnostico ?? "").trim() && { diagnostico: String(ficha.diagnostico) }),
+      notas: (ficha.notas ?? "").trim(),
+      usuario: ficha.ultima_actualizacion?.usuario ?? "",
+      createdAt: 0,
+    }]
+  }
+  return list.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
 }
 
 // Sesiones usadas/autorizadas de un paciente: suma los tratamientos del acordeón,

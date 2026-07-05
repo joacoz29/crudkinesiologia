@@ -5,16 +5,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, Bone, Lock } from "lucide-react"
+import { Loader2, Bone, Lock, Plus, Trash2, Check, X } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { ref, update } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
-import { parseTratamientosRaw, writeLog } from "@/lib/helpers"
+import { parseTratamientosRaw, parseConsultasTrauma, writeLog } from "@/lib/helpers"
 import { edadActual } from "@/lib/edad"
 import { getUserDisplayName } from "@/lib/auth-helper"
-import { Patient } from "@/types"
+import { Patient, TraumatologiaConsulta } from "@/types"
 import { toast } from "sonner"
 
 interface TraumaFichaModalProps {
@@ -23,19 +23,37 @@ interface TraumaFichaModalProps {
   patient: Patient | null
 }
 
+const hoyISO = () => format(new Date(), "yyyy-MM-dd")
+const nuevoId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+function fmtFechaConsulta(f: string): string {
+  if (!f) return "Sin fecha"
+  const d = parseISO(f)
+  return isValid(d) ? format(d, "d 'de' MMM yyyy", { locale: es }) : f
+}
+
 // Ficha desde el lente del traumatólogo: los datos del paciente y la historia de
-// kinesiología van en SOLO LECTURA (modelo compartido, ver [[traumatologia-feature]]);
-// lo único editable es la sección de traumatología, que se guarda en
-// pacientes/{id}/traumatologia sin tocar los tratamientos/sesiones de kine.
+// kinesiología van en SOLO LECTURA (modelo compartido, ver [[traumatologia-feature]]).
+// La sección de trauma es un HISTORIAL: cada visita agrega una consulta nueva
+// (no se pisa la anterior), guardado en pacientes/{id}/traumatologia/consultas.
 export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaModalProps) {
+  // Form de "nueva consulta"
+  const [fecha, setFecha] = useState(hoyISO())
   const [diagnostico, setDiagnostico] = useState("")
   const [notas, setNotas] = useState("")
+  // Historial local: se siembra del paciente y se actualiza al agregar/eliminar,
+  // así la UI refleja el cambio sin depender de que el prop se refresque.
+  const [consultas, setConsultas] = useState<TraumatologiaConsulta[]>([])
   const [saving, setSaving] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!patient) return
-    setDiagnostico(patient.traumatologia?.diagnostico ?? "")
-    setNotas(patient.traumatologia?.notas ?? "")
+    setConsultas(parseConsultasTrauma(patient.traumatologia))
+    setFecha(hoyISO())
+    setDiagnostico("")
+    setNotas("")
+    setConfirmDeleteId(null)
   }, [patient])
 
   const tratamientos = useMemo(() => parseTratamientosRaw(patient?.tratamientos), [patient])
@@ -43,41 +61,63 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
 
   if (!patient) return null
 
-  const prevDiag = patient.traumatologia?.diagnostico ?? ""
-  const prevNotas = patient.traumatologia?.notas ?? ""
-  const dirty = diagnostico.trim() !== prevDiag.trim() || notas.trim() !== prevNotas.trim()
-
-  const ua = patient.traumatologia?.ultima_actualizacion
-  const uaFecha =
-    ua?.fecha && isValid(parseISO(ua.fecha))
-      ? format(parseISO(ua.fecha), "d 'de' MMMM yyyy, HH:mm", { locale: es })
-      : null
-
   const edad = edadActual(patient)
 
-  const handleSave = async () => {
+  // Persiste el historial completo en el sub-nodo traumatologia. Reemplaza el
+  // objeto entero: así, al primer guardado, se descartan los campos legacy
+  // (diagnostico/notas sueltos) sin tocar el resto de la ficha compartida.
+  const persistir = async (lista: TraumatologiaConsulta[], detalle: string) => {
+    await update(ref(db, `pacientes/${patient.id}`), {
+      traumatologia: {
+        consultas: lista,
+        ultima_actualizacion: { fecha: new Date().toISOString(), usuario: getUserDisplayName(auth.currentUser) },
+      },
+    })
+    await writeLog({ accion: "editar_traumatologia", detalle, entidadId: patient.id })
+  }
+
+  // Al persistir, una entrada legacy (si la hubiera) se materializa con id real.
+  const materializarLegacy = (c: TraumatologiaConsulta): TraumatologiaConsulta =>
+    c.id === "legacy" ? { ...c, id: nuevoId(), createdAt: c.createdAt || Date.now() - 1 } : c
+
+  const handleAgregar = async () => {
+    if (!notas.trim()) return
     setSaving(true)
     try {
-      const ficha = {
-        diagnostico: diagnostico.trim(),
+      const nueva: TraumatologiaConsulta = {
+        id: nuevoId(),
+        fecha: fecha || hoyISO(),
+        ...(!!diagnostico.trim() && { diagnostico: diagnostico.trim() }),
         notas: notas.trim(),
-        ultima_actualizacion: {
-          fecha: new Date().toISOString(),
-          usuario: getUserDisplayName(auth.currentUser),
-        },
+        usuario: getUserDisplayName(auth.currentUser),
+        createdAt: Date.now(),
       }
-      // Escritura dirigida al sub-nodo: no toca el resto de la ficha compartida.
-      await update(ref(db, `pacientes/${patient.id}`), { traumatologia: ficha })
-      await writeLog({
-        accion: "editar_traumatologia",
-        detalle: `Editó la ficha de traumatología de ${patient.nombre} ${patient.apellido}`,
-        entidadId: patient.id,
-      })
-      toast.success("Ficha de traumatología guardada")
-      onOpenChange(false)
+      const lista = [...consultas.map(materializarLegacy), nueva]
+      await persistir(lista, `Agregó una consulta de traumatología de ${patient.nombre} ${patient.apellido}`)
+      setConsultas(parseConsultasTrauma({ consultas: lista }))
+      setDiagnostico("")
+      setNotas("")
+      setFecha(hoyISO())
+      toast.success("Consulta agregada")
     } catch (e) {
-      console.error("Error guardando ficha de traumatología", e)
-      toast.error("No se pudo guardar la ficha")
+      console.error("Error agregando consulta de traumatología", e)
+      toast.error("No se pudo agregar la consulta")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEliminar = async (id: string) => {
+    setSaving(true)
+    try {
+      const lista = consultas.filter((c) => c.id !== id).map(materializarLegacy)
+      await persistir(lista, `Eliminó una consulta de traumatología de ${patient.nombre} ${patient.apellido}`)
+      setConsultas(parseConsultasTrauma({ consultas: lista }))
+      setConfirmDeleteId(null)
+      toast.success("Consulta eliminada")
+    } catch (e) {
+      console.error("Error eliminando consulta de traumatología", e)
+      toast.error("No se pudo eliminar la consulta")
     } finally {
       setSaving(false)
     }
@@ -143,59 +183,127 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
             )}
           </section>
 
-          {/* Traumatología — editable */}
+          {/* Traumatología — historial de consultas (editable) */}
           <section className="space-y-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-4">
             <div className="flex items-center gap-1.5">
               <Bone className="h-4 w-4 text-indigo-600" />
               <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Traumatología</h3>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="trauma-diag" className="text-xs text-slate-600">
-                Diagnóstico
-              </Label>
-              <Input
-                id="trauma-diag"
-                value={diagnostico}
-                onChange={(e) => setDiagnostico(e.target.value)}
-                placeholder="Ej: Lumbalgia mecánica, gonartrosis…"
-                className="border-indigo-200 bg-white focus:border-indigo-500"
-              />
+            {/* Nueva consulta */}
+            <div className="space-y-3 rounded-md border border-indigo-100 bg-white p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Nueva consulta</p>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="space-y-1.5 sm:w-44">
+                  <Label htmlFor="trauma-fecha" className="text-xs text-slate-600">
+                    Fecha
+                  </Label>
+                  <Input
+                    id="trauma-fecha"
+                    type="date"
+                    value={fecha}
+                    onChange={(e) => setFecha(e.target.value)}
+                    className="border-indigo-200 focus:border-indigo-500"
+                  />
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  <Label htmlFor="trauma-diag" className="text-xs text-slate-600">
+                    Diagnóstico <span className="text-slate-300">(opcional)</span>
+                  </Label>
+                  <Input
+                    id="trauma-diag"
+                    value={diagnostico}
+                    onChange={(e) => setDiagnostico(e.target.value)}
+                    placeholder="Ej: Lumbalgia mecánica, gonartrosis…"
+                    className="border-indigo-200 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="trauma-notas" className="text-xs text-slate-600">
+                  Notas / evolución
+                </Label>
+                <Textarea
+                  id="trauma-notas"
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
+                  placeholder="Motivo de consulta, indicaciones, órdenes, evolución…"
+                  className="min-h-[90px] border-indigo-200 text-sm focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  onClick={handleAgregar}
+                  disabled={!notas.trim() || saving}
+                  className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Agregar consulta
+                </Button>
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="trauma-notas" className="text-xs text-slate-600">
-                Notas / evolución
-              </Label>
-              <Textarea
-                id="trauma-notas"
-                value={notas}
-                onChange={(e) => setNotas(e.target.value)}
-                placeholder="Consultas, indicaciones, órdenes, evolución…"
-                className="min-h-[120px] border-indigo-200 bg-white text-sm focus:border-indigo-500"
-              />
-            </div>
-
-            {uaFecha && (
-              <p className="text-[11px] text-slate-400">
-                Última edición: {uaFecha}
-                {ua?.usuario ? ` · ${ua.usuario}` : ""}
+            {/* Historial de consultas */}
+            <div>
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                Historial de consultas{consultas.length > 0 ? ` · ${consultas.length}` : ""}
               </p>
-            )}
+              {consultas.length === 0 ? (
+                <p className="text-sm italic text-slate-400">Sin consultas registradas todavía.</p>
+              ) : (
+                <ol className="space-y-2">
+                  {consultas.map((c) => (
+                    <li key={c.id} className="rounded-md border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-indigo-700">{fmtFechaConsulta(c.fecha)}</p>
+                          {c.diagnostico && <p className="mt-0.5 text-sm font-medium text-slate-700">{c.diagnostico}</p>}
+                        </div>
+                        {confirmDeleteId === c.id ? (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleEliminar(c.id)}
+                              disabled={saving}
+                              className="rounded p-1 text-red-600 hover:bg-red-50"
+                              title="Confirmar eliminación"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              disabled={saving}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-100"
+                              title="Cancelar"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(c.id)}
+                            className="shrink-0 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                            title="Eliminar consulta"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">{c.notas}</p>
+                      {c.usuario && <p className="mt-1.5 text-[11px] text-slate-400">Registró: {c.usuario}</p>}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
           </section>
 
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
               Cerrar
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={!dirty || saving}
-              className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Guardar
             </Button>
           </div>
         </div>

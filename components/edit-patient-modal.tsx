@@ -13,7 +13,7 @@ import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { ref, remove, update, get } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
-import { addToLibroDiario, appendSesionAlHistorial, fetchTurnosPorPaciente, parseTratamientosRaw, writeLog, LogCambio } from "@/lib/helpers"
+import { addToLibroDiario, appendSesionAlHistorial, fetchTurnosPorPaciente, parseTratamientosRaw, parseConsultasTrauma, writeLog, LogCambio } from "@/lib/helpers"
 import { edadDesdeFecha, edadActual } from "@/lib/edad"
 import { TratamientosAccordion } from "@/components/tratamientos-accordion"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
@@ -574,29 +574,36 @@ export function EditPatientModal({
             </div>
 
             {/* Traumatología — solo lectura acá; la edita el traumatólogo desde su ficha.
-                Se muestra solo si tiene contenido, para no ensuciar la ficha de kine. */}
-            {(editedPatient.traumatologia?.diagnostico?.trim() || editedPatient.traumatologia?.notas?.trim()) && (
-              <div className="border-t border-slate-100 pt-5">
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Traumatología</h3>
-                  <span className="text-[10px] text-slate-400">· solo lectura</span>
+                Muestra el historial de consultas (más nuevas primero) si hay alguna. */}
+            {(() => {
+              const consultasTrauma = parseConsultasTrauma(editedPatient.traumatologia)
+              if (consultasTrauma.length === 0) return null
+              return (
+                <div className="border-t border-slate-100 pt-5">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Traumatología</h3>
+                    <span className="text-[10px] text-slate-400">
+                      · solo lectura · {consultasTrauma.length} consulta{consultasTrauma.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {consultasTrauma.map((c) => {
+                      const d = c.fecha ? parseISO(c.fecha) : null
+                      const fechaTxt = d && isValid(d) ? format(d, "d 'de' MMM yyyy", { locale: es }) : c.fecha || "Sin fecha"
+                      return (
+                        <div key={c.id} className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+                          <p className="text-[11px] font-semibold text-indigo-700">
+                            {fechaTxt}
+                            {c.diagnostico ? ` · ${c.diagnostico}` : ""}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">{c.notas}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-                <div className="mt-2 space-y-2 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
-                  {editedPatient.traumatologia?.diagnostico?.trim() && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wide text-slate-400">Diagnóstico</p>
-                      <p className="text-sm text-slate-700">{editedPatient.traumatologia.diagnostico}</p>
-                    </div>
-                  )}
-                  {editedPatient.traumatologia?.notas?.trim() && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wide text-slate-400">Notas / evolución</p>
-                      <p className="whitespace-pre-wrap break-words text-sm text-slate-600">{editedPatient.traumatologia.notas}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Turnos agendados */}
             <div className="space-y-4 border-t border-slate-100 pt-5">

@@ -124,6 +124,7 @@ export interface LibroDiarioEntry {
   // claves bajo `entradas/` son uuids aleatorios, así que sin esto Firebase las
   // devuelve ordenadas por uuid (azaroso), no por cuándo se agregaron.
   createdAt?: number
+  especialidad?: Especialidad // ausente = kinesiología (retrocompat)
 }
 
 // Normaliza las entradas del libro diario soportando ambos formatos:
@@ -211,6 +212,37 @@ export async function addToLibroDiario(entry: {
   })
 }
 
+// Registra un cobro de traumatología en el Libro Diario (caja). A diferencia de
+// las sesiones de kine (que crean una fila en $0 para que recepción complete el
+// monto), acá el traumatólogo ya sabe lo que cobró: se escribe el haber directo,
+// taggeado como traumatología. Sin dedup por paciente/día: cada consulta cobrada
+// es un movimiento propio (un paciente puede tener kine y trauma el mismo día).
+export async function registrarCobroTrauma(entry: {
+  nombreApellido: string
+  obraSocial: string
+  monto: number
+  fecha: string // yyyy-MM-dd
+}) {
+  if (!entry.monto || entry.monto <= 0) return
+  const particular = esParticular(entry.obraSocial)
+  const entryId = crypto.randomUUID()
+  const libroEntry: LibroDiarioEntry = {
+    id: entryId,
+    tipo: "Paciente",
+    nombreApellido: entry.nombreApellido,
+    cobertura: particular ? "Particular" : "Obra Social",
+    obraSocial: particular ? "-" : entry.obraSocial,
+    debe: 0,
+    haber: entry.monto,
+    especialidad: "traumatologia",
+    createdAt: Date.now(),
+  }
+  await update(ref(db), {
+    [`libroDiario/${entry.fecha}/fecha`]: entry.fecha,
+    [`libroDiario/${entry.fecha}/entradas/${entryId}`]: libroEntry,
+  })
+}
+
 export async function fetchTurnosPorRango(
   start: string,
   end: string
@@ -278,13 +310,25 @@ export async function fetchLogsMes(mesKey: string): Promise<LogEntry[]> {
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 }
 
-export interface LibroResumen {
+// Una "tajada" del resumen: haber/debe por día + desglose por cobertura/tipo.
+// Se usa tanto para el total como para cada especialidad.
+export interface LibroResumenSlice {
   porDia: Record<string, { haber: number; debe: number }>
   // Desglose de la recaudación (haber) y egresos (debe) del rango
   haberParticular: number // pacientes Particular
   haberObraSocial: number // pacientes con Obra Social
   haberIngreso: number    // entradas tipo Ingreso
   debeGasto: number       // entradas tipo Gasto
+}
+
+// El total (campos planos, retrocompat) + el mismo desglose partido por
+// especialidad (kinesiología incluye las entradas legacy sin tag).
+export interface LibroResumen extends LibroResumenSlice {
+  porEspecialidad: Record<Especialidad, LibroResumenSlice>
+}
+
+function emptyLibroSlice(): LibroResumenSlice {
+  return { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 }
 }
 
 // Resumen del libro diario en un rango (claves yyyy-MM-dd): haber/debe por día
@@ -297,33 +341,37 @@ export async function fetchLibroDiarioPorRango(
   const q = query(ref(db, "libroDiario"), orderByKey(), startAt(start), endAt(end))
   const snapshot = await get(q)
 
-  const porDia: Record<string, { haber: number; debe: number }> = {}
-  let haberParticular = 0
-  let haberObraSocial = 0
-  let haberIngreso = 0
-  let debeGasto = 0
+  const total = emptyLibroSlice()
+  const kine = emptyLibroSlice()
+  const trauma = emptyLibroSlice()
+
+  // Acumula una entrada (haber/debe por día + desglose por cobertura/tipo) en una tajada.
+  const acumular = (s: LibroResumenSlice, fecha: string, e: LibroDiarioEntry) => {
+    const h = Number(e.haber) || 0
+    const d = Number(e.debe) || 0
+    const dia = s.porDia[fecha] ?? (s.porDia[fecha] = { haber: 0, debe: 0 })
+    dia.haber += h
+    dia.debe += d
+    const tipo = e.tipo ?? "Paciente"
+    if (tipo === "Ingreso") s.haberIngreso += h
+    else if (tipo === "Gasto") s.debeGasto += d
+    else if (!esParticular(e.obraSocial)) s.haberObraSocial += h
+    else s.haberParticular += h
+  }
 
   if (snapshot.exists()) {
     snapshot.forEach((daySnap) => {
       const fecha = daySnap.key!
       const entradas = normalizeLibroEntradas((daySnap.val() as { entradas?: unknown })?.entradas)
-      let haber = 0
-      let debe = 0
       for (const e of entradas) {
-        const h = Number(e.haber) || 0
-        const d = Number(e.debe) || 0
-        haber += h
-        debe += d
-        const tipo = e.tipo ?? "Paciente"
-        if (tipo === "Ingreso") haberIngreso += h
-        else if (tipo === "Gasto") debeGasto += d
-        else if (!esParticular(e.obraSocial)) haberObraSocial += h
-        else haberParticular += h
+        // Entradas sin tag = kinesiología (retrocompat). El total suma todo.
+        const slice = e.especialidad === "traumatologia" ? trauma : kine
+        acumular(total, fecha, e)
+        acumular(slice, fecha, e)
       }
-      porDia[fecha] = { haber, debe }
     })
   }
-  return { porDia, haberParticular, haberObraSocial, haberIngreso, debeGasto }
+  return { ...total, porEspecialidad: { kinesiologia: kine, traumatologia: trauma } }
 }
 
 export async function fetchTurnosPorPaciente(patientId: string): Promise<TurnoConFecha[]> {

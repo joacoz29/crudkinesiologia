@@ -6,15 +6,40 @@ import { es } from "date-fns/locale"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity, Users, Stethoscope, Download, X } from "lucide-react"
-import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, esParticular, type Opinion, type LibroResumen } from "@/lib/helpers"
+import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, esParticular, esDeEspecialidad, type Opinion, type LibroResumen, type LibroResumenSlice } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { rankDerivantes } from "@/lib/doctores"
 import { edadActual } from "@/lib/edad"
 import { Button } from "@/components/ui/button"
-import { Patient, Turno } from "@/types"
+import { Patient, Turno, Especialidad } from "@/types"
 
-const EMPTY_LIBRO: LibroResumen = { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 }
+const EMPTY_LIBRO: LibroResumen = {
+  porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0,
+  porEspecialidad: {
+    kinesiologia: { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 },
+    traumatologia: { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 },
+  },
+}
+
+// Vista por especialidad de la pestaña Datos (Fase 4): "ambas" = todo junto.
+type EspView = "ambas" | Especialidad
+const VISTAS_ESP: { k: EspView; label: string }[] = [
+  { k: "ambas", label: "Ambas" },
+  { k: "kinesiologia", label: "Kinesiología" },
+  { k: "traumatologia", label: "Traumatología" },
+]
+
+// Filtra los turnos por día según la especialidad activa (para la actividad).
+function filtrarTurnosPorEsp(porDia: Record<string, Turno[]>, esp: EspView): Record<string, Turno[]> {
+  if (esp === "ambas") return porDia
+  const out: Record<string, Turno[]> = {}
+  for (const [f, ts] of Object.entries(porDia)) {
+    const filt = ts.filter((t) => esDeEspecialidad(t, esp))
+    if (filt.length) out[f] = filt
+  }
+  return out
+}
 
 // Vistas del gráfico de movimiento diario (toggle interactivo)
 const VISTAS_RECAUD = [
@@ -184,6 +209,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
   // Estado del gráfico interactivo de recaudación (vista elegida + día en hover)
   const [vistaRecaud, setVistaRecaud] = useState<VistaRecaud>("saldo")
   const [vistaAtenc, setVistaAtenc] = useState<VistaAtenc>("asistio")
+  const [espView, setEspView] = useState<EspView>("ambas")
   const [hoverDia, setHoverDia] = useState<number | null>(null)
   const [hoverAtenc, setHoverAtenc] = useState<number | null>(null)
   const [diaSelAtenc, setDiaSelAtenc] = useState<string | null>(null)
@@ -211,29 +237,42 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
 
   // Turnos del mes cacheados por sesión (revalida solo el mes actual). Así
   // togglear de vista no re-baja los turnos de meses pasados.
-  const { data: turnosPorDia, isLoading: isLoadingTurnos } = useCachedMonth<Record<string, Turno[]>>(
+  const { data: turnosPorDiaRaw, isLoading: isLoadingTurnos } = useCachedMonth<Record<string, Turno[]>>(
     `turnos-datos/${mesKey}`,
     () => fetchTurnosPorRango(...rango(currentMonth)),
     { revalidate: esMesActual, fallback: {} },
   )
 
   // Recaudación del mes desde el libro diario (haber/debe por día + desglose), cacheada
-  const { data: libro, isLoading: isLoadingLibro } = useCachedMonth<LibroResumen>(
+  const { data: libroFull, isLoading: isLoadingLibro } = useCachedMonth<LibroResumen>(
     `libro-datos/${mesKey}`,
     () => fetchLibroDiarioPorRango(...rango(currentMonth)),
     { revalidate: esMesActual, fallback: EMPTY_LIBRO },
   )
 
   // Mes anterior (para tendencias). Misma key/forma que arriba → comparten caché.
-  const { data: turnosPrev } = useCachedMonth<Record<string, Turno[]>>(
+  const { data: turnosPrevRaw } = useCachedMonth<Record<string, Turno[]>>(
     `turnos-datos/${prevMesKey}`,
     () => fetchTurnosPorRango(...rango(prevMonth)),
     { revalidate: prevEsMesActual, fallback: {} },
   )
-  const { data: libroPrev } = useCachedMonth<LibroResumen>(
+  const { data: libroPrevFull } = useCachedMonth<LibroResumen>(
     `libro-datos/${prevMesKey}`,
     () => fetchLibroDiarioPorRango(...rango(prevMonth)),
     { revalidate: prevEsMesActual, fallback: EMPTY_LIBRO },
+  )
+
+  // Vista por especialidad (Fase 4): filtra la actividad (turnos) y taja la
+  // recaudación (libro) por la especialidad activa. "ambas" usa el total.
+  const turnosPorDia = useMemo(() => filtrarTurnosPorEsp(turnosPorDiaRaw, espView), [turnosPorDiaRaw, espView])
+  const turnosPrev = useMemo(() => filtrarTurnosPorEsp(turnosPrevRaw, espView), [turnosPrevRaw, espView])
+  const libro = useMemo<LibroResumenSlice>(
+    () => (espView === "ambas" ? libroFull : libroFull.porEspecialidad[espView]),
+    [libroFull, espView],
+  )
+  const libroPrev = useMemo<LibroResumenSlice>(
+    () => (espView === "ambas" ? libroPrevFull : libroPrevFull.porEspecialidad[espView]),
+    [libroPrevFull, espView],
   )
 
   // Opiniones del mes (satisfacción). Misma key que la vista Opiniones → caché compartida.
@@ -589,7 +628,22 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* Vista por especialidad: filtra la actividad (turnos) y la recaudación (libro). */}
+        <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px]">
+          {VISTAS_ESP.map(({ k, label }) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setEspView(k)}
+              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                espView === k ? "bg-white text-[#001633] shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <Button
           variant="outline"
           size="sm"
@@ -601,10 +655,13 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
         </Button>
       </div>
 
-      {metrics.sinTurnos ? (
+      {metrics.sinTurnos && !metrics.hayRecaudacion ? (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-16 text-center">
           <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-          <p className="text-sm text-slate-400">Sin turnos registrados en {mesNombre}</p>
+          <p className="text-sm text-slate-400">
+            Sin actividad registrada en {mesNombre}
+            {espView !== "ambas" ? ` para ${espView === "traumatologia" ? "traumatología" : "kinesiología"}` : ""}
+          </p>
         </div>
       ) : (
         <>

@@ -35,6 +35,7 @@ export interface TraumatologiaConsulta {
   fecha: string // "yyyy-MM-dd" de la consulta
   diagnostico?: string
   notas: string
+  monto?: number // importe cobrado; si > 0 genera una entrada en el Libro Diario (caja)
   usuario: string // quién la registró
   createdAt: number // epoch ms; ordena el historial
 }

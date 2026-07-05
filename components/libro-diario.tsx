@@ -22,6 +22,7 @@ import autoTable from "jspdf-autotable"
 import { ref, get, update } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { writeLog, LogCambio, normalizeLibroEntradas, esParticular } from "@/lib/helpers"
+import { Especialidad } from "@/types"
 import { toast } from "sonner"
 import { format } from "date-fns-tz"
 import { ChevronLeft, ChevronRight, ChevronsDown, ClipboardCopy, Loader2, Trash2 } from "lucide-react"
@@ -38,6 +39,7 @@ interface EntradaLibroDiario {
   debe: number
   haber: number
   createdAt: number // epoch ms — ordena la lista por orden de carga
+  especialidad?: Especialidad // ausente = kinesiología; "traumatologia" = cobro de trauma
 }
 
 interface LibroDiarioProps {
@@ -105,6 +107,7 @@ function sanitizeEntry(e: Partial<EntradaLibroDiario>): EntradaLibroDiario {
     debe: Number(e?.debe) || 0,
     haber: Number(e?.haber) || 0,
     createdAt: Number(e?.createdAt) || 0,
+    ...(e.especialidad === "traumatologia" && { especialidad: "traumatologia" as const }),
   }
 }
 
@@ -135,6 +138,10 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
   // Claves de almacenamiento viejas (índices "0","1",...) del día legacy, para
   // nulificarlas puntualmente en la migración sin pisar entradas que agregó otro.
   const legacyKeysRef = useRef<string[]>([])
+  // id → especialidad de las entradas cargadas (p. ej. cobros de trauma). Se
+  // reaplica al guardar para que editar el libro no borre el tag: RHF no registra
+  // ese campo como input, así que podría perderse en el round-trip del form.
+  const especialidadByIdRef = useRef<Record<string, Especialidad>>({})
   // Audit log: estado al cargar el día (baseline) y último estado guardado de la ráfaga de edición.
   // Tras 60s sin guardados se escribe UN log con el diff — evita un log por cada auto-save.
   const auditBaseline = useRef<AuditStats | null>(null)
@@ -188,8 +195,12 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
       setIsSaving(true)
       setError(null)
       try {
-        // `valueAsNumber` deja NaN en campos vacíos (Firebase lo rechaza); sanitizar
-        const sanitized = entries.map(sanitizeEntry)
+        // `valueAsNumber` deja NaN en campos vacíos (Firebase lo rechaza); sanitizar.
+        // Reaplica el tag de especialidad por id (RHF no lo trackea como input),
+        // para no borrar el marcador de trauma al reescribir el día.
+        const sanitized = entries.map((e) =>
+          sanitizeEntry(e.especialidad ? e : { ...e, especialidad: especialidadByIdRef.current[e.id] }),
+        )
 
         if (loadedAsArrayRef.current) {
           // Migración de día legacy (array → mapa por id): escribir cada entrada con
@@ -333,6 +344,9 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           legacyKeysRef.current = loadedAsArrayRef.current ? Object.keys(data.entradas ?? {}) : []
           const normalized = normalizeLibroEntradas(data.entradas).map(sanitizeEntry)
           setValue("entradas", normalized)
+          especialidadByIdRef.current = Object.fromEntries(
+            normalized.filter((e) => e.especialidad).map((e) => [e.id, e.especialidad!]),
+          )
           // Totales y baseline derivados de las entradas (ya no se leen del nodo)
           const baseline: Record<string, string> = {}
           let h = 0, d = 0
@@ -350,6 +364,7 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
           loadedAsArrayRef.current = false
           legacyKeysRef.current = []
           baselineRef.current = {}
+          especialidadByIdRef.current = {}
           setValue("entradas", [])
           setTotalHaber(0)
           setTotalDebe(0)
@@ -599,6 +614,11 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
               <div key={field.id} className={`border rounded-lg p-3 space-y-2.5 ${cardBg} ${newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in slide-in-from-top-1 duration-200 ease-out" : ""}`}>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 font-mono w-5 shrink-0">{index + 1}</span>
+                  {field.especialidad === "traumatologia" && (
+                    <span className="shrink-0 rounded bg-indigo-50 px-1 text-[9px] font-bold uppercase tracking-wide text-indigo-600" title="Cobro de traumatología">
+                      Trau
+                    </span>
+                  )}
                   <Select
                     value={tipo}
                     onValueChange={(value) => {
@@ -710,7 +730,14 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                   const obraSocialVacia = esPaciente && watchEntradas?.[index]?.cobertura === "Obra Social" && !watchEntradas?.[index]?.obraSocial?.trim()
                   return (
                     <TableRow key={field.id} className={`${isIncomplete ? "bg-amber-50/60" : index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in duration-200 ease-out" : ""}`}>
-                      <TableCell className="text-center text-sm">{index + 1}</TableCell>
+                      <TableCell className="text-center text-sm">
+                        {index + 1}
+                        {field.especialidad === "traumatologia" && (
+                          <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-wide text-indigo-600" title="Cobro de traumatología">
+                            Trau
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Select
                           value={tipo}

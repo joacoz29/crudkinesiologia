@@ -11,7 +11,7 @@ import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { ref, update } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
-import { parseTratamientosRaw, parseConsultasTrauma, writeLog } from "@/lib/helpers"
+import { parseTratamientosRaw, parseConsultasTrauma, registrarCobroTrauma, writeLog } from "@/lib/helpers"
 import { edadActual } from "@/lib/edad"
 import { getUserDisplayName } from "@/lib/auth-helper"
 import { Patient, TraumatologiaConsulta } from "@/types"
@@ -41,6 +41,7 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
   const [fecha, setFecha] = useState(hoyISO())
   const [diagnostico, setDiagnostico] = useState("")
   const [notas, setNotas] = useState("")
+  const [monto, setMonto] = useState("")
   // Historial local: se siembra del paciente y se actualiza al agregar/eliminar,
   // así la UI refleja el cambio sin depender de que el prop se refresque.
   const [consultas, setConsultas] = useState<TraumatologiaConsulta[]>([])
@@ -53,6 +54,7 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
     setFecha(hoyISO())
     setDiagnostico("")
     setNotas("")
+    setMonto("")
     setConfirmDeleteId(null)
   }, [patient])
 
@@ -84,21 +86,37 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
     if (!notas.trim()) return
     setSaving(true)
     try {
+      const montoNum = Number(monto) || 0
+      const fechaConsulta = fecha || hoyISO()
       const nueva: TraumatologiaConsulta = {
         id: nuevoId(),
-        fecha: fecha || hoyISO(),
+        fecha: fechaConsulta,
         ...(!!diagnostico.trim() && { diagnostico: diagnostico.trim() }),
         notas: notas.trim(),
+        ...(montoNum > 0 && { monto: montoNum }),
         usuario: getUserDisplayName(auth.currentUser),
         createdAt: Date.now(),
       }
       const lista = [...consultas.map(materializarLegacy), nueva]
-      await persistir(lista, `Agregó una consulta de traumatología de ${patient.nombre} ${patient.apellido}`)
+      await persistir(
+        lista,
+        `Agregó una consulta de traumatología de ${patient.nombre} ${patient.apellido}${montoNum > 0 ? ` (cobro $${montoNum})` : ""}`,
+      )
+      // Si cargó un importe, se registra como movimiento en el Libro (caja), taggeado trauma.
+      if (montoNum > 0) {
+        await registrarCobroTrauma({
+          nombreApellido: `${patient.nombre} ${patient.apellido}`,
+          obraSocial: patient.obraSocial,
+          monto: montoNum,
+          fecha: fechaConsulta,
+        })
+      }
       setConsultas(parseConsultasTrauma({ consultas: lista }))
       setDiagnostico("")
       setNotas("")
+      setMonto("")
       setFecha(hoyISO())
-      toast.success("Consulta agregada")
+      toast.success(montoNum > 0 ? "Consulta agregada · cobro registrado en el Libro" : "Consulta agregada")
     } catch (e) {
       console.error("Error agregando consulta de traumatología", e)
       toast.error("No se pudo agregar la consulta")
@@ -194,7 +212,7 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
             <div className="space-y-3 rounded-md border border-indigo-100 bg-white p-3">
               <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Nueva consulta</p>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="space-y-1.5 sm:w-44">
+                <div className="space-y-1.5 sm:w-36">
                   <Label htmlFor="trauma-fecha" className="text-xs text-slate-600">
                     Fecha
                   </Label>
@@ -205,6 +223,25 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
                     onChange={(e) => setFecha(e.target.value)}
                     className="border-indigo-200 focus:border-indigo-500"
                   />
+                </div>
+                <div className="space-y-1.5 sm:w-32">
+                  <Label htmlFor="trauma-monto" className="text-xs text-slate-600">
+                    Importe <span className="text-slate-300">(opc.)</span>
+                  </Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+                    <Input
+                      id="trauma-monto"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={100}
+                      value={monto}
+                      onChange={(e) => setMonto(e.target.value)}
+                      placeholder="0"
+                      className="border-indigo-200 pl-6 focus:border-indigo-500"
+                    />
+                  </div>
                 </div>
                 <div className="flex-1 space-y-1.5">
                   <Label htmlFor="trauma-diag" className="text-xs text-slate-600">
@@ -231,12 +268,17 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
                   className="min-h-[90px] border-indigo-200 text-sm focus:border-indigo-500"
                 />
               </div>
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] text-slate-400">
+                  {Number(monto) > 0
+                    ? "Se registra un cobro en el Libro Diario (caja)."
+                    : "Cargá un importe para registrar el cobro en la caja."}
+                </p>
                 <Button
                   type="button"
                   onClick={handleAgregar}
                   disabled={!notas.trim() || saving}
-                  className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"
+                  className="shrink-0 gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   Agregar consulta
@@ -293,7 +335,14 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
                         )}
                       </div>
                       <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">{c.notas}</p>
-                      {c.usuario && <p className="mt-1.5 text-[11px] text-slate-400">Registró: {c.usuario}</p>}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        {typeof c.monto === "number" && c.monto > 0 && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                            Cobrado ${c.monto.toLocaleString("es-AR")}
+                          </span>
+                        )}
+                        {c.usuario && <span className="text-[11px] text-slate-400">Registró: {c.usuario}</span>}
+                      </div>
                     </li>
                   ))}
                 </ol>

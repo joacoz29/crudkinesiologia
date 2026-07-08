@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { format, isToday } from "date-fns"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Plus, Search, X, Flag, CheckCircle2, Loader2, Printer } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Search, X, Flag, CheckCircle2, Loader2, Printer, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Printable } from "@/components/printable"
 import { printScoped } from "@/lib/print"
@@ -107,6 +107,32 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
   const defaultNuevoHora =
     firstFreeHour !== undefined ? `${String(firstFreeHour).padStart(2, "0")}:00` : "09:00"
 
+  // Salto a la hora actual (solo mirando el día de hoy). Con 40+ turnos, la tarde
+  // queda a varias pantallas de scroll: al abrir la agenda se aterriza en el bloque
+  // de la hora corriente, y el botón "Ahora" de la barra sticky vuelve de un salto.
+  const hourRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  const irAHoraActual = (suave: boolean) => {
+    const ahora = new Date().getHours()
+    // El bloque de la hora actual, o el más cercano hacia atrás (después de las
+    // 19 cae en el último; antes de las 8, en el primero = sin scroll).
+    const previas = HOURS.filter((h) => h <= ahora)
+    const destino = previas.length ? previas[previas.length - 1] : HOURS[0]
+    const el = destino !== undefined ? hourRefs.current[destino] : null
+    if (!el) return
+    const reduceMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    el.scrollIntoView({ block: "start", behavior: suave && !reduceMotion ? "smooth" : "auto" })
+  }
+
+  // Aterrizar al abrir/cambiar a hoy; se re-ancla una vez cuando llegan los turnos
+  // (las filas crecen con datos y el destino se corre). Instantáneo, sin animar.
+  const hayTurnos = turnos.length > 0
+  useEffect(() => {
+    if (!isToday(fecha)) return
+    irAHoraActual(false)
+    // irAHoraActual se re-crea por render; alcanza con re-anclar por fecha/carga
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fecha, hayTurnos])
+
   const totalAgendados = turnos.length
   const subtitleText = hasFilter
     ? filteredTurnos.length === 0
@@ -180,9 +206,10 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
         </div>
       )}
 
-      {/* Filters */}
+      {/* Filters — sticky: con la agenda larga, los controles siguen a mano al
+          scrollear a los horarios de la tarde (pedido de las asistentes). */}
       {turnos.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 bg-slate-50/95 py-2 backdrop-blur-sm">
           {FILTER_CHIPS.map((chip) => {
             const isActive = chip.value === null ? filterEstado === null : filterEstado === chip.value
             return (
@@ -205,6 +232,18 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
               </button>
             )
           })}
+
+          {/* Ir a la hora actual (solo hoy) */}
+          {isToday(fecha) && (
+            <button
+              onClick={() => irAHoraActual(true)}
+              title="Ir a la hora actual"
+              className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700"
+            >
+              <Clock className="h-3 w-3" />
+              Ahora
+            </button>
+          )}
 
           {/* Name search */}
           <div className="relative ml-auto">
@@ -257,8 +296,10 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
           return (
             <div
               key={hour}
+              ref={(el) => { hourRefs.current[hour] = el }}
               className={[
-                "flex min-h-[52px]",
+                // scroll-mt compensa la barra sticky al saltar a una hora
+                "flex min-h-[52px] scroll-mt-16",
                 libre && !hasFilter ? "hover:bg-gray-50 group cursor-pointer" : "",
               ]
                 .filter(Boolean)

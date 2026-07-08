@@ -211,9 +211,11 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
       )}
 
       {/* Filters — sticky: con la agenda larga, los controles siguen a mano al
-          scrollear a los horarios de la tarde (pedido de las asistentes). */}
+          scrollear a los horarios de la tarde (pedido de las asistentes). Fondo
+          sólido a propósito: un backdrop-blur acá repinta en cada frame de
+          scroll y con un fondo casi opaco no se percibe. */}
       {turnos.length > 0 && (
-        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 bg-slate-50/95 py-2 backdrop-blur-sm">
+        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 bg-slate-50 py-2">
           {FILTER_CHIPS.map((chip) => {
             const isActive = chip.value === null ? filterEstado === null : filterEstado === chip.value
             return (

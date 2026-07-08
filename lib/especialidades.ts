@@ -21,6 +21,8 @@ import { Especialidad } from "@/types"
 // 4) Ficha: si usa el modelo de trauma (consultas + cobro), generalizar
 //    TraumaFichaModal y cobroTraumaUpdates (hoy escriben pacientes/{id}/traumatologia
 //    y el tag "traumatologia" fijo) para parametrizarlos por especialidad.
+//    También components/edit-patient-modal.tsx: su sección read-only lee el nodo
+//    `traumatologia` fijo (label/color indigo) — parametrizarla o duplicarla.
 // 5) components/admin-panel.tsx: label/color de la acción de log si se agrega una.
 // 6) Reglas RTDB: pacientes/** ya hereda el permiso del padre; publicar a mano
 //    solo si se crea un nodo raíz nuevo (el archivo no se despliega solo).
@@ -33,7 +35,9 @@ export interface EspecialidadConfig {
   // estado del turno (modelo trauma: la facturación va por consulta).
   registraSesionKine: boolean
   // ¿Cobra por consulta con un monto desde su ficha, que impacta directo en el
-  // libro (modelo trauma)?
+  // libro (modelo trauma)? OJO: hoy es documental — ningún código lo consulta
+  // todavía (los switches reales son registraSesionKine y ficha). Se vuelve
+  // operativo cuando se generalice la ficha de trauma (paso 4 del checklist).
   cobroDirecto: boolean
   // Qué ficha abre la grilla de pacientes en el contexto de esta especialidad.
   ficha: "kine" | "trauma"

@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, Bone, Lock, Plus, Trash2, Check, X } from "lucide-react"
+import { Loader2, Bone, Lock, Plus, Trash2, Check, X, ChevronDown } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { format, parseISO, isValid } from "date-fns"
 import { format as formatTZ } from "date-fns-tz"
@@ -51,6 +51,10 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
   const [consultas, setConsultas] = useState<TraumatologiaConsulta[]>([])
   const [saving, setSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  // Acordeones de la historia de kine (cerrados por default: la ficha abre
+  // enfocada en trauma, la historia se despliega a demanda)
+  const [kineOpen, setKineOpen] = useState(false)
+  const [histLibreOpen, setHistLibreOpen] = useState(false)
 
   useEffect(() => {
     if (!patient) return
@@ -60,6 +64,8 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
     setNotas("")
     setMonto("")
     setConfirmDeleteId(null)
+    setKineOpen(false)
+    setHistLibreOpen(false)
   }, [patient])
 
   const tratamientos = useMemo(() => parseTratamientosRaw(patient?.tratamientos), [patient])
@@ -170,41 +176,84 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
             <Dato label="Teléfono" value={patient.telefono || "—"} />
           </div>
 
-          {/* Historia de kinesiología — solo lectura */}
+          {/* Historia de kinesiología — solo lectura. Acordeón cerrado por default:
+              la ficha abre enfocada en trauma sin inundar de información. El
+              historial libre (el bloque largo) se pliega aparte, adentro. */}
           <section>
-            <div className="mb-2 flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-slate-400" />
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <button
+              type="button"
+              onClick={() => setKineOpen((v) => !v)}
+              aria-expanded={kineOpen}
+              className="group flex w-full items-center gap-1.5 text-left"
+            >
+              <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 transition-colors group-hover:text-slate-600">
                 Historia de kinesiología · solo lectura
               </h3>
-            </div>
+              {(tratamientos.length > 0 || !!historialLibre) && !kineOpen && (
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400/50" title="Tiene contenido" />
+              )}
+              <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
+                <span className="text-[11px] text-slate-300">
+                  {tratamientos.length > 0
+                    ? `${tratamientos.length} tratamiento${tratamientos.length !== 1 ? "s" : ""}`
+                    : historialLibre
+                    ? "historial libre"
+                    : "sin registros"}
+                </span>
+                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 motion-reduce:transition-none ${kineOpen ? "" : "-rotate-90"}`} />
+              </span>
+            </button>
 
-            {tratamientos.length === 0 && !historialLibre ? (
-              <p className="text-sm italic text-slate-400">Sin historia de kinesiología registrada.</p>
-            ) : (
-              <div className="space-y-2">
-                {tratamientos.map((t) => (
-                  <div key={t.id} className="rounded-md border border-slate-200 bg-white p-2.5 text-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-slate-700">{t.diagnostico || "Sin diagnóstico"}</span>
-                      <span className="shrink-0 text-xs text-slate-500">
-                        {t.sesiones.length}/{t.sesionesAutorizadas} ses.
-                      </span>
-                    </div>
-                    <div className="mt-0.5 text-xs text-slate-400">
-                      {t.doctor ? `Dr. ${t.doctor}` : "Sin derivante"}
-                      {t.nroAutorizacion ? ` · Aut. ${t.nroAutorizacion}` : ""}
-                    </div>
-                  </div>
-                ))}
-                {historialLibre && (
-                  <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                    <p className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Historial libre</p>
-                    <p className="whitespace-pre-wrap break-words font-mono text-xs text-slate-600">{historialLibre}</p>
-                  </div>
-                )}
+            <div className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${kineOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+              <div className="overflow-hidden">
+                <div className="space-y-2 pt-2">
+                  {tratamientos.length === 0 && !historialLibre ? (
+                    <p className="text-sm italic text-slate-400">Sin historia de kinesiología registrada.</p>
+                  ) : (
+                    <>
+                      {tratamientos.map((t) => (
+                        <div key={t.id} className="rounded-md border border-slate-200 bg-white p-2.5 text-sm">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-slate-700">{t.diagnostico || "Sin diagnóstico"}</span>
+                            <span className="shrink-0 text-xs text-slate-500">
+                              {t.sesiones.length}/{t.sesionesAutorizadas} ses.
+                            </span>
+                          </div>
+                          <div className="mt-0.5 text-xs text-slate-400">
+                            {t.doctor ? `Dr. ${t.doctor}` : "Sin derivante"}
+                            {t.nroAutorizacion ? ` · Aut. ${t.nroAutorizacion}` : ""}
+                          </div>
+                        </div>
+                      ))}
+                      {historialLibre && (
+                        <div className="rounded-md border border-slate-200 bg-white">
+                          <button
+                            type="button"
+                            onClick={() => setHistLibreOpen((v) => !v)}
+                            aria-expanded={histLibreOpen}
+                            className="group flex w-full items-center gap-1.5 p-2.5 text-left"
+                          >
+                            <span className="text-[11px] uppercase tracking-wide text-slate-400 transition-colors group-hover:text-slate-600">
+                              Historial libre
+                            </span>
+                            {!histLibreOpen && (
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400/50" title="Tiene contenido" />
+                            )}
+                            <ChevronDown className={`ml-auto h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200 motion-reduce:transition-none ${histLibreOpen ? "" : "-rotate-90"}`} />
+                          </button>
+                          <div className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${histLibreOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                            <div className="overflow-hidden">
+                              <p className="whitespace-pre-wrap break-words px-2.5 pb-2.5 font-mono text-xs text-slate-600">{historialLibre}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            )}
+            </div>
           </section>
 
           {/* Traumatología — historial de consultas (editable) */}

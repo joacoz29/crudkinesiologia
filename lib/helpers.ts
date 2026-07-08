@@ -66,6 +66,9 @@ function normalizeConsultaTrauma(item: unknown): TraumatologiaConsulta {
     fecha: String(c.fecha ?? ""),
     ...(!!(c.diagnostico != null && String(c.diagnostico).trim()) && { diagnostico: String(c.diagnostico) }),
     notas: String(c.notas ?? ""),
+    // Preservar el monto es crítico: las escrituras reescriben la lista completa
+    // desde el estado parseado — si se cayera acá, se perdería en la base.
+    ...(Number(c.monto) > 0 && { monto: Number(c.monto) }),
     usuario: String(c.usuario ?? ""),
     createdAt: Number(c.createdAt ?? 0),
   }
@@ -212,18 +215,20 @@ export async function addToLibroDiario(entry: {
   })
 }
 
-// Registra un cobro de traumatología en el Libro Diario (caja). A diferencia de
-// las sesiones de kine (que crean una fila en $0 para que recepción complete el
-// monto), acá el traumatólogo ya sabe lo que cobró: se escribe el haber directo,
-// taggeado como traumatología. Sin dedup por paciente/día: cada consulta cobrada
-// es un movimiento propio (un paciente puede tener kine y trauma el mismo día).
-export async function registrarCobroTrauma(entry: {
+// Prepara las rutas de un cobro de traumatología para el Libro Diario (caja),
+// para fusionarlas en la MISMA escritura multi-path que guarda la consulta (todo
+// o nada: no queda una consulta con cobro sin su movimiento en el libro, ni al
+// revés). A diferencia de las sesiones de kine (fila en $0 que completa recepción),
+// acá el traumatólogo ya sabe lo que cobró: haber directo, taggeado como
+// traumatología. Sin dedup por paciente/día: cada consulta cobrada es un
+// movimiento propio (un paciente puede tener kine y trauma el mismo día).
+export function cobroTraumaUpdates(entry: {
   nombreApellido: string
   obraSocial: string
   monto: number
   fecha: string // yyyy-MM-dd
-}) {
-  if (!entry.monto || entry.monto <= 0) return
+}): Record<string, unknown> {
+  if (!entry.monto || entry.monto <= 0) return {}
   const particular = esParticular(entry.obraSocial)
   const entryId = crypto.randomUUID()
   const libroEntry: LibroDiarioEntry = {
@@ -237,10 +242,10 @@ export async function registrarCobroTrauma(entry: {
     especialidad: "traumatologia",
     createdAt: Date.now(),
   }
-  await update(ref(db), {
+  return {
     [`libroDiario/${entry.fecha}/fecha`]: entry.fecha,
     [`libroDiario/${entry.fecha}/entradas/${entryId}`]: libroEntry,
-  })
+  }
 }
 
 export async function fetchTurnosPorRango(
@@ -327,7 +332,7 @@ export interface LibroResumen extends LibroResumenSlice {
   porEspecialidad: Record<Especialidad, LibroResumenSlice>
 }
 
-function emptyLibroSlice(): LibroResumenSlice {
+export function emptyLibroSlice(): LibroResumenSlice {
   return { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 }
 }
 
@@ -606,7 +611,11 @@ export async function reconciliarAusencia(params: {
   let remaining: number | null = null
   let afectoTratamiento = false
 
-  if (cambiaFalta || cambiaLabel || cambiaAut) {
+  // Turno de traumatología: solo se actualizan los campos del turno. La falta NO
+  // toca los tratamientos/sesiones de kinesiología (mismo guard que confirmarAsistencia).
+  const esTurnoTrauma = turnoPrev.especialidad === "traumatologia"
+
+  if (!esTurnoTrauma && (cambiaFalta || cambiaLabel || cambiaAut)) {
     const pacSnap = await get(ref(db, `pacientes/${patientId}`))
     if (!pacSnap.exists()) throw new Error("PACIENTE_NO_ENCONTRADO")
     const raw = pacSnap.val() as Record<string, unknown>

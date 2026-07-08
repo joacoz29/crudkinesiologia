@@ -184,6 +184,13 @@ export function EditPatientModal({
     return personalCambio || historialCambio || tratsCambio
   }, [patient, editedPatient, sesionesText, tratamientos])
 
+  // Historial de trauma (solo lectura acá): memoizado para no re-parsear/ordenar
+  // en cada tecla (el modal re-renderiza con cada cambio de input).
+  const consultasTrauma = useMemo(
+    () => parseConsultasTrauma(editedPatient?.traumatologia),
+    [editedPatient?.traumatologia],
+  )
+
   // Intercepta el cierre del modal (Esc, click afuera, botón X): si hay cambios sin
   // guardar pide confirmación en vez de descartarlos en silencio. El cierre que
   // dispara un guardado exitoso NO pasa por acá (lo controla el prop `open` desde el
@@ -575,35 +582,31 @@ export function EditPatientModal({
 
             {/* Traumatología — solo lectura acá; la edita el traumatólogo desde su ficha.
                 Muestra el historial de consultas (más nuevas primero) si hay alguna. */}
-            {(() => {
-              const consultasTrauma = parseConsultasTrauma(editedPatient.traumatologia)
-              if (consultasTrauma.length === 0) return null
-              return (
-                <div className="border-t border-slate-100 pt-5">
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Traumatología</h3>
-                    <span className="text-[10px] text-slate-400">
-                      · solo lectura · {consultasTrauma.length} consulta{consultasTrauma.length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <div className="mt-2 space-y-2">
-                    {consultasTrauma.map((c) => {
-                      const d = c.fecha ? parseISO(c.fecha) : null
-                      const fechaTxt = d && isValid(d) ? format(d, "d 'de' MMM yyyy", { locale: es }) : c.fecha || "Sin fecha"
-                      return (
-                        <div key={c.id} className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
-                          <p className="text-[11px] font-semibold text-indigo-700">
-                            {fechaTxt}
-                            {c.diagnostico ? ` · ${c.diagnostico}` : ""}
-                          </p>
-                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">{c.notas}</p>
-                        </div>
-                      )
-                    })}
-                  </div>
+            {consultasTrauma.length > 0 && (
+              <div className="border-t border-slate-100 pt-5">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Traumatología</h3>
+                  <span className="text-[10px] text-slate-400">
+                    · solo lectura · {consultasTrauma.length} consulta{consultasTrauma.length !== 1 ? "s" : ""}
+                  </span>
                 </div>
-              )
-            })()}
+                <div className="mt-2 space-y-2">
+                  {consultasTrauma.map((c) => {
+                    const d = c.fecha ? parseISO(c.fecha) : null
+                    const fechaTxt = d && isValid(d) ? format(d, "d 'de' MMM yyyy", { locale: es }) : c.fecha || "Sin fecha"
+                    return (
+                      <div key={c.id} className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+                        <p className="text-[11px] font-semibold text-indigo-700">
+                          {fechaTxt}
+                          {c.diagnostico ? ` · ${c.diagnostico}` : ""}
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">{c.notas}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Turnos agendados */}
             <div className="space-y-4 border-t border-slate-100 pt-5">

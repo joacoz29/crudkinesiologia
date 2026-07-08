@@ -210,14 +210,13 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
     }
   }
 
-  // Abre la ficha del paciente desde cualquier pestaña (el EditPatientModal está
-  // montado a nivel de página, no dentro del branch de Pacientes). NO cambia de
+  // Abre la ficha del paciente desde cualquier pestaña (los modales están
+  // montados a nivel de página, no dentro del branch de Pacientes). NO cambia de
   // pestaña: si lo abrís desde Pendientes, al cerrar/guardar seguís en Pendientes.
+  // Mismo routing por especialidad que handleEdit (un solo lugar decide el modal).
   const handleAbrirFicha = (patientId: string) => {
     const p = allPatients.find((x) => x.id === patientId)
-    if (!p) return
-    setSelectedPatient(p)
-    setEditModalOpen(true)
+    if (p) handleEdit(p)
   }
 
   // Deep-link desde Pendientes: ir al calendario posicionado en una fecha puntual.
@@ -276,6 +275,10 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
     try {
       const patientRef = ref(db, `pacientes/${updatedPatient.id}`)
       const cleanPatient = JSON.parse(JSON.stringify(updatedPatient))
+      // La ficha kine nunca escribe la sección de trauma: el snapshot del modal
+      // puede estar viejo y pisaría consultas que el traumatólogo agregó mientras
+      // tanto. Al omitir la clave, update() (merge) deja el sub-nodo intacto.
+      delete cleanPatient.traumatologia
       await update(patientRef, cleanPatient)
       toast.success('Paciente actualizado correctamente')
       setEditModalOpen(false)
@@ -681,7 +684,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
           />
         ) : activeTab === "pendientes" ? (
           (isAdminUser || canSeeLibroDiario)
-            ? <TareasPendientes onAbrirFicha={handleAbrirFicha} onIrCalendario={handleIrCalendario} />
+            ? <TareasPendientes onAbrirFicha={handleAbrirFicha} onIrCalendario={handleIrCalendario} especialidad={especialidad} />
             : null
         ) : (
           isAdminUser ? <AdminPanel /> : null

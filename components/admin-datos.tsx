@@ -6,7 +6,7 @@ import { es } from "date-fns/locale"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity, Users, Stethoscope, Download, X } from "lucide-react"
-import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, esParticular, esDeEspecialidad, type Opinion, type LibroResumen, type LibroResumenSlice } from "@/lib/helpers"
+import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, esParticular, esDeEspecialidad, emptyLibroSlice, type Opinion, type LibroResumen, type LibroResumenSlice } from "@/lib/helpers"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { rankDerivantes } from "@/lib/doctores"
@@ -15,11 +15,8 @@ import { Button } from "@/components/ui/button"
 import { Patient, Turno, Especialidad } from "@/types"
 
 const EMPTY_LIBRO: LibroResumen = {
-  porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0,
-  porEspecialidad: {
-    kinesiologia: { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 },
-    traumatologia: { porDia: {}, haberParticular: 0, haberObraSocial: 0, haberIngreso: 0, debeGasto: 0 },
-  },
+  ...emptyLibroSlice(),
+  porEspecialidad: { kinesiologia: emptyLibroSlice(), traumatologia: emptyLibroSlice() },
 }
 
 // Vista por especialidad de la pestaña Datos (Fase 4): "ambas" = todo junto.

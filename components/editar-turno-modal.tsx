@@ -329,7 +329,11 @@ export function EditarTurnoModal({
       }
 
       const revert = res.revert!
-      toast.success(`Sesión ${res.nextNum} registrada para ${turno.nombre} ${turno.apellido}`, {
+      // Turno de trauma: solo confirma asistencia (no registra sesión de kine → no hay nextNum)
+      const msgOk = res.nextNum != null
+        ? `Sesión ${res.nextNum} registrada para ${turno.nombre} ${turno.apellido}`
+        : `Asistencia confirmada de ${turno.nombre} ${turno.apellido}`
+      toast.success(msgOk, {
         duration: 8000,
         action: {
           label: "Deshacer",

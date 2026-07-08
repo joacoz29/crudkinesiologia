@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { addDays, subDays } from "date-fns"
 import { format } from "date-fns-tz"
 import { usePatients } from "@/lib/patients-store"
-import { fetchTurnosPorRango, horaToMin } from "@/lib/helpers"
+import { fetchTurnosPorRango, horaToMin, esDeEspecialidad } from "@/lib/helpers"
 import { fetchFeriados } from "@/lib/feriados"
 import {
   computeTareasPacientes,
@@ -15,7 +15,7 @@ import {
   type TareaCategoria,
   type TareaSeveridad,
 } from "@/lib/tareas"
-import { Patient, Turno } from "@/types"
+import { Patient, Turno, Especialidad } from "@/types"
 import { Button } from "@/components/ui/button"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
@@ -221,9 +221,13 @@ function CategoriaSeccion({
 export function TareasPendientes({
   onAbrirFicha,
   onIrCalendario,
+  especialidad = "kinesiologia",
 }: {
   onAbrirFicha: (patientId: string) => void
   onIrCalendario: (fecha: string) => void
+  // Las tareas de turnos se filtran por la especialidad activa (los turnos de
+  // trauma no deben aparecer como "sin marcar" en la Recepción de kine).
+  especialidad?: Especialidad
 }) {
   const { patients, isLoading: patientsLoading } = usePatients()
   const [turnos, setTurnos] = useState<Record<string, Turno[]>>({})
@@ -293,7 +297,13 @@ export function TareasPendientes({
     const hoyKey = format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
     const nowMin = horaToMin(format(new Date(), "HH:mm", { timeZone: TZ }))
     const dePacientes = computeTareasPacientes(patients)
-    const deTurnos = computeTareasTurnos(patients, turnos, hoyKey, nowMin)
+    // Solo los turnos de la especialidad activa generan tareas (legacy sin tag = kine)
+    const turnosEsp: Record<string, Turno[]> = {}
+    for (const [f, ts] of Object.entries(turnos)) {
+      const filt = ts.filter((t) => esDeEspecialidad(t, especialidad))
+      if (filt.length) turnosEsp[f] = filt
+    }
+    const deTurnos = computeTareasTurnos(patients, turnosEsp, hoyKey, nowMin)
     // Si un paciente tiene "Reautorizar antes del turno", no mostramos además la
     // tarea clínica de "Sesiones agotadas" (sería redundante).
     const reautorizar = new Set(
@@ -303,7 +313,7 @@ export function TareasPendientes({
       (t) => !(t.id.startsWith("sesiones_por_agotar:") && t.patientId && reautorizar.has(t.patientId)),
     )
     return ordenarTareas([...dePacientesFiltradas, ...deTurnos])
-  }, [patients, turnos])
+  }, [patients, turnos, especialidad])
 
   const porCategoria = useMemo(() => {
     const map: Record<TareaCategoria, Tarea[]> = { datos: [], clinico: [], operativo: [] }

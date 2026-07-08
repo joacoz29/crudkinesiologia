@@ -8,10 +8,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Bone, Lock, Plus, Trash2, Check, X } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { format, parseISO, isValid } from "date-fns"
+import { format as formatTZ } from "date-fns-tz"
 import { es } from "date-fns/locale"
 import { ref, update } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
-import { parseTratamientosRaw, parseConsultasTrauma, registrarCobroTrauma, writeLog } from "@/lib/helpers"
+import { parseTratamientosRaw, parseConsultasTrauma, cobroTraumaUpdates, writeLog } from "@/lib/helpers"
 import { edadActual } from "@/lib/edad"
 import { getUserDisplayName } from "@/lib/auth-helper"
 import { Patient, TraumatologiaConsulta } from "@/types"
@@ -23,7 +24,10 @@ interface TraumaFichaModalProps {
   patient: Patient | null
 }
 
-const hoyISO = () => format(new Date(), "yyyy-MM-dd")
+// Fecha local de Argentina, no UTC ni la del dispositivo (después de las 21:00
+// AR, toISOString cae en "mañana" — misma convención que el resto de helpers).
+const TZ = "America/Argentina/Buenos_Aires"
+const hoyISO = () => formatTZ(new Date(), "yyyy-MM-dd", { timeZone: TZ })
 const nuevoId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
 function fmtFechaConsulta(f: string): string {
@@ -68,12 +72,15 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
   // Persiste el historial completo en el sub-nodo traumatologia. Reemplaza el
   // objeto entero: así, al primer guardado, se descartan los campos legacy
   // (diagnostico/notas sueltos) sin tocar el resto de la ficha compartida.
-  const persistir = async (lista: TraumatologiaConsulta[], detalle: string) => {
-    await update(ref(db, `pacientes/${patient.id}`), {
-      traumatologia: {
+  // `extraUpdates` (p. ej. el cobro en el Libro) va en la MISMA escritura
+  // multi-path: o se guarda todo o no se guarda nada.
+  const persistir = async (lista: TraumatologiaConsulta[], detalle: string, extraUpdates: Record<string, unknown> = {}) => {
+    await update(ref(db), {
+      [`pacientes/${patient.id}/traumatologia`]: {
         consultas: lista,
         ultima_actualizacion: { fecha: new Date().toISOString(), usuario: getUserDisplayName(auth.currentUser) },
       },
+      ...extraUpdates,
     })
     await writeLog({ accion: "editar_traumatologia", detalle, entidadId: patient.id })
   }
@@ -98,19 +105,18 @@ export function TraumaFichaModal({ open, onOpenChange, patient }: TraumaFichaMod
         createdAt: Date.now(),
       }
       const lista = [...consultas.map(materializarLegacy), nueva]
+      // Si cargó un importe, el movimiento del Libro (caja) va en la misma escritura.
+      const cobro = cobroTraumaUpdates({
+        nombreApellido: `${patient.nombre} ${patient.apellido}`,
+        obraSocial: patient.obraSocial,
+        monto: montoNum,
+        fecha: fechaConsulta,
+      })
       await persistir(
         lista,
         `Agregó una consulta de traumatología de ${patient.nombre} ${patient.apellido}${montoNum > 0 ? ` (cobro $${montoNum})` : ""}`,
+        cobro,
       )
-      // Si cargó un importe, se registra como movimiento en el Libro (caja), taggeado trauma.
-      if (montoNum > 0) {
-        await registrarCobroTrauma({
-          nombreApellido: `${patient.nombre} ${patient.apellido}`,
-          obraSocial: patient.obraSocial,
-          monto: montoNum,
-          fecha: fechaConsulta,
-        })
-      }
       setConsultas(parseConsultasTrauma({ consultas: lista }))
       setDiagnostico("")
       setNotas("")

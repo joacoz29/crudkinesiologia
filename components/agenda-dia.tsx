@@ -82,9 +82,13 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
 
   const filteredTurnos = turnos.filter((t) => {
     const matchesEstado = filterEstado === null || t.estado === filterEstado
+    // Busca en ambos órdenes: la agenda muestra "apellido nombre" pero cada una
+    // tipea como le sale ("juan perez" o "perez juan" encuentran lo mismo)
+    const q = searchName.trim().toLowerCase()
     const matchesName =
-      searchName.trim() === "" ||
-      `${t.nombre} ${t.apellido}`.toLowerCase().includes(searchName.trim().toLowerCase())
+      q === "" ||
+      `${t.nombre} ${t.apellido}`.toLowerCase().includes(q) ||
+      `${t.apellido} ${t.nombre}`.toLowerCase().includes(q)
     return matchesEstado && matchesName
   })
 
@@ -342,7 +346,8 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
                         >
                           <div className="flex items-center justify-between gap-4">
                             <span className="font-medium">
-                              {turno.hora} — {turno.nombre} {turno.apellido}
+                              {/* Apellido primero: las asistentes escanean la agenda por apellido */}
+                              {turno.hora} — {turno.apellido} {turno.nombre}
                             </span>
                             <span className="text-xs opacity-70 shrink-0">
                               {ESTADO_LABELS[turno.estado]}
@@ -425,7 +430,7 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
                   .map((t) => (
                     <tr key={t.id} className="border-b border-gray-400 align-top">
                       <td className="py-1 pr-3 font-mono">{t.hora}</td>
-                      <td className="py-1 pr-3">{t.nombre} {t.apellido}</td>
+                      <td className="py-1 pr-3">{t.apellido} {t.nombre}</td>
                       <td className="py-1 pr-3">
                         {ESTADO_LABELS[t.estado]}
                         {t.estado === "ausente" && t.justificado ? " (just.)" : ""}

@@ -6,7 +6,8 @@ import { es } from "date-fns/locale"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity, Users, Stethoscope, Download, X } from "lucide-react"
-import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, esParticular, esDeEspecialidad, emptyLibroSlice, type Opinion, type LibroResumen, type LibroResumenSlice } from "@/lib/helpers"
+import { fetchTurnosPorRango, fetchLibroDiarioPorRango, fetchOpinionesMes, fetchLogsMes, getSessionStats, esParticular, emptyLibroSlice, type Opinion, type LibroResumen, type LibroResumenSlice } from "@/lib/helpers"
+import { ESPECIALIDADES, ESPECIALIDADES_LIST, filtrarTurnosPorEspecialidad } from "@/lib/especialidades"
 import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { rankDerivantes } from "@/lib/doctores"
@@ -16,26 +17,22 @@ import { Patient, Turno, Especialidad } from "@/types"
 
 const EMPTY_LIBRO: LibroResumen = {
   ...emptyLibroSlice(),
-  porEspecialidad: { kinesiologia: emptyLibroSlice(), traumatologia: emptyLibroSlice() },
+  porEspecialidad: Object.fromEntries(
+    ESPECIALIDADES_LIST.map((e) => [e, emptyLibroSlice()]),
+  ) as Record<Especialidad, LibroResumenSlice>,
 }
 
-// Vista por especialidad de la pestaña Datos (Fase 4): "ambas" = todo junto.
+// Vista por especialidad de la pestaña Datos: "todas" junto + una por especialidad,
+// derivadas del registry (sumar una especialidad agrega su toggle solo).
 type EspView = "ambas" | Especialidad
 const VISTAS_ESP: { k: EspView; label: string }[] = [
-  { k: "ambas", label: "Ambas" },
-  { k: "kinesiologia", label: "Kinesiología" },
-  { k: "traumatologia", label: "Traumatología" },
+  { k: "ambas", label: "Todas" },
+  ...ESPECIALIDADES_LIST.map((e) => ({ k: e as EspView, label: ESPECIALIDADES[e].label })),
 ]
 
-// Filtra los turnos por día según la especialidad activa (para la actividad).
+// Filtra los turnos por día según la vista activa ("ambas" = sin filtrar).
 function filtrarTurnosPorEsp(porDia: Record<string, Turno[]>, esp: EspView): Record<string, Turno[]> {
-  if (esp === "ambas") return porDia
-  const out: Record<string, Turno[]> = {}
-  for (const [f, ts] of Object.entries(porDia)) {
-    const filt = ts.filter((t) => esDeEspecialidad(t, esp))
-    if (filt.length) out[f] = filt
-  }
-  return out
+  return esp === "ambas" ? porDia : filtrarTurnosPorEspecialidad(porDia, esp)
 }
 
 // Vistas del gráfico de movimiento diario (toggle interactivo)
@@ -657,7 +654,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
           <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-2" />
           <p className="text-sm text-slate-400">
             Sin actividad registrada en {mesNombre}
-            {espView !== "ambas" ? ` para ${espView === "traumatologia" ? "traumatología" : "kinesiología"}` : ""}
+            {espView !== "ambas" ? ` para ${ESPECIALIDADES[espView].label.toLowerCase()}` : ""}
           </p>
         </div>
       ) : (

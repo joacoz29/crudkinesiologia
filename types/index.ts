@@ -1,5 +1,8 @@
 export type TurnoEstado = "pendiente" | "asistio" | "ausente" | "cancelado"
 
+// Para sumar una especialidad (próxima: medicina clínica), arrancar por la
+// checklist en lib/especialidades.ts — agregar el valor acá hace que tsc marque
+// todos los Record<Especialidad, ...> pendientes de completar.
 export type Especialidad = "kinesiologia" | "traumatologia"
 
 export interface Tratamiento {

@@ -23,6 +23,7 @@ import { ref, get, update } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { writeLog, LogCambio, normalizeLibroEntradas, esParticular } from "@/lib/helpers"
 import { Especialidad } from "@/types"
+import { ESPECIALIDADES, ESP_DEFAULT, espDe } from "@/lib/especialidades"
 import { toast } from "sonner"
 import { format } from "date-fns-tz"
 import { ChevronLeft, ChevronRight, ChevronsDown, ClipboardCopy, Loader2, Trash2 } from "lucide-react"
@@ -107,7 +108,8 @@ function sanitizeEntry(e: Partial<EntradaLibroDiario>): EntradaLibroDiario {
     debe: Number(e?.debe) || 0,
     haber: Number(e?.haber) || 0,
     createdAt: Number(e?.createdAt) || 0,
-    ...(e.especialidad === "traumatologia" && { especialidad: "traumatologia" as const }),
+    // Se preserva cualquier tag de especialidad no-default (kine va sin tag)
+    ...(e.especialidad && e.especialidad !== ESP_DEFAULT ? { especialidad: e.especialidad } : {}),
   }
 }
 
@@ -614,9 +616,9 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
               <div key={field.id} className={`border rounded-lg p-3 space-y-2.5 ${cardBg} ${newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in slide-in-from-top-1 duration-200 ease-out" : ""}`}>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 font-mono w-5 shrink-0">{index + 1}</span>
-                  {field.especialidad === "traumatologia" && (
-                    <span className="shrink-0 rounded bg-indigo-50 px-1 text-[9px] font-bold uppercase tracking-wide text-indigo-600" title="Cobro de traumatología">
-                      Trau
+                  {ESPECIALIDADES[espDe(field)].badge && (
+                    <span className="shrink-0 rounded bg-indigo-50 px-1 text-[9px] font-bold uppercase tracking-wide text-indigo-600" title={`Cobro de ${ESPECIALIDADES[espDe(field)].label.toLowerCase()}`}>
+                      {ESPECIALIDADES[espDe(field)].badge}
                     </span>
                   )}
                   <Select
@@ -732,9 +734,9 @@ export function LibroDiario({ updateTrigger }: LibroDiarioProps) {
                     <TableRow key={field.id} className={`${isIncomplete ? "bg-amber-50/60" : index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${newRowIds.current.has(watchEntradas?.[index]?.id ?? "") ? "animate-in fade-in duration-200 ease-out" : ""}`}>
                       <TableCell className="text-center text-sm">
                         {index + 1}
-                        {field.especialidad === "traumatologia" && (
-                          <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-wide text-indigo-600" title="Cobro de traumatología">
-                            Trau
+                        {ESPECIALIDADES[espDe(field)].badge && (
+                          <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-wide text-indigo-600" title={`Cobro de ${ESPECIALIDADES[espDe(field)].label.toLowerCase()}`}>
+                            {ESPECIALIDADES[espDe(field)].badge}
                           </span>
                         )}
                       </TableCell>

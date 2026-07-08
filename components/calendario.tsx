@@ -19,7 +19,8 @@ import { es } from "date-fns/locale"
 import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Turno, TurnoEstado, Especialidad } from "@/types"
-import { fetchTurnosPorRango, confirmarAsistencia, desconfirmarAsistencia, esDeEspecialidad } from "@/lib/helpers"
+import { fetchTurnosPorRango, confirmarAsistencia, desconfirmarAsistencia } from "@/lib/helpers"
+import { esDeEspecialidad, filtrarTurnosPorEspecialidad } from "@/lib/especialidades"
 import { getCachedMonth, setCachedMonth, clearCachePrefix } from "@/lib/monthly-cache"
 import { fetchFeriados } from "@/lib/feriados"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
@@ -319,13 +320,10 @@ export function Calendario({
 
   // Filtra por la especialidad activa (en memoria, sin re-fetch). Legacy sin
   // especialidad = kinesiología. Todos los consumidores usan esta versión.
-  const turnosVisibles = useMemo(() => {
-    const out: Record<string, Turno[]> = {}
-    for (const [fecha, ts] of Object.entries(turnosPorFecha)) {
-      out[fecha] = ts.filter((t) => esDeEspecialidad(t, especialidad))
-    }
-    return out
-  }, [turnosPorFecha, especialidad])
+  const turnosVisibles = useMemo(
+    () => filtrarTurnosPorEspecialidad(turnosPorFecha, especialidad),
+    [turnosPorFecha, especialidad],
+  )
 
   // Solo el mes visible: turnosVisibles también trae días de meses adyacentes de la grilla
   const monthPrefix = format(currentMonth, "yyyy-MM")

@@ -3,6 +3,7 @@ import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
 import { Patient, Tratamiento, Turno, TurnoConFecha, TurnoEstado, Especialidad, TraumatologiaFicha, TraumatologiaConsulta } from "@/types"
 import { getUserDisplayName } from "@/lib/auth-helper"
+import { ESPECIALIDADES, ESPECIALIDADES_LIST, espDe } from "@/lib/especialidades"
 
 const TZ = "America/Argentina/Buenos_Aires"
 
@@ -25,14 +26,6 @@ export function horaToMin(h: string): number {
 export function minToHora(m: number): string {
   const c = Math.max(0, Math.min(24 * 60 - 1, m))
   return `${String(Math.floor(c / 60)).padStart(2, "0")}:${String(c % 60).padStart(2, "0")}`
-}
-
-// Un turno pertenece a una especialidad. Los turnos legacy sin `especialidad` se
-// tratan como kinesiología (retrocompat).
-export function esDeEspecialidad(t: { especialidad?: Especialidad }, esp: Especialidad): boolean {
-  return esp === "traumatologia"
-    ? t.especialidad === "traumatologia"
-    : (t.especialidad ?? "kinesiologia") === "kinesiologia"
 }
 
 export function parseTratamientosRaw(val: unknown): Tratamiento[] {
@@ -347,8 +340,11 @@ export async function fetchLibroDiarioPorRango(
   const snapshot = await get(q)
 
   const total = emptyLibroSlice()
-  const kine = emptyLibroSlice()
-  const trauma = emptyLibroSlice()
+  // Una tajada por especialidad, derivada del registry (sumar una especialidad
+  // no requiere tocar esto). Las entradas sin tag caen en el default (kine).
+  const porEspecialidad = Object.fromEntries(
+    ESPECIALIDADES_LIST.map((e) => [e, emptyLibroSlice()]),
+  ) as Record<Especialidad, LibroResumenSlice>
 
   // Acumula una entrada (haber/debe por día + desglose por cobertura/tipo) en una tajada.
   const acumular = (s: LibroResumenSlice, fecha: string, e: LibroDiarioEntry) => {
@@ -369,14 +365,12 @@ export async function fetchLibroDiarioPorRango(
       const fecha = daySnap.key!
       const entradas = normalizeLibroEntradas((daySnap.val() as { entradas?: unknown })?.entradas)
       for (const e of entradas) {
-        // Entradas sin tag = kinesiología (retrocompat). El total suma todo.
-        const slice = e.especialidad === "traumatologia" ? trauma : kine
         acumular(total, fecha, e)
-        acumular(slice, fecha, e)
+        acumular(porEspecialidad[espDe(e)], fecha, e)
       }
     })
   }
-  return { ...total, porEspecialidad: { kinesiologia: kine, traumatologia: trauma } }
+  return { ...total, porEspecialidad }
 }
 
 export async function fetchTurnosPorPaciente(patientId: string): Promise<TurnoConFecha[]> {
@@ -449,13 +443,15 @@ export async function confirmarAsistencia(params: {
   const estadoPrevio = (turnoSnap.val() as Turno).estado
   if (estadoPrevio === "asistio") return { alreadyConfirmed: true }
 
-  // Turno de traumatología: confirmar solo marca el estado. NO registra sesión ni
-  // toca tratamientos/libro de kinesiología (trauma tiene su propio modelo — Fase 3).
-  if ((turnoSnap.val() as Turno).especialidad === "traumatologia") {
+  // Especialidad sin modelo de sesiones de kine (p. ej. traumatología): confirmar
+  // solo marca el estado. NO registra sesión ni toca tratamientos/libro de kine
+  // (su facturación va por consulta; ver lib/especialidades.ts).
+  const espTurno = espDe(turnoSnap.val() as Turno)
+  if (!ESPECIALIDADES[espTurno].registraSesionKine) {
     const upd: Record<string, unknown> = { [`turnos/${fecha}/${turnoId}/estado`]: "asistio" }
     const rev: Record<string, unknown> = { [`turnos/${fecha}/${turnoId}/estado`]: estadoPrevio }
     await update(ref(db), upd)
-    await writeLog({ accion: "confirmar_asistencia", detalle: `Confirmó asistencia (traumatología) de ${nombre} ${apellido} (${fecha} ${hora})`, entidadId: patientId })
+    await writeLog({ accion: "confirmar_asistencia", detalle: `Confirmó asistencia (${ESPECIALIDADES[espTurno].label.toLowerCase()}) de ${nombre} ${apellido} (${fecha} ${hora})`, entidadId: patientId })
     return { alreadyConfirmed: false, revert: rev }
   }
 
@@ -611,11 +607,12 @@ export async function reconciliarAusencia(params: {
   let remaining: number | null = null
   let afectoTratamiento = false
 
-  // Turno de traumatología: solo se actualizan los campos del turno. La falta NO
-  // toca los tratamientos/sesiones de kinesiología (mismo guard que confirmarAsistencia).
-  const esTurnoTrauma = turnoPrev.especialidad === "traumatologia"
+  // Especialidad sin modelo de sesiones de kine: solo se actualizan los campos
+  // del turno. La falta NO toca los tratamientos/sesiones de kinesiología
+  // (mismo guard que confirmarAsistencia; ver lib/especialidades.ts).
+  const conSesionesKine = ESPECIALIDADES[espDe(turnoPrev)].registraSesionKine
 
-  if (!esTurnoTrauma && (cambiaFalta || cambiaLabel || cambiaAut)) {
+  if (conSesionesKine && (cambiaFalta || cambiaLabel || cambiaAut)) {
     const pacSnap = await get(ref(db, `pacientes/${patientId}`))
     if (!pacSnap.exists()) throw new Error("PACIENTE_NO_ENCONTRADO")
     const raw = pacSnap.val() as Record<string, unknown>

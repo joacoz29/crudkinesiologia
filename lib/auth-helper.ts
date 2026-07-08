@@ -68,13 +68,19 @@ export function isAdmin(user: User | null): boolean {
   return getUserRole(user) === 'admin'
 }
 
-// Especialidad "propia" del usuario: el traumatólogo trabaja en traumatología;
-// el resto (kine/asistente/admin/sin rol) en kinesiología por default.
-export function especialidadDe(user: User | null): Especialidad {
-  return getUserRole(user) === 'traumatologo' ? 'traumatologia' : 'kinesiologia'
+// Especialidad "propia" de cada rol médico. Los roles que no figuran (kine/
+// asistente/admin/sin rol) trabajan en kinesiología por default. Al sumar una
+// especialidad, agregar acá su rol (ver checklist en lib/especialidades.ts).
+const ROL_ESPECIALIDAD: Partial<Record<UserRole, Especialidad>> = {
+  traumatologo: 'traumatologia',
 }
 
-// El admin puede alternar entre especialidades (ve las dos); el resto queda fijo.
+export function especialidadDe(user: User | null): Especialidad {
+  const rol = getUserRole(user)
+  return (rol && ROL_ESPECIALIDAD[rol]) || 'kinesiologia'
+}
+
+// El admin puede alternar entre especialidades (las ve todas); el resto queda fijo.
 export function puedeCambiarEspecialidad(user: User | null): boolean {
   return isAdmin(user)
 }

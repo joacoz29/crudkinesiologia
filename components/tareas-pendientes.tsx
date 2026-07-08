@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { addDays, subDays } from "date-fns"
 import { format } from "date-fns-tz"
 import { usePatients } from "@/lib/patients-store"
-import { fetchTurnosPorRango, horaToMin, esDeEspecialidad } from "@/lib/helpers"
+import { fetchTurnosPorRango, horaToMin } from "@/lib/helpers"
+import { filtrarTurnosPorEspecialidad } from "@/lib/especialidades"
 import { fetchFeriados } from "@/lib/feriados"
 import {
   computeTareasPacientes,
@@ -298,12 +299,7 @@ export function TareasPendientes({
     const nowMin = horaToMin(format(new Date(), "HH:mm", { timeZone: TZ }))
     const dePacientes = computeTareasPacientes(patients)
     // Solo los turnos de la especialidad activa generan tareas (legacy sin tag = kine)
-    const turnosEsp: Record<string, Turno[]> = {}
-    for (const [f, ts] of Object.entries(turnos)) {
-      const filt = ts.filter((t) => esDeEspecialidad(t, especialidad))
-      if (filt.length) turnosEsp[f] = filt
-    }
-    const deTurnos = computeTareasTurnos(patients, turnosEsp, hoyKey, nowMin)
+    const deTurnos = computeTareasTurnos(patients, filtrarTurnosPorEspecialidad(turnos, especialidad), hoyKey, nowMin)
     // Si un paciente tiene "Reautorizar antes del turno", no mostramos además la
     // tarea clínica de "Sesiones agotadas" (sería redundante).
     const reautorizar = new Set(

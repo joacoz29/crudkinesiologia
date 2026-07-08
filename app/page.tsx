@@ -21,6 +21,7 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import { Patient, Turno, Especialidad } from "@/types"
 import { getUserDisplayName, isAdmin, canAccessLibroDiario, especialidadDe, puedeCambiarEspecialidad } from "@/lib/auth-helper"
+import { ESPECIALIDADES, ESPECIALIDADES_LIST, ESP_DEFAULT } from "@/lib/especialidades"
 import { AdminPanel } from "@/components/admin-panel"
 import { TareasPendientes } from "@/components/tareas-pendientes"
 import { ConnectionStatus } from "@/components/connection-status"
@@ -201,9 +202,9 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
 
   const handleEdit = (patient: Patient) => {
     setSelectedPatient(patient)
-    // En contexto traumatología (el traumatólogo, o el admin con el selector en
-    // trauma) la ficha se abre en modo trauma: kine read-only + sección de trauma.
-    if (especialidad === "traumatologia") {
+    // La especialidad activa decide qué ficha se abre (config en lib/especialidades):
+    // "trauma" = kine read-only + sección propia de consultas; "kine" = la de siempre.
+    if (ESPECIALIDADES[especialidad].ficha === "trauma") {
       setTraumaFichaOpen(true)
     } else {
       setEditModalOpen(true)
@@ -317,23 +318,24 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
               <p className="text-xs text-white/50 mt-0.5">Lic. Ana Patricia Tullio</p>
             </div>
             <div className="flex items-center gap-4">
-              {/* Contexto de especialidad (Fase 1): selector para admin, chip para el traumatólogo.
-                  Todavía no filtra la agenda — eso llega en la Fase 2. */}
+              {/* Contexto de especialidad: selector para admin (derivado del registry
+                  de lib/especialidades — sumar una especialidad agrega el toggle solo),
+                  chip fijo para los médicos de otras especialidades. */}
               {puedeElegirEsp ? (
                 <div className="inline-flex rounded-full bg-white/10 p-0.5 text-xs">
-                  {([["kinesiologia", "Kinesiología"], ["traumatologia", "Traumatología"]] as const).map(([e, label]) => (
+                  {ESPECIALIDADES_LIST.map((e) => (
                     <button
                       key={e}
                       type="button"
                       onClick={() => setEspecialidad(e)}
                       className={`px-3 py-1 rounded-full font-medium transition-colors ${especialidad === e ? "bg-white text-[#001633]" : "text-white/70 hover:text-white"}`}
                     >
-                      {label}
+                      {ESPECIALIDADES[e].label}
                     </button>
                   ))}
                 </div>
-              ) : especialidad === "traumatologia" ? (
-                <span className="px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-medium">Traumatología</span>
+              ) : especialidad !== ESP_DEFAULT ? (
+                <span className="px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-medium">{ESPECIALIDADES[especialidad].label}</span>
               ) : null}
               <div className="bg-white text-[#001633] py-2 px-4 rounded-full flex items-center">
                 <span className="mr-2">

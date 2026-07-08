@@ -26,6 +26,7 @@ import { fetchFeriados } from "@/lib/feriados"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { AgendaDia } from "@/components/agenda-dia"
+import { ScrollFab } from "@/components/scroll-fab"
 import { toast } from "sonner"
 
 const DAYS_OF_WEEK = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
@@ -589,6 +590,9 @@ export function Calendario({
           onSaved={handleTurnoSaved}
         />
       )}
+
+      {/* FAB de scroll: al fondo de la agenda del día, y de vuelta arriba */}
+      <ScrollFab labelDown="Ir al final de la agenda" labelUp="Volver arriba" />
     </div>
   )
 }

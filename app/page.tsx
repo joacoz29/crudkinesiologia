@@ -317,7 +317,9 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
               <h1 className="text-xl font-semibold tracking-tight">Kinesiología Integral</h1>
               <p className="text-xs text-white/50 mt-0.5">Lic. Ana Patricia Tullio</p>
             </div>
-            <div className="flex items-center gap-4">
+            {/* En mobile la fila (selector + usuario + logout) no entra en el ancho:
+                envuelve centrada en vez de desbordar cortando los extremos. */}
+            <div className="flex max-w-full flex-wrap items-center justify-center gap-2 sm:justify-end sm:gap-4">
               {/* Contexto de especialidad: selector para admin (derivado del registry
                   de lib/especialidades — sumar una especialidad agrega el toggle solo),
                   chip fijo para los médicos de otras especialidades. */}

@@ -72,6 +72,9 @@ export function EditarTurnoModal({
   const [nuevaFecha, setNuevaFecha] = useState<Date | undefined>(undefined)
   const [isMoving, setIsMoving] = useState(false)
   const [reprogConflictOpen, setReprogConflictOpen] = useState(false)
+  // Guard de intención pendiente: eligieron fecha en "Reprogramar" pero tocaron
+  // "Guardar cambios" en vez de "Mover" (error frecuente en recepción)
+  const [avisoMoverOpen, setAvisoMoverOpen] = useState(false)
   const [turnosEseDia, setTurnosEseDia] = useState<Turno[]>([])
   const [loadingTurnosDia, setLoadingTurnosDia] = useState(false)
 
@@ -114,10 +117,18 @@ export function EditarTurnoModal({
       setReprogramando(false)
       setNuevaFecha(undefined)
       setReprogConflictOpen(false)
+      setAvisoMoverOpen(false)
     }
   }, [open, turno])
 
   const handleSave = async () => {
+    // Hay una fecha de reprogramación elegida y sin aplicar: "Guardar cambios" NO
+    // mueve el turno (eso lo hace "Mover"). Frenar y preguntar antes de que la
+    // asistente cierre creyendo que lo reprogramó.
+    if (reprogramando && nuevaFecha && format(nuevaFecha, "yyyy-MM-dd") !== fecha) {
+      setAvisoMoverOpen(true)
+      return
+    }
     setIsSaving(true)
     try {
       // Si el cambio involucra "ausente" (entra, sale o cambia la justificación) y el
@@ -693,6 +704,34 @@ export function EditarTurnoModal({
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmReprogramar} className="bg-[#001633] hover:bg-[#002966]">
               Reprogramar igual
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Eligieron fecha para reprogramar pero tocaron "Guardar cambios" en vez de
+          "Mover": preguntar la intención antes de guardar sin mover. "Mover el
+          turno" pasa por handleReprogramar (mismo chequeo de duplicados). */}
+      <AlertDialog open={avisoMoverOpen} onOpenChange={setAvisoMoverOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Elegiste una fecha para reprogramar</AlertDialogTitle>
+            <AlertDialogDescription>
+              Seleccionaste
+              {nuevaFecha && (
+                <> el <span className="font-medium capitalize">{format(nuevaFecha, "EEEE d 'de' MMMM", { locale: es })}</span></>
+              )}{" "}
+              en &ldquo;Reprogramar&rdquo;, pero &ldquo;Guardar cambios&rdquo; no mueve el turno — para eso está el botón{" "}
+              <span className="font-medium">Mover</span>. ¿Querés mover el turno a esa fecha?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Volver</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setAvisoMoverOpen(false); handleReprogramar() }}
+              className="bg-[#001633] hover:bg-[#002966]"
+            >
+              Mover el turno
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

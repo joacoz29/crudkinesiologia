@@ -314,7 +314,7 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
             >
               <div
                 className={[
-                  "w-16 shrink-0 flex items-start justify-center pt-3.5 text-xs font-mono border-r border-gray-100",
+                  "w-12 sm:w-16 shrink-0 flex items-start justify-center pt-3.5 text-xs font-mono border-r border-gray-100",
                   libre ? "text-gray-300" : "text-gray-500 font-medium",
                 ]
                   .filter(Boolean)
@@ -323,7 +323,10 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
                 {hourLabel}
               </div>
 
-              <div className="flex-1 px-3 py-2 flex flex-col gap-1.5 justify-center">
+              {/* min-w-0 en toda la cadena: sin esto, el min-content de un hijo con
+                  nowrap (la nota con truncate) fuerza el ancho de la fila y en
+                  pantallas angostas los chips desbordan el viewport. */}
+              <div className="flex-1 min-w-0 px-2 sm:px-3 py-2 flex flex-col gap-1.5 justify-center">
                 {libre && !hasFilter ? (
                   <span className="text-xs text-gray-300 group-hover:text-gray-400 flex items-center gap-1 transition-colors">
                     <Plus className="h-3 w-3" />
@@ -334,20 +337,20 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
                     const isConfirming = confirmingIds.has(turno.id)
                     const canQuickConfirm = turno.estado === "pendiente" && !!turno.patientId && !!onConfirmarAsistencia && !esFuturo
                     return (
-                      <div key={turno.id} className="flex items-stretch gap-1.5 w-full max-w-sm">
+                      <div key={turno.id} className="flex min-w-0 items-stretch gap-1.5 w-full max-w-sm">
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
                             onEditarTurno(turno)
                           }}
                           className={[
-                            "text-left text-sm px-3 py-1.5 rounded border flex-1",
+                            "text-left text-sm px-2.5 sm:px-3 py-1.5 rounded border flex-1 min-w-0",
                             "hover:opacity-75 transition-opacity",
                             chipStyle(turno),
                           ].join(" ")}
                         >
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="font-medium">
+                          <div className="flex items-center justify-between gap-2 sm:gap-4">
+                            <span className="min-w-0 font-medium">
                               {/* Apellido primero: las asistentes escanean la agenda por apellido */}
                               {turno.hora} — {turno.apellido} {turno.nombre}
                             </span>

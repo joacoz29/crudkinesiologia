@@ -36,7 +36,9 @@ import { ref, update, remove, get } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { toast } from "sonner"
-import { confirmarAsistencia, desconfirmarAsistencia, reconciliarAusencia, deshacerAusente, writeLog, LogCambio, horaToMin, minToHora } from "@/lib/helpers"
+import { confirmarAsistencia, desconfirmarAsistencia, reconciliarAusencia, deshacerAusente } from "@/lib/flujo/asistencia"
+import { writeLog, LogCambio } from "@/lib/audit/log"
+import { horaToMin, minToHora } from "@/lib/domain/tiempo"
 
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },

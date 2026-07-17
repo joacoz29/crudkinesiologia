@@ -156,16 +156,18 @@ flowchart LR
         cadm["Admin<br/>admin-panel · admin-datos<br/>admin-duplicados"]
     end
 
-    subgraph libl["lib/ — cache · logica · acceso a datos"]
+    subgraph libl["lib/ — cache · dominio · datos · flujo · auditoria"]
         store["patients-store<br/>cache live de pacientes"]
         mcache["monthly-cache<br/>cache SWR por mes"]
-        helpers["helpers — barrel<br/>re-exporta domain · data · flujo · audit"]
+        dom["domain/* (puro, con tests)<br/>paciente · trauma · libro · tiempo<br/>+ edad · doctores"]
+        dataM["data/*<br/>turnos · libro · opiniones-logs"]
+        flujoM["flujo/asistencia<br/>escrituras clinicas atomicas"]
+        auditM["audit/log — writeLog"]
         tareas["tareas (puro)"]
         dedup["dedup (fusion)"]
         fer["feriados"]
         authh["auth-helper<br/>roles (solo UI)"]
         esp["especialidades<br/>registry por especialidad"]
-        puros["edad · doctores<br/>(puros)"]
         fbc["firebase client SDK"]
     end
 
@@ -178,17 +180,18 @@ flowchart LR
     ext["API feriados (externa)"]
 
     shell --> cpac & ccal & clib & cpen & cadm
-    shell --> store & helpers & tareas & fer & authh
-    ccal --> helpers & mcache & fer
-    cadm --> helpers & mcache & store & dedup
-    cpen --> store & helpers & tareas & fer
-    cpac --> helpers & store
-    clib --> helpers
-    tareas --> helpers
-    dedup --> helpers & fbc
+    shell --> store & tareas & fer & authh & dataM & auditM & dom
+    ccal --> mcache & fer & dataM & flujoM & auditM & dom
+    cadm --> mcache & store & dedup & dataM & dom
+    cpen --> store & tareas & fer & dataM & dom
+    cpac --> store & dataM & auditM & dom
+    clib --> auditM & dom
+    tareas --> dom
+    dedup --> dataM & auditM & fbc
+    flujoM --> dataM & dom & auditM & esp
+    dataM --> dom & esp & fbc
+    auditM --> authh & fbc
     shell & ccal & clib & cpen & cadm --> esp
-    cpac & cadm --> puros
-    helpers --> fbc & authh & esp
     store --> fbc
     fer --> apife
     fbc --> rtdb
@@ -198,9 +201,10 @@ flowchart LR
 
 **Decisiones / lecturas que muestra el diagrama**
 
-- **`helpers` y `patients-store` son los dos hubs.** Casi todas las features dependen de
-  `helpers` (acceso a datos + lógica de negocio + auditoría) y de `patients-store` (la
-  colección de pacientes). Es el acoplamiento central del sistema (ver Observaciones).
+- **El ex-hub `helpers` ya no existe (refactor R1–R3).** La lib quedó en capas con grafo
+  **acíclico**: `domain/*` (puro, abajo de todo, con tests) ← `data/*` y `audit/log` ←
+  `flujo/asistencia` (la única capa que combina datos + dominio + auditoría en escrituras
+  atómicas). `patients-store` sigue siendo el hub de la colección de pacientes.
 - **Separación caché / lógica / cómputo puro.** `patients-store` y `monthly-cache`
   resuelven el costo de datos; `helpers`/`dedup` encapsulan las escrituras; `tareas` es
   **puro** (deriva la pestaña Pendientes desde lo ya cacheado, sin lecturas nuevas).
@@ -306,9 +310,9 @@ Hallazgos verificados contra el código (no asumidos). Ordenados por impacto apr
 > `helpers.ts` es ahora un **barrel de re-exports** y el contenido vive partido por
 > responsabilidad en `lib/domain/*` (deserialización PURA con **tests de retrocompat** —
 > `npm test`, Vitest, primera suite del repo), `lib/data/*` (acceso a RTDB),
-> `lib/flujo/asistencia` (lógica clínica con escrituras) y `lib/audit/log`. Pendientes: R3
-> (migrar imports directos y borrar el barrel) y R4 (los componentes grandes de la obs #7,
-> por oportunidad). **#9 tiene plan concreto (fase F6)**: custom claims +
+> `lib/flujo/asistencia` (lógica clínica con escrituras) y `lib/audit/log`. **R3 hecha**: los
+> 16 consumidores importan de los módulos directos y `lib/helpers.ts` se borró. Pendiente: R4
+> (los componentes grandes de la obs #7, por oportunidad). **#9 tiene plan concreto (fase F6)**: custom claims +
 > reglas por rol + auditoría de write-paths — con una restricción nueva a respetar: los
 > updates multi-path deben pasar TODAS las reglas juntas (confirmar asistencia de kine
 > escribe `libroDiario` aunque el rol no vea esa pestaña; trauma escribe consulta + cobro en

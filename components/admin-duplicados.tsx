@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { usePatients } from "@/lib/patients-store"
 import { gruposDuplicados, fusionarPacientes, deshacerFusion, type GrupoDuplicado } from "@/lib/dedup"
-import { getSessionStats } from "@/lib/helpers"
+import { getSessionStats } from "@/lib/domain/paciente"
 import { Patient } from "@/types"
 import { PreviewPatientPanel } from "@/components/preview-patient-panel"
 import { Button } from "@/components/ui/button"

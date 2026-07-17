@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { signInWithEmailAndPassword } from "firebase/auth"
 import { auth } from "@/lib/firebase"
-import { writeLog } from "@/lib/helpers"
+import { writeLog } from "@/lib/audit/log"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

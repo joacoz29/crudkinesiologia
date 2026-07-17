@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useCachedMonth } from "@/lib/monthly-cache"
-import { fetchOpinionesMes, fetchLogsMes, type Opinion, type LogEntry } from "@/lib/helpers"
+import { fetchOpinionesMes, fetchLogsMes, type Opinion, type LogEntry } from "@/lib/data/opiniones-logs"
 import { format, parseISO, isValid, addMonths, subMonths } from "date-fns"
 import { formatInTimeZone } from "date-fns-tz"
 import { es } from "date-fns/locale"

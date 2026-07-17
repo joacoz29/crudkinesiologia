@@ -2,7 +2,8 @@ import { ref, update } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { Patient } from "@/types"
 import { soloDigitos, dniEsValido } from "@/lib/tareas"
-import { fetchTurnosPorPaciente, writeLog } from "@/lib/helpers"
+import { fetchTurnosPorPaciente } from "@/lib/data/turnos"
+import { writeLog } from "@/lib/audit/log"
 
 // Depuración de pacientes duplicados (mismo DNI VÁLIDO en 2+ fichas). Ver el
 // análisis con scripts/dni-audit.mjs. La fusión es asistida (el admin revisa

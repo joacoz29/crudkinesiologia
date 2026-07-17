@@ -1,5 +1,6 @@
 import { Patient, Turno } from "@/types"
-import { getSessionStats, parseTratamientosRaw, horaToMin } from "@/lib/helpers"
+import { getSessionStats, parseTratamientosRaw } from "@/lib/domain/paciente"
+import { horaToMin } from "@/lib/domain/tiempo"
 import { edadActual } from "@/lib/edad"
 
 // ───────────────────────────────────────────────────────────────────────────

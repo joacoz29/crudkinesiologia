@@ -12,8 +12,8 @@ Skill para acompañar el desarrollo de **crudkinesiologia** (gestión de Kinesio
 1. **Entender el pedido.** Identificá qué nodos de RTDB toca (`pacientes`, `turnos/{fecha}`, `libroDiario/{fecha}`, `logs/{mes}`, `opiniones/{mes}`, `config/*`) y si lee, escribe o ambos.
 2. **Proponer, no encuestar.** Dar **1 recomendación clara** + a lo sumo 1 alternativa más liviana con su trade-off. Arrancar siempre por el **v1 mínimo viable** y dejar lo grande como extensión. No volcar un menú de 5 opciones.
 3. **Pasar los 3 checklists de abajo ANTES de escribir** (Ahorro de datos · Seguridad · Auditoría/integridad). Si la idea choca con alguno, ajustar el diseño, no el chequeo.
-4. **Reusar antes que crear.** La mayoría de los helpers/cachés ya existen en `lib/helpers.ts`, `lib/patients-store.ts`, `lib/monthly-cache.ts`, `lib/auth-helper.ts`. Buscá el patrón existente antes de inventar uno.
-5. **Cerrar.** `npm run lint` (+ `npx tsc --noEmit` si tocaste tipos), avisar si hay que **publicar reglas en Firebase Console**, y sugerir `/code-review` antes de commitear.
+4. **Reusar antes que crear.** La lib está partida por responsabilidad: `lib/domain/*` ((de)serialización pura, con tests), `lib/data/*` (lecturas/altas RTDB), `lib/flujo/asistencia.ts` (lógica clínica con escrituras), `lib/audit/log.ts` (writeLog), `lib/especialidades.ts` (registry por especialidad), más `lib/patients-store.ts`, `lib/monthly-cache.ts`, `lib/auth-helper.ts`. Buscá el patrón existente antes de inventar uno.
+5. **Cerrar.** `npm test` + `npx tsc --noEmit` (lint no se usa), avisar si hay que **publicar reglas en Firebase Console**, y sugerir `/code-review` antes de commitear.
 
 ---
 
@@ -55,7 +55,7 @@ La regla de oro: **nunca volver a bajar lo que ya está en memoria.** Una lectur
 
 ## Pilar 3 — Auditoría e integridad de escrituras
 
-- **Toda mutación de negocio se loguea.** `writeLog` en `lib/helpers.ts` cubre pacientes (con diffs), turnos, confirmar/deshacer asistencia, libro diario, login/logout. **No escribir por fuera de los helpers que loguean** (ya se borraron helpers de turno que salteaban la auditoría — no reintroducir ese patrón). Acción dedicada + label + color por tipo de evento.
+- **Toda mutación de negocio se loguea.** `writeLog` en `lib/audit/log.ts` cubre pacientes (con diffs), turnos, confirmar/deshacer asistencia, libro diario, login/logout. **No escribir por fuera de los helpers que loguean** (ya se borraron helpers de turno que salteaban la auditoría — no reintroducir ese patrón). Acción dedicada + label + color por tipo de evento.
 - **Escrituras multi-path = atómicas.** Si tocás más de un path, una sola `update(ref(db), { "a/x": v, "b/y": null })`. Patrones existentes: `confirmarAsistencia` (historial + tratamiento + estado turno + libro diario), reprogramar turno (mueve `turnos/{nueva}` + nulifica `turnos/{vieja}` con el mismo id), "eliminar próximos".
 - **Idempotencia:** antes de mutar, releé el estado actual (guard de `confirmarAsistencia` relee el turno). Las acciones reversibles devuelven un payload `revert` para el "Deshacer" del toast (`desconfirmarAsistencia`, `deshacer_eliminar_turnos`).
 - **Identidad estable, no índices.** IDs con `crypto.randomUUID()`; en mapas la clave es la identidad (lección del lost-update del libro: array→mapa `{entryId: entry}`, escritura por-entrada con diff contra `baselineRef`, nunca `set()` del nodo entero, que pisa lo que escribió otro en paralelo). Para orden estable de un mapa, campo explícito (`createdAt` epoch ms), no el orden lexicográfico de las claves.

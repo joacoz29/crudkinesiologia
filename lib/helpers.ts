@@ -1,167 +1,22 @@
 import { ref, get, push, update, query, orderByKey, startAt, endAt } from "firebase/database"
 import { format } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
-import { Patient, Tratamiento, Turno, TurnoConFecha, TurnoEstado, Especialidad, TraumatologiaFicha, TraumatologiaConsulta } from "@/types"
+import { Turno, TurnoConFecha, TurnoEstado, Especialidad } from "@/types"
 import { getUserDisplayName } from "@/lib/auth-helper"
 import { ESPECIALIDADES, ESPECIALIDADES_LIST, espDe } from "@/lib/especialidades"
+import { TZ } from "@/lib/domain/tiempo"
+import { parseTratamientosRaw, getNextSessionNumber } from "@/lib/domain/paciente"
+import { esParticular, normalizeLibroEntradas, type LibroDiarioEntry } from "@/lib/domain/libro"
 
-const TZ = "America/Argentina/Buenos_Aires"
-
-// Sesión registrada en el historial libre: "N-" seguido de espacio o fin de
-// texto. El lookahead evita falsos positivos con teléfonos ("02320-659087") o
-// fechas ("2026-06-10") anotados en el mismo campo. Fuente única para contar y
-// numerar sesiones (countSesionesEnHistorial / getNextSessionNumber).
-const SESION_RE = /(\d+)-(?=\s|$)/g
-
-/** Cuenta las sesiones "N-" registradas en el historial libre (esquema legacy). */
-export function countSesionesEnHistorial(text: string): number {
-  return [...text.matchAll(SESION_RE)].length
-}
-
-// Hora "HH:MM" → minutos del día, y viceversa (para ventanas horarias)
-export function horaToMin(h: string): number {
-  const [hh, mm] = (h ?? "").split(":")
-  return (parseInt(hh, 10) || 0) * 60 + (parseInt(mm, 10) || 0)
-}
-export function minToHora(m: number): string {
-  const c = Math.max(0, Math.min(24 * 60 - 1, m))
-  return `${String(Math.floor(c / 60)).padStart(2, "0")}:${String(c % 60).padStart(2, "0")}`
-}
-
-export function parseTratamientosRaw(val: unknown): Tratamiento[] {
-  if (!val) return []
-  const items: unknown[] = Array.isArray(val) ? val : Object.values(val as object)
-  return items.filter(Boolean).map((item) => {
-    const t = item as Record<string, unknown>
-    const rawSesiones = t.sesiones
-    const sesiones: string[] = Array.isArray(rawSesiones)
-      ? (rawSesiones as string[]).filter(Boolean)
-      : rawSesiones && typeof rawSesiones === "object"
-      ? (Object.values(rawSesiones as object) as string[]).filter(Boolean)
-      : []
-    return {
-      id: String(t.id ?? Date.now()),
-      nroAutorizacion: String(t.nroAutorizacion ?? ""),
-      sesionesAutorizadas: Number(t.sesionesAutorizadas ?? 0),
-      fechaCreacion: String(t.fechaCreacion ?? ""),
-      sesiones,
-      ...(t.tratamiento != null && { tratamiento: String(t.tratamiento) }),
-      ...(t.diagnostico != null && { diagnostico: String(t.diagnostico) }),
-      ...(t.doctor != null && { doctor: String(t.doctor) }),
-    }
-  })
-}
-
-function normalizeConsultaTrauma(item: unknown): TraumatologiaConsulta {
-  const c = item as Record<string, unknown>
-  return {
-    id: String(c.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
-    fecha: String(c.fecha ?? ""),
-    ...(!!(c.diagnostico != null && String(c.diagnostico).trim()) && { diagnostico: String(c.diagnostico) }),
-    notas: String(c.notas ?? ""),
-    // Preservar el monto es crítico: las escrituras reescriben la lista completa
-    // desde el estado parseado — si se cayera acá, se perdería en la base.
-    ...(Number(c.monto) > 0 && { monto: Number(c.monto) }),
-    usuario: String(c.usuario ?? ""),
-    createdAt: Number(c.createdAt ?? 0),
-  }
-}
-
-// Historial de consultas de traumatología, más nuevas primero. Acepta la lista
-// como array u objeto (retrocompat RTDB) y pliega el formato legacy plano
-// ({diagnostico, notas} sueltos) como una consulta, para no perder lo ya cargado.
-export function parseConsultasTrauma(ficha: TraumatologiaFicha | undefined | null): TraumatologiaConsulta[] {
-  if (!ficha) return []
-  const raw: unknown = ficha.consultas
-  let list: TraumatologiaConsulta[] = []
-  if (Array.isArray(raw)) list = raw.filter(Boolean).map(normalizeConsultaTrauma)
-  else if (raw && typeof raw === "object") list = Object.values(raw as object).filter(Boolean).map(normalizeConsultaTrauma)
-  if (list.length === 0 && ((ficha.diagnostico ?? "").trim() || (ficha.notas ?? "").trim())) {
-    list = [{
-      id: "legacy",
-      fecha: (ficha.ultima_actualizacion?.fecha ?? "").slice(0, 10),
-      ...(!!(ficha.diagnostico ?? "").trim() && { diagnostico: String(ficha.diagnostico) }),
-      notas: (ficha.notas ?? "").trim(),
-      usuario: ficha.ultima_actualizacion?.usuario ?? "",
-      createdAt: 0,
-    }]
-  }
-  return list.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
-}
-
-// Sesiones usadas/autorizadas de un paciente: suma los tratamientos del acordeón,
-// o cae al esquema legacy (sesionesAutorizadas + conteo de "N-" en el historial libre).
-// null si el paciente no tiene sesiones autorizadas cargadas.
-export function getSessionStats(patient: Patient): { used: number; authorized: number } | null {
-  const trats = parseTratamientosRaw(patient.tratamientos)
-  if (trats.length > 0) {
-    const authorized = trats.reduce((sum, t) => sum + (t.sesionesAutorizadas ?? 0), 0)
-    if (!authorized) return null
-    const used = trats.reduce((sum, t) => sum + t.sesiones.length, 0)
-    return { used, authorized }
-  }
-  const authorized = patient.sesionesAutorizadas
-  if (!authorized) return null
-  const sesionesText = (patient.sesiones ?? []).join(" ")
-  const used = countSesionesEnHistorial(sesionesText)
-  return { used, authorized }
-}
-
-export interface LibroDiarioEntry {
-  id?: string
-  tipo?: "Paciente" | "Gasto" | "Ingreso"
-  nombreApellido: string
-  cobertura: "Particular" | "Obra Social"
-  obraSocial: string
-  detalle?: string
-  debe: number
-  haber: number
-  // Sello de creación (epoch ms) para ordenar la lista por orden de carga. Las
-  // claves bajo `entradas/` son uuids aleatorios, así que sin esto Firebase las
-  // devuelve ordenadas por uuid (azaroso), no por cuándo se agregaron.
-  createdAt?: number
-  especialidad?: Especialidad // ausente = kinesiología (retrocompat)
-}
-
-// Normaliza las entradas del libro diario soportando ambos formatos:
-// - array (legacy: se guardaba el nodo entero) → id = inner `id`
-// - mapa { entryId: entry } (nuevo: escrituras por-entrada) → id = la clave
-// La clave manda en el formato mapa: es la identidad estable para los updates.
-export function normalizeLibroEntradas(raw: unknown): (LibroDiarioEntry & { id: string })[] {
-  if (!raw) return []
-  const entries: (LibroDiarioEntry & { id: string })[] = []
-  if (Array.isArray(raw)) {
-    raw.forEach((e, i) => {
-      if (!e) return
-      const v = e as LibroDiarioEntry
-      entries.push({
-        ...v,
-        id: v.id || (typeof crypto !== "undefined" ? crypto.randomUUID() : String(Math.random())),
-        tipo: v.tipo ?? "Paciente",
-        // Formato legacy sin sello: el índice del array ES el orden de carga
-        createdAt: typeof v.createdAt === "number" ? v.createdAt : i,
-      })
-    })
-  } else if (typeof raw === "object") {
-    for (const [key, val] of Object.entries(raw as Record<string, LibroDiarioEntry>)) {
-      if (!val) continue
-      entries.push({ ...val, id: key, tipo: val.tipo ?? "Paciente" })
-    }
-  }
-  // Orden estable por sello de creación. Las entradas sin `createdAt` (datos viejos
-  // en formato mapa, cuyo orden real ya se había perdido) quedan primero conservando
-  // su orden relativo previo; las nuevas se ordenan por cuándo se agregaron.
-  return entries.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
-}
-
-// "Particular" se identifica por la obra social: vacío, "-" o el texto
-// "particular" (cualquier mayúscula). Así un paciente cuya obra social quedó
-// cargada como "PARTICULAR" se trata como particular y no como una obra social
-// real (de ahí salía el desfase cobertura "Obra Social" / obraSocial "PARTICULAR").
-export function esParticular(obraSocial: string | undefined | null): boolean {
-  const t = (obraSocial ?? "").trim().toLowerCase()
-  return t === "" || t === "-" || t === "particular"
-}
+// ── Barrel del refactor R1 (ver docs/architecture.md → obs #5/#6) ────────────
+// La (de)serialización de dominio vive en lib/domain/* (módulos PUROS, con
+// tests de retrocompat en lib/domain/__tests__/). Se re-exporta desde acá para
+// que los consumidores sigan importando de "@/lib/helpers" sin cambios; la
+// migración de imports directa es la etapa R3.
+export * from "@/lib/domain/tiempo"
+export * from "@/lib/domain/paciente"
+export * from "@/lib/domain/trauma"
+export * from "@/lib/domain/libro"
 
 // Prepara UNA entrada de paciente para el libro diario del día, o null si el
 // paciente ya tiene entrada ese día. Devuelve solo la entrada + su id para
@@ -397,19 +252,6 @@ export async function fetchTurnosPorPaciente(patientId: string): Promise<TurnoCo
 
 // Agrega una entrada "N- dd/mm/yyyy HH:mm" al historial libre, con numeración
 // correlativa — mismo formato que usa confirmarAsistencia
-export function appendSesionAlHistorial(historial: string, fechaHora: string): string {
-  const entry = `${getNextSessionNumber(historial)}- ${fechaHora}`
-  return historial.trim() ? `${historial.trim()}\n${entry}` : entry
-}
-
-export function getNextSessionNumber(text: string): number {
-  // Mismo criterio que countSesionesEnHistorial (ver SESION_RE): cuenta "N-"
-  // reales, no fechas ni teléfonos anotados en el historial libre.
-  const matches = [...text.matchAll(SESION_RE)]
-  if (matches.length === 0) return 1
-  return Math.max(...matches.map((m) => parseInt(m[1], 10))) + 1
-}
-
 export interface ConfirmarAsistenciaResult {
   alreadyConfirmed: boolean
   nextNum?: number

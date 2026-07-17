@@ -159,7 +159,7 @@ flowchart LR
     subgraph libl["lib/ — cache · logica · acceso a datos"]
         store["patients-store<br/>cache live de pacientes"]
         mcache["monthly-cache<br/>cache SWR por mes"]
-        helpers["helpers — HUB<br/>turnos · libro · logs · asistencia"]
+        helpers["helpers — barrel<br/>re-exporta domain · data · flujo · audit"]
         tareas["tareas (puro)"]
         dedup["dedup (fusion)"]
         fer["feriados"]
@@ -302,8 +302,13 @@ Hallazgos verificados contra el código (no asumidos). Ordenados por impacto apr
 > mobile: la agenda ya no desborda en pantallas angostas (cadena `min-w-0`; la causa era el
 > `truncate` de las notas propagando su min-content) y el header envuelve. Flujo de trabajo:
 > rama **`dev`** (preview de Vercel contra la MISMA base de producción) → ff-merge a `main`.
-> Efectos sobre las observaciones: **#6 empeoró** (`helpers.ts` creció con asistencia por
-> especialidad y consultas de trauma); **#9 tiene plan concreto (fase F6)**: custom claims +
+> Efectos sobre las observaciones: **#5 y #6 resueltas en lo estructural (refactor R1/R2)**:
+> `helpers.ts` es ahora un **barrel de re-exports** y el contenido vive partido por
+> responsabilidad en `lib/domain/*` (deserialización PURA con **tests de retrocompat** —
+> `npm test`, Vitest, primera suite del repo), `lib/data/*` (acceso a RTDB),
+> `lib/flujo/asistencia` (lógica clínica con escrituras) y `lib/audit/log`. Pendientes: R3
+> (migrar imports directos y borrar el barrel) y R4 (los componentes grandes de la obs #7,
+> por oportunidad). **#9 tiene plan concreto (fase F6)**: custom claims +
 > reglas por rol + auditoría de write-paths — con una restricción nueva a respetar: los
 > updates multi-path deben pasar TODAS las reglas juntas (confirmar asistencia de kine
 > escribe `libroDiario` aunque el rol no vea esa pestaña; trauma escribe consulta + cobro en
@@ -390,9 +395,9 @@ Hallazgos verificados contra el código (no asumidos). Ordenados por impacto apr
 
 Para no asumir, se deja explícito lo que **no** pude confirmar leyendo el repo:
 
-- **Tests / CI:** no se encontraron archivos de test ni configuración de CI. *(La memoria del
-  proyecto indica que `npm run lint` se cuelga y se valida con `tsc`; no verificado en esta
-  pasada.)*
+- **Tests / CI:** desde jul 2026 hay **tests unitarios** (`npm test`, Vitest) para los módulos
+  puros de `lib/domain/*` — documentan el contrato de retrocompat de los datos legacy. No hay
+  CI todavía (se corren a mano junto con `tsc`; `npm run lint` sigue sin usarse).
 - **Contenido de variables de entorno:** solo se conocen los **nombres** (`NEXT_PUBLIC_FIREBASE_*`
   para el cliente, `FIREBASE_*` para el admin), no sus valores ni el entorno real.
 - **Volumen de datos:** ~2.600 pacientes (visto en la UI, jul 2026) → el store in-memory

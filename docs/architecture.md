@@ -1,6 +1,9 @@
 # Arquitectura — crudkinesiologia
 
-Sistema de gestión de consultorio kinesiológico (**Kinesiología Integral**).
+Sistema de gestión del consultorio **Kinesiología Integral**. Desde jul 2026 es
+**multi-especialidad**: kinesiología + traumatología sobre un modelo de **paciente
+compartido** (una ficha por persona; la especialidad taggea la actividad). Tercera
+especialidad planificada: medicina clínica (ver `lib/especialidades.ts`).
 
 **Stack:** Next.js 14 (App Router) · React 18 · TypeScript · Tailwind · ShadCN/Radix ·
 Firebase Realtime Database (client SDK) + Firebase Auth · `firebase-admin` (server) ·
@@ -16,7 +19,7 @@ desplegado en **Vercel**.
 
 ```mermaid
 flowchart TB
-    staff["Staff<br/>admin · kinesiologo · asistente"]
+    staff["Staff<br/>admin · kinesiologo · asistente · traumatologo"]
     pac["Paciente<br/>(sin cuenta)"]
 
     subgraph vercel["Infraestructura — Vercel"]
@@ -68,6 +71,11 @@ flowchart TB
   server-side con admin SDK) y un **proxy de feriados** (cachea 24 h y oculta el origen).
 - **Auth es un servicio aparte:** el client SDK obtiene un ID token de Firebase Auth y con
   él autentica cada llamada a RTDB. Los **roles** (`auth-helper`) son **solo de UI**.
+- **Contexto de especialidad en el cliente.** El rol fija la especialidad activa (el
+  traumatólogo trabaja fijo en la suya; el admin alterna con un selector). Agenda, Datos y
+  Recepción filtran **en memoria** por el tag `especialidad` de turnos/entradas (ausente =
+  kinesiología, retrocompat con todo el histórico). La lectura de RTDB sigue siendo **una y
+  compartida** — nunca un fetch por especialidad.
 - **Mantenimiento offline** (auditoría de DNIs, rotación de contraseñas) corre por fuera de
   la app, con service account.
 
@@ -141,7 +149,7 @@ consumen y no aportan al grafo de dependencias de negocio.
 flowchart LR
     subgraph feat["Frontend — features (client components)"]
         shell["app/page.tsx<br/>shell · auth guard · CRUD pacientes"]
-        cpac["Pacientes<br/>new/edit-patient-modal<br/>tratamientos-accordion"]
+        cpac["Pacientes<br/>new/edit-patient-modal<br/>tratamientos-accordion<br/>trauma-ficha-modal"]
         ccal["Calendario<br/>calendario · agenda-dia<br/>nuevo/editar-turno-modal"]
         clib["Libro Diario<br/>libro-diario"]
         cpen["Pendientes<br/>tareas-pendientes"]
@@ -156,6 +164,8 @@ flowchart LR
         dedup["dedup (fusion)"]
         fer["feriados"]
         authh["auth-helper<br/>roles (solo UI)"]
+        esp["especialidades<br/>registry por especialidad"]
+        puros["edad · doctores<br/>(puros)"]
         fbc["firebase client SDK"]
     end
 
@@ -176,7 +186,9 @@ flowchart LR
     clib --> helpers
     tareas --> helpers
     dedup --> helpers & fbc
-    helpers --> fbc & authh
+    shell & ccal & clib & cpen & cadm --> esp
+    cpac & cadm --> puros
+    helpers --> fbc & authh & esp
     store --> fbc
     fer --> apife
     fbc --> rtdb
@@ -197,6 +209,11 @@ flowchart LR
   el resto de la app (misma key de mes → caché compartida).
 - **El único puente al backend desde lib es `feriados -> /api/feriados`.** Todo lo demás
   del cliente va directo al SDK.
+- **`especialidades` es el registry transversal.** Todas las pestañas y `helpers` derivan
+  de él labels, filtros y comportamiento clínico por especialidad — nada de
+  `=== "traumatologia"` suelto. Sumar una especialidad = una entrada acá (+ checklist del
+  propio archivo). `edad` y `doctores` son módulos **puros** chicos (derivar edad de
+  `fechaNacimiento`; dedup de derivantes).
 
 ---
 
@@ -204,9 +221,9 @@ flowchart LR
 
 | Nodo | Contenido | Reglas |
 |---|---|---|
-| `pacientes/{id}` | ficha del paciente (clave `push()` ≈ fecha de alta) | `auth != null` (R/W) |
-| `turnos/{yyyy-MM-dd}/{turnoId}` | turnos por fecha | `auth != null` (R/W) |
-| `libroDiario/{yyyy-MM-dd}/entradas/{entryId}` | entradas del libro (mapa por id) | `auth != null` (R/W) |
+| `pacientes/{id}` | ficha del paciente (clave `push()` ≈ fecha de alta) · sub-nodo `traumatologia/consultas[]` = historial de la 2ª especialidad | `auth != null` (R/W) |
+| `turnos/{yyyy-MM-dd}/{turnoId}` | turnos por fecha · campo `especialidad?` (ausente = kinesiología) | `auth != null` (R/W) |
+| `libroDiario/{yyyy-MM-dd}/entradas/{entryId}` | entradas del libro (mapa por id) · `especialidad?` taggea los cobros de trauma para el split de Datos | `auth != null` (R/W) |
 | `logs/{yyyy-MM}/{logId}` | registro de actividad | lectura: 5 emails admin · escritura: `!data.exists()` (append-only) |
 | `opiniones/{yyyy-MM}/{id}` | opiniones por QR | lectura: 5 emails admin · escritura: **solo admin SDK** |
 | `opinionesIndice/{patientId}` · `opinionThrottle/{ipHash}` | anti-abuso del QR | **solo admin SDK** (clientes denegados por default) |
@@ -228,6 +245,24 @@ flowchart LR
   su vez cachea 24 h en el server).
 - **Excepción deliberada:** el **libro diario NO se cachea** en lectura — es dato financiero,
   se escribe desde dos lados sin señal confiable de invalidación cross-tab.
+
+### Multi-especialidad (paciente compartido — jul 2026)
+- **Una sola ficha por persona; la especialidad es un tag de actividad**, no colecciones
+  separadas: `turnos/*/especialidad?`, `libroDiario/*/entradas/*/especialidad?` y el
+  sub-nodo `pacientes/{id}/traumatologia` (historial de consultas propio). Tag **ausente =
+  kinesiología** → todo el histórico pre-especialidades sigue válido sin migración.
+- **`lib/especialidades.ts` es el registry único**: labels, badge del libro, qué ficha abre
+  la grilla y los **flags de comportamiento clínico**. `registraSesionKine` decide qué hace
+  confirmar asistencia: en kine registra sesión en tratamientos + fila en $0 del libro; en
+  trauma solo marca el estado (factura por consulta: monto opcional → entrada taggeada en el
+  libro, escrita en el **mismo update multi-path** que la consulta). El propio archivo trae
+  el checklist para sumar la 3ª especialidad (medicina clínica).
+- **Filtrado en memoria sobre la lectura compartida** (`filtrarTurnosPorEspecialidad`,
+  `LibroResumen.porEspecialidad`): jamás un fetch por especialidad (costo de datos).
+- **Rol → especialidad en `auth-helper`** (el traumatólogo trabaja fijo; el admin alterna).
+  Como el resto de los roles, es **solo UI** hasta endurecer reglas (obs #9 / F6).
+- **La ficha se ve completa desde cualquier rol**: el traumatólogo ve la historia de kine
+  read-only en su modal; kine ve el historial de trauma read-only en el suyo.
 
 ### Seguridad
 - Reglas RTDB **deny-by-default**; los datos solo con `auth != null`.
@@ -258,6 +293,22 @@ flowchart LR
 ## Architecture Observations
 
 Hallazgos verificados contra el código (no asumidos). Ordenados por impacto aproximado.
+
+> **Actualización (jul 2026).** La **multi-especialidad (F1–F4) está en producción**:
+> registry `lib/especialidades.ts`, ficha de trauma con historial de consultas + facturación
+> directa al libro, Datos/Libro con split por especialidad, Recepción filtrada. Módulos
+> nuevos: `especialidades` (registry), `trauma-ficha-modal`, `scroll-fab` (FAB de scroll
+> compartido), página `app/dev-agenda` (test de layout local, 404 en producción). Hardening
+> mobile: la agenda ya no desborda en pantallas angostas (cadena `min-w-0`; la causa era el
+> `truncate` de las notas propagando su min-content) y el header envuelve. Flujo de trabajo:
+> rama **`dev`** (preview de Vercel contra la MISMA base de producción) → ff-merge a `main`.
+> Efectos sobre las observaciones: **#6 empeoró** (`helpers.ts` creció con asistencia por
+> especialidad y consultas de trauma); **#9 tiene plan concreto (fase F6)**: custom claims +
+> reglas por rol + auditoría de write-paths — con una restricción nueva a respetar: los
+> updates multi-path deben pasar TODAS las reglas juntas (confirmar asistencia de kine
+> escribe `libroDiario` aunque el rol no vea esa pestaña; trauma escribe consulta + cobro en
+> un solo update). Volumen real ahora conocido: **~2.600 pacientes** → la obs #1 hoy está
+> holgada.
 
 > **Actualización (jun 2026).** Cambios materiales desde esta revisión: **obs #8 resuelta**
 > (código muerto de auth borrado). Nuevos módulos puros: `lib/edad.ts` (la edad se deriva de un
@@ -344,8 +395,8 @@ Para no asumir, se deja explícito lo que **no** pude confirmar leyendo el repo:
   pasada.)*
 - **Contenido de variables de entorno:** solo se conocen los **nombres** (`NEXT_PUBLIC_FIREBASE_*`
   para el cliente, `FIREBASE_*` para el admin), no sus valores ni el entorno real.
-- **Volumen de datos:** cantidad real de pacientes/turnos desconocida → el techo del store
-  in-memory (obs. #1) no se puede cuantificar.
+- **Volumen de datos:** ~2.600 pacientes (visto en la UI, jul 2026) → el store in-memory
+  (obs. #1) hoy trabaja holgado; re-evaluar si el padrón se multiplica.
 - **Firebase Storage:** `next.config.js` whitelist-ea `firebasestorage.googleapis.com` para
   imágenes, pero **no se halló uso de Storage** en el código (posible config vestigial).
 - **Scripts offline:** se confirmó la existencia de `scripts/dni-audit.mjs` y

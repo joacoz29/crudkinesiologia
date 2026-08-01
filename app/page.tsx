@@ -121,6 +121,8 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   // Conteo para el badge de la pestaña Pendientes. Solo tareas de paciente
   // (gratis desde la caché live); las de turno no se cuentan acá para no
   // disparar una lectura de turnos a nivel page.
+  // Las tareas `dni_duplicado` siguen contando: la Recepción las presenta como la
+  // sección "Fichas duplicadas" (1 tarea = 1 grupo), así que el total no cambia.
   const pendientesCount = useMemo(() => computeTareasPacientes(allPatients).length, [allPatients])
   const error = mutationError ?? storeError
   const router = useRouter()

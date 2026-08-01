@@ -10,7 +10,6 @@ import { ChevronLeft, ChevronRight, ChevronDown, Shield, Star, Search, Inbox, Ca
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AdminDatos } from "@/components/admin-datos"
-import { AdminDuplicados } from "@/components/admin-duplicados"
 
 const TZ = "America/Argentina/Buenos_Aires"
 
@@ -107,7 +106,7 @@ export function AdminPanel() {
   const [filterUser, setFilterUser] = useState("todos")
   const [filterAccion, setFilterAccion] = useState("todas")
   const [searchPaciente, setSearchPaciente] = useState("")
-  const [vista, setVista] = useState<"registro" | "opiniones" | "datos" | "duplicados">("registro")
+  const [vista, setVista] = useState<"registro" | "opiniones" | "datos">("registro")
   const [diaIndex, setDiaIndex] = useState(0) // paginación por día del registro (0 = día más reciente)
   const [usuariosOpen, setUsuariosOpen] = useState(false) // resumen por usuario colapsable
 
@@ -118,7 +117,7 @@ export function AdminPanel() {
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
   const [pill, setPill] = useState({ left: 0, top: 0, width: 0, height: 0 })
   const [pillReady, setPillReady] = useState(false)
-  const vistaIndex = ["registro", "opiniones", "datos", "duplicados"].indexOf(vista)
+  const vistaIndex = ["registro", "opiniones", "datos"].indexOf(vista)
 
   useLayoutEffect(() => {
     const el = tabRefs.current[vistaIndex]
@@ -287,7 +286,6 @@ export function AdminPanel() {
               ["registro", "Registro de actividad", "Registro"],
               ["opiniones", "Opiniones", "Opiniones"],
               ["datos", "Datos", "Datos"],
-              ["duplicados", "Duplicados", "Duplic."],
             ] as const).map(([value, label, short], i) => (
               <button
                 key={value}
@@ -330,9 +328,7 @@ export function AdminPanel() {
         </div>
       </div>
 
-      {vista === "duplicados" ? (
-        <AdminDuplicados />
-      ) : vista === "datos" ? (
+      {vista === "datos" ? (
         <AdminDatos currentMonth={currentMonth} />
       ) : vista === "opiniones" ? (
         <>

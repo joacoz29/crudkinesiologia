@@ -1,8 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { usePatients } from "@/lib/patients-store"
-import { gruposDuplicados, fusionarPacientes, deshacerFusion, type GrupoDuplicado } from "@/lib/dedup"
+import { useState } from "react"
+import { fusionarPacientes, deshacerFusion, type GrupoDuplicado } from "@/lib/dedup"
 import { getSessionStats } from "@/lib/domain/paciente"
 import { Patient } from "@/types"
 import { PreviewPatientPanel } from "@/components/preview-patient-panel"
@@ -18,7 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
-import { GitMerge, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { GitMerge, AlertTriangle, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 
 const PAGE_SIZE = 10
 
@@ -38,9 +37,14 @@ function mejorKeeper(g: GrupoDuplicado): string {
   })[0].id
 }
 
-export function AdminDuplicados() {
-  const { patients, isLoading } = usePatients()
-  const grupos = useMemo(() => gruposDuplicados(patients), [patients])
+/**
+ * Depuración asistida de fichas duplicadas. Vive dentro de la Recepción (la usan
+ * las administrativas, no solo el admin): el encabezado, el contador y el estado
+ * "sin duplicados" los pone la sección que lo contiene, así que acá va solo el
+ * contenido accionable. Los `grupos` llegan por prop — el padre ya los computó
+ * sobre `usePatients()`, así que no hay lectura ni recálculo extra.
+ */
+export function PacientesDuplicados({ grupos }: { grupos: GrupoDuplicado[] }) {
   const [page, setPage] = useState(1)
   const [keepSel, setKeepSel] = useState<Record<string, string>>({}) // dni → keepId elegido
   const [confirmGrupo, setConfirmGrupo] = useState<GrupoDuplicado | null>(null)
@@ -85,35 +89,8 @@ export function AdminDuplicados() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-28 bg-white rounded-xl border border-slate-200 animate-pulse" />
-        ))}
-      </div>
-    )
-  }
-
-  if (grupos.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-2 py-20 text-slate-400 bg-white rounded-xl border border-slate-200">
-        <CheckCircle2 className="h-12 w-12 text-emerald-400" />
-        <p className="font-medium text-slate-600">Sin duplicados</p>
-        <p className="text-sm">No hay DNIs válidos compartidos por más de un paciente.</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold text-[#001633]">Pacientes duplicados</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          {grupos.length} grupo{grupos.length !== 1 ? "s" : ""} con el mismo DNI. Tocá una ficha para verla en detalle, elegí cuál conservar y fusioná.
-        </p>
-      </div>
-
+    <div className="space-y-3 px-4 py-4">
       <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800 text-xs">
         <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
         <span>

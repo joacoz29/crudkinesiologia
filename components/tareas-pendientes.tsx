@@ -17,10 +17,12 @@ import {
   type TareaCategoria,
   type TareaSeveridad,
 } from "@/lib/tareas"
+import { gruposDuplicados } from "@/lib/dedup"
 import { Patient, Turno, Especialidad } from "@/types"
 import { Button } from "@/components/ui/button"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
+import { PacientesDuplicados } from "@/components/pacientes-duplicados"
 import {
   ClipboardList,
   UserCog,
@@ -30,6 +32,7 @@ import {
   ChevronRight,
   ChevronLeft,
   ChevronDown,
+  Copy,
   Loader2,
 } from "lucide-react"
 
@@ -68,6 +71,72 @@ function rangoTurnos() {
   }
 }
 
+// Carcasa de una sección colapsable (header con ícono/contador/urgencias + cuerpo
+// animado). La comparten las categorías de tareas y la sección de duplicados, que
+// tiene su propio contenido en vez de una lista de tareas.
+function SeccionShell({
+  label,
+  Icon,
+  iconWrap,
+  count,
+  countClass,
+  altaCount,
+  defaultExpanded = true,
+  children,
+}: {
+  label: string
+  Icon: typeof UserCog
+  iconWrap: string
+  count: number
+  countClass: string
+  altaCount: number
+  defaultExpanded?: boolean
+  children: React.ReactNode
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+
+  // El contenido queda en el DOM aunque esté colapsado (para animar la altura con
+  // grid-rows); `inert` lo saca del foco de teclado mientras la sección está cerrada.
+  const contentRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.inert = !expanded
+  }, [expanded])
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="w-full flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/60 hover:bg-slate-100/70 transition-colors text-left"
+      >
+        <span className={`grid h-8 w-8 place-items-center rounded-lg shrink-0 ${iconWrap}`}>
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
+        <h2 className="text-sm font-semibold text-[#001633]">{label}</h2>
+        <span className={`text-xs font-semibold rounded-full px-2 py-0.5 tabular-nums ${countClass}`}>
+          {count}
+        </span>
+        {altaCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+            {altaCount} urgente{altaCount !== 1 ? "s" : ""}
+          </span>
+        )}
+        <ChevronDown
+          className={`ml-auto h-4 w-4 text-slate-400 transition-transform duration-200 motion-reduce:transition-none ${expanded ? "" : "-rotate-90"}`}
+        />
+      </button>
+
+      <div className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div ref={contentRef} className="overflow-hidden">
+          {children}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 // Una sección colapsable por categoría, con su propia paginación. Cada sección
 // guarda su estado (abierta/cerrada y página) — la `key={cat}` lo mantiene
 // estable aunque cambien las tareas.
@@ -86,17 +155,9 @@ function CategoriaSeccion({
   onAgendar: (patientId: string) => void
   onIrCalendario: (fecha: string) => void
 }) {
-  const [expanded, setExpanded] = useState(true)
   const [page, setPage] = useState(1)
   const { label, Icon, iconWrap, count } = CATEGORIA_META[cat]
   const altaCount = items.filter((t) => t.severidad === "alta").length
-
-  // El contenido queda en el DOM aunque esté colapsado (para animar la altura con
-  // grid-rows); `inert` lo saca del foco de teclado mientras la sección está cerrada.
-  const contentRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (contentRef.current) contentRef.current.inert = !expanded
-  }, [expanded])
 
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
   const pageClamped = Math.min(page, totalPages) // auto-corrige si bajó la cantidad
@@ -104,119 +165,99 @@ function CategoriaSeccion({
   const visibles = items.slice(start, start + PAGE_SIZE)
 
   return (
-    <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/60 hover:bg-slate-100/70 transition-colors text-left"
-      >
-        <span className={`grid h-8 w-8 place-items-center rounded-lg shrink-0 ${iconWrap}`}>
-          <Icon className="h-[18px] w-[18px]" />
-        </span>
-        <h2 className="text-sm font-semibold text-[#001633]">{label}</h2>
-        <span className={`text-xs font-semibold rounded-full px-2 py-0.5 tabular-nums ${count}`}>
-          {items.length}
-        </span>
-        {altaCount > 0 && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
-            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-            {altaCount} urgente{altaCount !== 1 ? "s" : ""}
-          </span>
-        )}
-        <ChevronDown
-          className={`ml-auto h-4 w-4 text-slate-400 transition-transform duration-200 motion-reduce:transition-none ${expanded ? "" : "-rotate-90"}`}
-        />
-      </button>
-
-      <div className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-        <div ref={contentRef} className="overflow-hidden">
-          <ul className="divide-y divide-slate-100">
-            {visibles.map((t) => (
-              <li key={t.id} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50/60 transition-colors">
-                <span
-                  className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${SEV_META[t.severidad].dot}`}
-                  title={`Prioridad ${t.severidad}`}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900">{t.titulo}</p>
-                  <p className="text-xs text-slate-600 mt-0.5 break-words">{t.descripcion}</p>
-                </div>
-                {t.turnoRef ? (
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0 text-slate-400 hover:text-[#001633] hover:bg-slate-100"
-                      title="Ver en el calendario"
-                      onClick={() => onIrCalendario(t.turnoRef!.fecha)}
-                    >
-                      <CalendarDays className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 text-[#001633] hover:bg-[#001633] hover:text-white gap-1"
-                      onClick={() => onAbrirTurno(t.turnoRef!)}
-                    >
-                      Marcar asistencia
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : tareaKind(t) === "sin_proximo_turno" && t.patientId ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white gap-1"
-                    onClick={() => onAgendar(t.patientId!)}
-                  >
-                    Agendar turno
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
-                ) : t.patientId ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white gap-1"
-                    onClick={() => onAbrirFicha(t.patientId!)}
-                  >
-                    Abrir ficha
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100 text-xs text-slate-500">
-              <span>
-                {start + 1}–{Math.min(start + PAGE_SIZE, items.length)} de {items.length}
-              </span>
-              <div className="flex gap-1">
+    <SeccionShell
+      label={label}
+      Icon={Icon}
+      iconWrap={iconWrap}
+      count={items.length}
+      countClass={count}
+      altaCount={altaCount}
+    >
+      <ul className="divide-y divide-slate-100">
+        {visibles.map((t) => (
+          <li key={t.id} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50/60 transition-colors">
+            <span
+              className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${SEV_META[t.severidad].dot}`}
+              title={`Prioridad ${t.severidad}`}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-900">{t.titulo}</p>
+              <p className="text-xs text-slate-600 mt-0.5 break-words">{t.descripcion}</p>
+            </div>
+            {t.turnoRef ? (
+              <div className="flex shrink-0 items-center gap-1">
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="h-7 w-7 p-0"
-                  disabled={pageClamped === 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  variant="ghost"
+                  className="h-8 w-8 p-0 text-slate-400 hover:text-[#001633] hover:bg-slate-100"
+                  title="Ver en el calendario"
+                  onClick={() => onIrCalendario(t.turnoRef!.fecha)}
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <CalendarDays className="h-4 w-4" />
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="h-7 w-7 p-0"
-                  disabled={pageClamped === totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  variant="ghost"
+                  className="h-8 text-[#001633] hover:bg-[#001633] hover:text-white gap-1"
+                  onClick={() => onAbrirTurno(t.turnoRef!)}
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  Marcar asistencia
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            </div>
-          )}
+            ) : tareaKind(t) === "sin_proximo_turno" && t.patientId ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white gap-1"
+                onClick={() => onAgendar(t.patientId!)}
+              >
+                Agendar turno
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            ) : t.patientId ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 shrink-0 text-[#001633] hover:bg-[#001633] hover:text-white gap-1"
+                onClick={() => onAbrirFicha(t.patientId!)}
+              >
+                Abrir ficha
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100 text-xs text-slate-500">
+          <span>
+            {start + 1}–{Math.min(start + PAGE_SIZE, items.length)} de {items.length}
+          </span>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 w-7 p-0"
+              disabled={pageClamped === 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 w-7 p-0"
+              disabled={pageClamped === totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
-    </section>
+      )}
+    </SeccionShell>
   )
 }
 
@@ -307,10 +348,20 @@ export function TareasPendientes({
       deTurnos.filter((t) => t.id.startsWith("reautorizar:")).map((t) => t.patientId),
     )
     const dePacientesFiltradas = dePacientes.filter(
-      (t) => !(t.id.startsWith("sesiones_por_agotar:") && t.patientId && reautorizar.has(t.patientId)),
+      (t) =>
+        !(t.id.startsWith("sesiones_por_agotar:") && t.patientId && reautorizar.has(t.patientId)) &&
+        // Los DNIs duplicados tienen su propia sección (con la fusión asistida), así
+        // que no se listan además como tarea suelta: es el MISMO universo de grupos
+        // (`gruposDuplicados` y `dni_duplicado` comparten el criterio `dniEsValido`),
+        // uno por grupo → el total de pendientes no cambia, solo dónde se atienden.
+        tareaKind(t) !== "dni_duplicado",
     )
     return ordenarTareas([...dePacientesFiltradas, ...deTurnos])
   }, [patients, turnos, especialidad])
+
+  // Grupos de fichas con el mismo DNI válido. Puro sobre lo que ya está en memoria
+  // (`usePatients` live) — cero lecturas nuevas.
+  const duplicados = useMemo(() => gruposDuplicados(patients), [patients])
 
   const porCategoria = useMemo(() => {
     const map: Record<TareaCategoria, Tarea[]> = { datos: [], clinico: [], operativo: [] }
@@ -318,7 +369,13 @@ export function TareasPendientes({
     return map
   }, [tareas])
 
-  const urgentes = useMemo(() => tareas.filter((t) => t.severidad === "alta").length, [tareas])
+  // Cada grupo de duplicados cuenta como un pendiente urgente (antes era una tarea
+  // `dni_duplicado` por grupo) → los totales del encabezado y el badge no se mueven.
+  const total = tareas.length + duplicados.length
+  const urgentes = useMemo(
+    () => tareas.filter((t) => t.severidad === "alta").length + duplicados.length,
+    [tareas, duplicados],
+  )
 
   if (patientsLoading) {
     return (
@@ -339,12 +396,12 @@ export function TareasPendientes({
         <div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-[#001633]">Recepción</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {tareas.length === 0 ? (
+            {total === 0 ? (
               "Sin pendientes detectados"
             ) : (
               <>
-                <span className="font-medium text-slate-700">{tareas.length}</span> pendiente
-                {tareas.length !== 1 ? "s" : ""} para revisar
+                <span className="font-medium text-slate-700">{total}</span> pendiente
+                {total !== 1 ? "s" : ""} para revisar
                 {urgentes > 0 && (
                   <>
                     {" · "}
@@ -364,7 +421,7 @@ export function TareasPendientes({
         </div>
       </div>
 
-      {!turnosLoading && tareas.length === 0 ? (
+      {!turnosLoading && total === 0 ? (
         <div className="flex flex-col items-center gap-2 py-20 text-slate-400 bg-white rounded-xl border border-slate-200">
           <CheckCircle2 className="h-12 w-12 text-emerald-400" />
           <p className="font-medium text-slate-600">¡Todo al día!</p>
@@ -387,6 +444,23 @@ export function TareasPendientes({
               />
             )
           })}
+
+          {/* Fichas duplicadas: va última y plegada por default — es trabajo de
+              limpieza de a tandas, no del día a día del mostrador. El índigo la
+              distingue de las categorías (rojo y ámbar quedan para severidad). */}
+          {duplicados.length > 0 && (
+            <SeccionShell
+              label="Fichas duplicadas"
+              Icon={Copy}
+              iconWrap="bg-indigo-50 text-indigo-600"
+              count={duplicados.length}
+              countClass="bg-indigo-50 text-indigo-700"
+              altaCount={duplicados.length}
+              defaultExpanded={false}
+            >
+              <PacientesDuplicados grupos={duplicados} />
+            </SeccionShell>
+          )}
         </div>
       )}
 

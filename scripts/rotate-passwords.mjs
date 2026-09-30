@@ -22,6 +22,7 @@ const EMAILS_A_ROTAR = [
   "eugeniafunk@kinesiologia.com",
   "karinadiaz@kinesiologia.com.ar",
   "camilabaldi@kinesiologia.com.ar",
+  "anabeladure@kinesiologia.com.ar",
   "gonzalogonzalez@kinesiologia.com.ar",
   "anatullio@kinesiologia.com.ar",
   "alanmartineztullio@kinesiologia.com.ar",

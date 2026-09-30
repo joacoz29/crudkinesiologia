@@ -17,6 +17,7 @@ const ROLE_MAP: Record<string, UserRole> = {
   // Kinesiólogos
   'gonzalogonzalez@kinesiologia.com.ar': 'kinesiologo',
   'camilabaldi@kinesiologia.com.ar': 'kinesiologo',
+  'anabeladure@kinesiologia.com.ar': 'kinesiologo',
   // Traumatólogo (2da especialidad): agenda propia; ve la historia de kine read-only
   'gustavogurpide@kinesiologia.com.ar': 'traumatologo',
   // Asistentes
@@ -49,6 +50,7 @@ const userNameMap: Record<string, string> = {
   'eugeniafunk@kinesiologia.com': 'Eugenia Funk',
   'karinadiaz@kinesiologia.com.ar': 'Karina Díaz',
   'camilabaldi@kinesiologia.com.ar': 'Camila Baldi',
+  'anabeladure@kinesiologia.com.ar': 'Anabela Dure',
   'gonzalogonzalez@kinesiologia.com.ar': 'Gonzalo González',
   'gustavogurpide@kinesiologia.com.ar': 'Gustavo Gurpide',
   'anatullio@kinesiologia.com.ar': 'Ana Tullio',

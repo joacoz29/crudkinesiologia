@@ -92,7 +92,7 @@ flowchart TB
     subgraph A["Flujo A — mutacion autenticada (staff)"]
         a1["Accion en UI<br/>(ej. confirmar asistencia)"]
         a2["Componente / modal"]
-        a3["helper en lib/helpers.ts"]
+        a3["helper en lib/flujo · lib/data"]
         a4{"Relee estado fresco<br/>guard idempotencia + fecha"}
         a5["Arma update multi-path<br/>(atomico)"]
         a6["update(ref(db))"]
@@ -152,8 +152,8 @@ flowchart LR
         cpac["Pacientes<br/>new/edit-patient-modal<br/>tratamientos-accordion<br/>trauma-ficha-modal"]
         ccal["Calendario<br/>calendario · agenda-dia<br/>nuevo/editar-turno-modal"]
         clib["Libro Diario<br/>libro-diario"]
-        cpen["Pendientes<br/>tareas-pendientes"]
-        cadm["Admin<br/>admin-panel · admin-datos<br/>admin-duplicados"]
+        cpen["Recepcion<br/>tareas-pendientes · pacientes-duplicados"]
+        cadm["Admin<br/>admin-panel · admin-datos"]
     end
 
     subgraph libl["lib/ — cache · dominio · datos · flujo · auditoria"]

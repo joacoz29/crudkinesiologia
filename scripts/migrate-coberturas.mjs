@@ -40,7 +40,7 @@ initializeApp({
   databaseURL: FIREBASE_DATABASE_URL,
 })
 
-// Mismo criterio que lib/helpers.ts (mantener en sync)
+// Mismo criterio que lib/domain/libro.ts (mantener en sync)
 const norm = (os) => String(os ?? "").trim().toLowerCase()
 const esParticular = (os) => { const t = norm(os); return t === "" || t === "-" || t === "particular" }
 const esTextoParticular = (os) => norm(os) === "particular"

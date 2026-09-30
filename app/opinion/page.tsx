@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
-const KINESIOLOGOS = ["Ana Tullio", "Gonzalo González", "Camila Baldi"]
+const KINESIOLOGOS = ["Ana Tullio", "Gonzalo González", "Camila Baldi", "Anabela Dure"]
 
 export default function OpinionPage() {
   const [dni, setDni] = useState("")

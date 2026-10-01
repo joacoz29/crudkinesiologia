@@ -146,16 +146,16 @@ export function PacientesDuplicados({ grupos }: { grupos: GrupoDuplicado[] }) {
               </div>
 
               {/* La vista previa es un panel fixed que cubre ~448px del borde
-                  derecho. Con una ficha abierta el botón se desliza a la
-                  izquierda para no quedar tapado, y vuelve a la derecha al
-                  cerrar. Posición absoluta + transición de left/translateX =
+                  derecho. En pantallas angostas (< md) el botón se desliza a
+                  la izquierda para no quedar tapado; desde md el panel reserva
+                  su ancho en el body (ver PreviewPatientPanel) y no hace falta. Posición absoluta + transición de left/translateX =
                   glide horizontal con la curva de salida del proyecto; el alto
                   del contenedor (h-9 = botón sm) reserva el espacio. motion-reduce
                   lo deja saltar sin animar. */}
               <div className="relative mt-3 h-9">
                 <div
                   className={`absolute top-0 transition-[left,transform] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none ${
-                    preview ? "left-0 translate-x-0" : "left-full -translate-x-full"
+                    preview ? "left-0 translate-x-0 md:left-full md:-translate-x-full" : "left-full -translate-x-full"
                   }`}
                 >
                   <Button

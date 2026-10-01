@@ -61,6 +61,18 @@ export function PreviewPatientPanel({ patient, onClose }: PreviewPatientPanelPro
     if (patient) setShown(patient)
   }, [patient])
 
+  // El panel es `fixed` (no empuja el layout): mientras está abierto, reservamos
+  // su ancho (max-w-md = 28rem) como padding derecho del body, así el contenido
+  // se reacomoda en el espacio que queda en vez de quedar tapado. Solo desde md:
+  // en pantallas angostas el panel ocupa casi todo el ancho y no hay lugar para
+  // las dos cosas. (Las clases van como literales para que Tailwind las genere.)
+  useEffect(() => {
+    if (!open) return
+    const cls = ["md:pr-[28rem]", "transition-[padding]", "duration-300", "ease-out", "motion-reduce:transition-none"]
+    document.body.classList.add(...cls)
+    return () => document.body.classList.remove(...cls)
+  }, [open])
+
   const display = patient ?? shown
   const tratamientos = display ? parseTratamientosRaw(display.tratamientos) : []
   const historial = formatSesiones(display?.sesiones)

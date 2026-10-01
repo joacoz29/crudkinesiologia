@@ -22,6 +22,8 @@
    - [Filtros y búsqueda](#46-filtros-y-búsqueda)
    - [Feriados nacionales](#47-feriados-nacionales)
 5. [Libro Diario](#5-libro-diario)
+6. [Recepción](#6-recepción)
+7. [Traumatología](#7-traumatología)
 
 ---
 
@@ -29,24 +31,23 @@
 
 Al ingresar a la aplicación se muestra una pantalla de login. Ingresá tu mail y contraseña institucional (por ejemplo `karina@kinesiologia.com.ar`) y hacé click en **Ingresar**.
 
-Una vez dentro, tu nombre aparece en la esquina superior derecha junto al ícono de usuario. Para cerrar sesión usá el botón **Salir** que está al lado de tu nombre.
+Una vez dentro, tu nombre aparece en la esquina superior derecha junto al ícono de usuario. Para cerrar sesión usá el botón **Cerrar sesión** que está al lado de tu nombre.
 
 ---
 
 ## 2. Pantalla principal
 
-La aplicación tiene dos secciones principales accesibles desde las pestañas superiores:
+La aplicación se maneja desde las pestañas superiores. Cuáles ves depende de tu rol:
 
-| Pestaña | Qué contiene |
-|---|---|
-| **Pacientes** | Lista de todos los pacientes registrados |
-| **Calendario** | Agenda mensual con los turnos |
+| Pestaña | Qué contiene | Quién la ve |
+|---|---|---|
+| **Pacientes** | Lista de todos los pacientes registrados | Todos |
+| **Calendario** | Agenda mensual con los turnos | Todos |
+| **Libro Diario** | Registro diario de pacientes atendidos | Administración y asistentes |
+| **Recepción** | Lista de pendientes y depuración de fichas duplicadas | Administración y asistentes |
+| **Admin** | Registro de actividad, opiniones y datos del consultorio | Solo administración |
 
-Hay una tercer sección accesible desde el menú:
-
-| Sección | Qué contiene |
-|---|---|
-| **Libro Diario** | Registro diario de pacientes atendidos |
+Los administradores además ven, arriba a la derecha, un selector **Kinesiología / Traumatología** para cambiar de especialidad (ver [Traumatología](#7-traumatología)).
 
 ---
 
@@ -54,12 +55,13 @@ Hay una tercer sección accesible desde el menú:
 
 ### 3.1 Ver la lista de pacientes
 
-La pestaña **Pacientes** muestra una tabla con todos los pacientes ordenados alfabéticamente. Desde la barra de búsqueda en la parte superior podés filtrar por nombre, apellido, DNI u obra social escribiendo en tiempo real.
+La pestaña **Pacientes** muestra una tabla con todos los pacientes; los **recién ingresados aparecen primero**. Desde la barra de búsqueda en la parte superior podés filtrar por nombre, apellido o DNI escribiendo en tiempo real.
 
 Cada fila muestra:
 - Nombre y apellido
+- Edad y DNI
 - Obra social y N° de afiliado
-- Diagnóstico y médico tratante
+- Teléfono
 - Badge de sesiones usadas vs. autorizadas (si tiene tratamiento activo)
 
 La lista está paginada. Usá los botones de navegación al pie para pasar de página.
@@ -319,6 +321,48 @@ Cada entrada del día muestra:
 - Columnas de **Debe** y **Haber** para anotaciones contables (editables).
 
 El sistema evita duplicar entradas: si un paciente ya tiene una entrada para ese día, no se agrega nuevamente aunque se confirme otro turno.
+
+---
+
+## 6. Recepción
+
+La pestaña **Recepción** (solo administración y asistentes) se arma sola mirando los datos y lista lo que falta resolver. El número junto al nombre de la pestaña es el total de pendientes. Está dividida en secciones plegables:
+
+| Sección | Qué incluye |
+|---|---|
+| **Turnos** | Turnos sin marcar (de días anteriores o de hoy ya pasados) y pacientes con sesiones por usar que no tienen próximo turno |
+| **Seguimiento clínico** | Sesiones por agotar o agotadas, y pacientes que agotaron sesiones y tienen turno próximo (reautorizar) |
+| **Datos de pacientes** | Datos incompletos (teléfono, DNI, obra social, diagnóstico, edad), tratamientos sin N° de autorización y DNIs de relleno compartidos |
+| **Fichas duplicadas** | Fichas distintas con el mismo DNI (empieza plegada) |
+
+Cada tarea tiene su botón de acción (**Marcar asistencia**, **Agendar turno**, **Abrir ficha**) y desaparece sola cuando se resuelve el dato.
+
+### 6.1 Fichas duplicadas
+
+Cada grupo muestra las fichas que comparten un DNI. Tocá una ficha para verla en detalle en el panel de la derecha (**solo lectura**; la página se corre para que no tape nada), elegí cuál conservar y tocá **Fusionar**.
+
+> **Revisá cada grupo antes de fusionar:** a veces son dos personas distintas con el mismo DNI mal cargado. En ese caso **no fusiones**: corregí el DNI desde Pacientes.
+
+Al fusionar, los historiales se concatenan (no se pierde ninguna sesión), los turnos se reasignan a la ficha que queda y se eliminan las otras. Queda registrado y aparece un aviso con la opción **Deshacer**.
+
+---
+
+## 7. Traumatología
+
+El consultorio atiende dos especialidades sobre **la misma ficha de paciente**. El traumatólogo trabaja siempre en Traumatología; los administradores alternan con el selector del encabezado.
+
+En el contexto de Traumatología:
+- El calendario y las tareas de turnos de Recepción muestran solo los turnos de trauma. En el Libro Diario los cobros de trauma se distinguen con una insignia, y la pestaña Datos del Admin tiene una vista por especialidad.
+- Al editar un paciente se abre la **ficha de trauma**: historial de consultas (diagnóstico, notas y monto opcional que se carga al Libro Diario). La historia de kinesiología se ve en modo solo lectura.
+- Confirmar asistencia a un turno de trauma solo marca el estado; no registra sesión de kinesiología.
+
+### 7.1 Filtro "Con trauma"
+
+En **Pacientes**, junto al buscador, aparece el botón **Con trauma** (activado por defecto): muestra solo a los pacientes que ya tienen alguna consulta cargada en su ficha de trauma. Los que **nunca tuvieron sesiones de kinesiología** llevan el chip **Solo trauma**.
+
+Para cargar la primera consulta a un paciente que todavía no pasó por trauma, apagá el botón (o usá **Buscar en todos los pacientes** si la búsqueda no encuentra nada) y abrí su ficha.
+
+> El filtro cuenta las consultas **cargadas en la ficha**. Un turno de trauma marcado como asistido pero sin consulta cargada no hace aparecer al paciente en el filtro.
 
 ---
 

@@ -25,7 +25,7 @@ flowchart TB
     subgraph vercel["Infraestructura — Vercel"]
         subgraph cli["Cliente — Next.js 14 App Router (React/TS)"]
             login["Ruta /login"]
-            app["Ruta / (app autenticada)<br/>tabs: Pacientes · Libro · Calendario · Pendientes · Admin"]
+            app["Ruta / (app autenticada)<br/>tabs: Pacientes · Libro · Calendario · Recepción · Admin"]
             opi["Ruta /opinion (publica)"]
             comps["Componentes de pestania"]
             lib["lib/ — cache + logica + helpers"]
@@ -206,14 +206,15 @@ flowchart LR
   `flujo/asistencia` (la única capa que combina datos + dominio + auditoría en escrituras
   atómicas). `patients-store` sigue siendo el hub de la colección de pacientes.
 - **Separación caché / lógica / cómputo puro.** `patients-store` y `monthly-cache`
-  resuelven el costo de datos; `helpers`/`dedup` encapsulan las escrituras; `tareas` es
-  **puro** (deriva la pestaña Pendientes desde lo ya cacheado, sin lecturas nuevas).
-- **Admin compone, no reimplementa.** `admin-panel` orquesta cuatro vistas
-  (Registro · Opiniones · Datos · Duplicados) reutilizando las mismas cachés y helpers que
-  el resto de la app (misma key de mes → caché compartida).
+  resuelven el costo de datos; `flujo/*`, `data/*` y `dedup` encapsulan las escrituras;
+  `tareas` es **puro** (deriva la pestaña Recepción desde lo ya cacheado, sin lecturas nuevas).
+- **Admin compone, no reimplementa.** `admin-panel` orquesta tres vistas
+  (Registro · Opiniones · Datos) reutilizando las mismas cachés y helpers que el resto de
+  la app (misma key de mes → caché compartida). La depuración de **duplicados** ya no es
+  del Admin: vive en la Recepción (`pacientes-duplicados`, ver nota de ago–oct 2026).
 - **El único puente al backend desde lib es `feriados -> /api/feriados`.** Todo lo demás
   del cliente va directo al SDK.
-- **`especialidades` es el registry transversal.** Todas las pestañas y `helpers` derivan
+- **`especialidades` es el registry transversal.** Todas las pestañas y `flujo/asistencia` derivan
   de él labels, filtros y comportamiento clínico por especialidad — nada de
   `=== "traumatologia"` suelto. Sumar una especialidad = una entrada acá (+ checklist del
   propio archivo). `edad` y `doctores` son módulos **puros** chicos (derivar edad de
@@ -297,6 +298,29 @@ flowchart LR
 ## Architecture Observations
 
 Hallazgos verificados contra el código (no asumidos). Ordenados por impacto aproximado.
+
+> **Actualización (ago–oct 2026).** Cambios materiales de UI/roles, sin tocar el modelo de
+> datos ni las reglas RTDB (**no hay nada que publicar en Firebase Console**):
+> - **Duplicados pasó de Admin a Recepción.** `admin-duplicados` → `components/pacientes-duplicados`:
+>   recibe los grupos por prop (los computa `tareas-pendientes` sobre `usePatients()`, cero lecturas
+>   nuevas). `SeccionShell` (header colapsable) se extrajo para compartirlo con las categorías de
+>   tareas; la sección "Fichas duplicadas" va última y plegada. Las tareas `dni_duplicado` ya no se
+>   listan sueltas (eran los mismos grupos): los totales y el badge de la pestaña no cambian. Como
+>   fusionar borra fichas y ahora lo alcanzan las asistentes, ojo con la obs #9 (las reglas ya
+>   dejaban escribir `pacientes` a cualquier autenticado; solo creció la superficie de UI).
+> - **`PreviewPatientPanel` reserva su ancho.** El panel es `fixed` (28rem) y tapaba el contenido:
+>   mientras está abierto agrega `md:pr-[28rem]` al `<body>` (solo desde `md`; debajo, el botón
+>   Fusionar se desliza como antes).
+> - **Filtro "Con trauma" en Pacientes** (solo en contexto de traumatología, arranca activo):
+>   `tieneTrauma` / `esSoloTrauma` en `lib/domain/trauma` (con tests). "Pasó por trauma" = tiene ≥1
+>   consulta cargada en `pacientes/{id}/traumatologia` (o el formato legacy plano); "solo trauma" =
+>   además no registró ninguna sesión de kine. Se resuelve **en memoria** sobre `usePatients()`: un
+>   turno de trauma marcado como asistido sin consulta cargada **no** cuenta (contarlo exigiría leer
+>   turnos de todo el histórico). El chip "Solo trauma" aparece en la grilla.
+> - **Alta de kinesióloga (Anabela Dure).** Hay que tocar **cuatro** lugares escritos a mano:
+>   `ROLE_MAP` y `userNameMap` (`lib/auth-helper.ts`), la lista `KINESIOLOGOS` del formulario
+>   público (`app/opinion/page.tsx`, "¿Quién te atendió?") y `scripts/rotate-passwords.mjs`; más crear
+>   la cuenta en Firebase Auth (mail + contraseña, a mano). Candidato a derivarse de una sola fuente.
 
 > **Actualización (jul 2026).** La **multi-especialidad (F1–F4) está en producción**:
 > registry `lib/especialidades.ts`, ficha de trauma con historial de consultas + facturación

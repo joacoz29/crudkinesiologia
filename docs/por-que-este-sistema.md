@@ -70,18 +70,23 @@ Cada uno de esos problemas tiene un costo real. Este sistema los ataca de raíz.
 - Pensado para **varias personas editando a la vez** sin pisarse (escritura por entrada).
 - Botón flotante para saltar al final cuando el día se hace largo.
 
-### ✅ Pendientes (tu lista de trabajo automática)
-Una pestaña que **se arma sola** mirando tus datos y te dice qué falta hacer:
+### ✅ Recepción (tu lista de trabajo automática)
+Una pestaña (antes "Pendientes") que **se arma sola** mirando tus datos y te dice qué falta hacer:
 - Pacientes con datos incompletos (sin teléfono, sin DNI, sin diagnóstico…).
 - Pacientes a los que **se les están por agotar las sesiones**.
 - Pacientes que **agotaron sesiones y tienen turno próximo** → reautorizar ya.
 - **Turnos sin marcar** (de días anteriores o de hoy ya pasados).
 - Pacientes con sesiones por usar **sin próximo turno** → agendar.
-- **DNIs duplicados** para depurar.
+- **Fichas duplicadas** (mismo DNI) en su propia sección, con la fusión asistida al lado.
 
 Cada tarea tiene su botón de acción (marcar asistencia, abrir ficha, agendar) y
 **desaparece sola** cuando resolvés el dato. Es la diferencia entre "ojalá me
 acuerde" y "el sistema me lo recuerda".
+
+### 🦴 Traumatología (segunda especialidad)
+- Una **misma ficha por persona**: kinesiología y traumatología comparten paciente, cada una con su historial.
+- El traumatólogo trabaja con su agenda y su ficha de **consultas** (diagnóstico, notas y cobro opcional que va directo al Libro Diario).
+- En Pacientes, el botón **"Con trauma"** muestra solo a quienes ya tuvieron consulta de trauma y marca con **"Solo trauma"** a quienes nunca vinieron a kinesiología.
 
 ### 📊 Datos (el panel del dueño)
 - **Atenciones del mes**, promedio por día, **% de ausentismo**, % particular vs obra social.
@@ -99,6 +104,7 @@ acuerde" y "el sistema me lo recuerda".
 - Anti-abuso incorporado (una opinión por paciente cada 7 días, límite por IP).
 
 ### 🧹 Depuración de duplicados
+- Vive dentro de **Recepción** (la usan las administrativas, no solo el dueño).
 - Detecta automáticamente las fichas que comparten DNI.
 - Una herramienta de **fusión asistida**: elegís cuál conservar y el sistema
   **junta los historiales (sin perder ninguna sesión)**, reasigna los turnos y borra
@@ -106,7 +112,7 @@ acuerde" y "el sistema me lo recuerda".
 
 ### 🛡️ Registro de actividad y roles
 - **Cada acción importante queda registrada**: quién creó, editó, borró, confirmó, fusionó… con fecha, hora y detalle del cambio.
-- Roles (admin / kinesiólogo / asistente) que muestran a cada uno lo que le corresponde.
+- Roles (admin / kinesiólogo / traumatólogo / asistente) que muestran a cada uno lo que le corresponde.
 - Si algo se hizo mal, sabés **exactamente quién y cuándo** — fin de las discusiones.
 
 ---

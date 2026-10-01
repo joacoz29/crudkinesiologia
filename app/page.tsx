@@ -518,10 +518,11 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
                         {getInitials(patient.nombre, patient.apellido)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-800 truncate">
-                          {patient.nombre} {patient.apellido}
-                          {esTrauma && esSoloTrauma(patient) && <span className="ml-2 align-middle rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">Solo trauma</span>}
-                        </p>
+                        {/* El chip va fuera del texto truncado: si no, en pantallas angostas se corta ("Solo …") */}
+                        <div className="flex min-w-0 items-center gap-2">
+                          <p className="min-w-0 truncate font-medium text-slate-800">{patient.nombre} {patient.apellido}</p>
+                          {esTrauma && esSoloTrauma(patient) && <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">Solo trauma</span>}
+                        </div>
                         <p className="text-xs text-slate-500 truncate">{patient.obraSocial}{patient.telefono ? ` · ${patient.telefono}` : ""}</p>
                       </div>
                       <div className="flex gap-1 shrink-0">

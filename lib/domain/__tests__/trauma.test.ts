@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
-import { parseConsultasTrauma } from "@/lib/domain/trauma"
+import { parseConsultasTrauma, tieneTrauma, esSoloTrauma } from "@/lib/domain/trauma"
+import type { Patient } from "@/types"
 
 describe("parseConsultasTrauma", () => {
   it("ficha ausente → []", () => {
@@ -75,5 +76,53 @@ describe("parseConsultasTrauma", () => {
 
   it("legacy plano vacío (solo espacios) NO genera consulta", () => {
     expect(parseConsultasTrauma({ diagnostico: "  ", notas: "" })).toEqual([])
+  })
+})
+
+const pac = (extra: Record<string, unknown>): Patient =>
+  ({ id: "p", nombre: "A", apellido: "B", dni: "1", sesiones: [], ...extra }) as unknown as Patient
+
+describe("tieneTrauma / esSoloTrauma", () => {
+  const conConsulta = { consultas: [{ id: "a", fecha: "2026-07-01", notas: "x", usuario: "G", createdAt: 1 }] }
+
+  it("sin ficha de trauma → ninguno de los dos", () => {
+    expect(tieneTrauma(pac({}))).toBe(false)
+    expect(esSoloTrauma(pac({}))).toBe(false)
+    expect(tieneTrauma(pac({ traumatologia: {} }))).toBe(false)
+  })
+
+  it("con consulta y sin kine → trauma y solo trauma", () => {
+    const p = pac({ traumatologia: conConsulta })
+    expect(tieneTrauma(p)).toBe(true)
+    expect(esSoloTrauma(p)).toBe(true)
+  })
+
+  it("el formato legacy plano (diagnostico/notas sueltos) cuenta como consulta", () => {
+    expect(tieneTrauma(pac({ traumatologia: { diagnostico: "esguince" } }))).toBe(true)
+  })
+
+  it("con sesiones de kine en el historial libre → trauma pero NO solo trauma", () => {
+    const p = pac({ traumatologia: conConsulta, sesiones: ["1- 12/5/23\n2- 15/5/23"] })
+    expect(tieneTrauma(p)).toBe(true)
+    expect(esSoloTrauma(p)).toBe(false)
+  })
+
+  it("un teléfono o fecha en el historial no cuenta como sesión de kine", () => {
+    const p = pac({ traumatologia: conConsulta, sesiones: ["tel 02320-659087, vino el 2026-06-10"] })
+    expect(esSoloTrauma(p)).toBe(true)
+  })
+
+  it("con sesiones en un tratamiento → NO solo trauma", () => {
+    const p = pac({
+      traumatologia: conConsulta,
+      tratamientos: [{ id: "t", sesionesAutorizadas: 10, sesiones: ["Sesión 1 — 01/07/2026 10:00"] }],
+    })
+    expect(esSoloTrauma(p)).toBe(false)
+  })
+
+  it("kine sin consultas de trauma → ninguno de los dos", () => {
+    const p = pac({ sesiones: ["1- 12/5/23"] })
+    expect(tieneTrauma(p)).toBe(false)
+    expect(esSoloTrauma(p)).toBe(false)
   })
 })

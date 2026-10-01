@@ -9,11 +9,12 @@ import { TraumaFichaModal } from "@/components/trauma-ficha-modal"
 import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
-import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users, CalendarPlus } from "lucide-react"
+import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users, CalendarPlus, Bone } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, update } from "firebase/database"
 import { countSesionesEnHistorial } from "@/lib/domain/paciente"
+import { tieneTrauma, esSoloTrauma } from "@/lib/domain/trauma"
 import { fetchTurnosPorPaciente } from "@/lib/data/turnos"
 import { writeLog } from "@/lib/audit/log"
 import { usePatients, queryPatients } from "@/lib/patients-store"
@@ -113,9 +114,19 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   // Caché compartida (suscripción live a `pacientes`): búsqueda y paginación
   // se resuelven en memoria, sin volver a pegarle a la base.
   const { patients: allPatients, isLoading, error: storeError } = usePatients()
+  // Filtro "con consulta de trauma": solo en el contexto de traumatología (arranca
+  // activo, se puede apagar para buscar a un paciente que todavía no pasó por trauma).
+  // Se resuelve en memoria sobre la misma caché: cero lecturas extra.
+  const [soloTrauma, setSoloTrauma] = useState(true)
+  const esTrauma = ESPECIALIDADES[especialidad].ficha === "trauma"
+  const filtrarTrauma = esTrauma && soloTrauma
+  const baseList = useMemo(
+    () => (filtrarTrauma ? allPatients.filter(tieneTrauma) : allPatients),
+    [allPatients, filtrarTrauma],
+  )
   const { patients, pagination } = useMemo(
-    () => queryPatients(allPatients, { search: searchTerm, page: currentPage, limit: patientsPerPage }),
-    [allPatients, searchTerm, currentPage],
+    () => queryPatients(baseList, { search: searchTerm, page: currentPage, limit: patientsPerPage }),
+    [baseList, searchTerm, currentPage],
   )
   const { totalPages, totalItems } = pagination
   // Conteo para el badge de la pestaña Pendientes. Solo tareas de paciente
@@ -312,6 +323,11 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
     setCurrentPage(1)
   }
 
+  const toggleSoloTrauma = (v: boolean) => {
+    setSoloTrauma(v)
+    setCurrentPage(1)
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-[#001633] text-white p-4 shadow-md">
@@ -418,20 +434,38 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
 
             <div className="flex flex-col sm:flex-row justify-between mb-6 gap-4">
               <div className="flex flex-col gap-1">
-                <div className="relative w-full sm:w-80">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
-                  <Input
-                    type="search"
-                    placeholder="Buscar por nombre, apellido o DNI..."
-                    className="pl-9 pr-3 border-slate-200 focus:border-[#001633] focus:ring-[#001633] bg-white w-full"
-                    value={searchTerm}
-                    onChange={handleSearch}
-                  />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="relative w-full sm:w-80">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                    <Input
+                      type="search"
+                      placeholder="Buscar por nombre, apellido o DNI..."
+                      className="pl-9 pr-3 border-slate-200 focus:border-[#001633] focus:ring-[#001633] bg-white w-full"
+                      value={searchTerm}
+                      onChange={handleSearch}
+                    />
+                  </div>
+                  {esTrauma && (
+                    <button
+                      type="button"
+                      aria-pressed={soloTrauma}
+                      onClick={() => toggleSoloTrauma(!soloTrauma)}
+                      title={soloTrauma ? "Mostrando solo pacientes con consulta de trauma. Tocá para ver todos." : "Tocá para ver solo los pacientes con consulta de trauma."}
+                      className={`inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-md border px-3 text-sm font-medium transition-colors ${
+                        soloTrauma
+                          ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                          : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                      }`}
+                    >
+                      <Bone className="h-4 w-4" />
+                      Con trauma
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-slate-400 pl-1 h-4">
                   {!isLoading && (totalItems === 0
                     ? "Sin resultados"
-                    : `${totalItems} paciente${totalItems !== 1 ? "s" : ""}${searchTerm ? " encontrados" : ""}`
+                    : `${totalItems} paciente${totalItems !== 1 ? "s" : ""}${filtrarTrauma ? " con consulta de trauma" : ""}${searchTerm ? " encontrados" : ""}`
                   )}
                 </p>
               </div>
@@ -462,8 +496,16 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
                       <Users className="h-10 w-10 text-slate-300" />
                       {searchTerm ? (
                         <>
-                          <p className="font-medium text-slate-500 text-sm">Sin resultados para &quot;{searchTerm}&quot;</p>
+                          <p className="font-medium text-slate-500 text-sm">Sin resultados para &quot;{searchTerm}&quot;{filtrarTrauma ? " entre los pacientes de trauma" : ""}</p>
                           <button onClick={clearSearch} className="text-sm text-[#001633] hover:underline">Limpiar búsqueda</button>
+                          {filtrarTrauma && (
+                            <button onClick={() => toggleSoloTrauma(false)} className="text-sm text-indigo-700 hover:underline">Buscar en todos los pacientes</button>
+                          )}
+                        </>
+                      ) : filtrarTrauma ? (
+                        <>
+                          <p className="font-medium text-slate-500 text-sm">Todavía no hay consultas de trauma cargadas</p>
+                          <button onClick={() => toggleSoloTrauma(false)} className="text-sm text-indigo-700 hover:underline">Ver todos los pacientes</button>
                         </>
                       ) : (
                         <p className="font-medium text-slate-500 text-sm">No hay pacientes registrados</p>
@@ -476,7 +518,10 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
                         {getInitials(patient.nombre, patient.apellido)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-800 truncate">{patient.nombre} {patient.apellido}</p>
+                        <p className="font-medium text-slate-800 truncate">
+                          {patient.nombre} {patient.apellido}
+                          {esTrauma && esSoloTrauma(patient) && <span className="ml-2 align-middle rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">Solo trauma</span>}
+                        </p>
                         <p className="text-xs text-slate-500 truncate">{patient.obraSocial}{patient.telefono ? ` · ${patient.telefono}` : ""}</p>
                       </div>
                       <div className="flex gap-1 shrink-0">
@@ -540,9 +585,21 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
                             <Users className="h-10 w-10 text-slate-300" />
                             {searchTerm ? (
                               <>
-                                <p className="font-medium text-slate-500">Sin resultados para &quot;{searchTerm}&quot;</p>
+                                <p className="font-medium text-slate-500">Sin resultados para &quot;{searchTerm}&quot;{filtrarTrauma ? " entre los pacientes de trauma" : ""}</p>
                                 <button onClick={clearSearch} className="text-sm text-[#001633] hover:underline mt-1">
                                   Limpiar búsqueda
+                                </button>
+                                {filtrarTrauma && (
+                                  <button onClick={() => toggleSoloTrauma(false)} className="text-sm text-indigo-700 hover:underline">
+                                    Buscar en todos los pacientes
+                                  </button>
+                                )}
+                              </>
+                            ) : filtrarTrauma ? (
+                              <>
+                                <p className="font-medium text-slate-500">Todavía no hay consultas de trauma cargadas</p>
+                                <button onClick={() => toggleSoloTrauma(false)} className="text-sm text-indigo-700 hover:underline mt-1">
+                                  Ver todos los pacientes
                                 </button>
                               </>
                             ) : (
@@ -563,7 +620,10 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
                                 </div>
                               </TableCell>
                               <TableCell className="py-3 font-semibold text-slate-900">{patient.nombre}</TableCell>
-                              <TableCell className="py-3 font-semibold text-slate-900">{patient.apellido}</TableCell>
+                              <TableCell className="py-3 font-semibold text-slate-900">
+                                {patient.apellido}
+                                {esTrauma && esSoloTrauma(patient) && <span className="ml-2 align-middle rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">Solo trauma</span>}
+                              </TableCell>
                               <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{edadActual(patient) ?? "—"}</TableCell>
                               <TableCell className="py-3 text-sm text-slate-400 hidden sm:table-cell">{patient.dni}</TableCell>
                               <TableCell className="py-3 text-sm text-slate-600 font-medium hidden sm:table-cell">{patient.obraSocial}</TableCell>

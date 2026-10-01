@@ -3,7 +3,8 @@
 // lib/helpers.ts (R1; ver docs/architecture.md → Observaciones #5/#6).
 // Retrocompat documentada como tests en lib/domain/__tests__/trauma.test.ts.
 
-import { TraumatologiaFicha, TraumatologiaConsulta } from "@/types"
+import { Patient, TraumatologiaFicha, TraumatologiaConsulta } from "@/types"
+import { parseTratamientosRaw, countSesionesEnHistorial } from "@/lib/domain/paciente"
 
 function normalizeConsultaTrauma(item: unknown): TraumatologiaConsulta {
   const c = item as Record<string, unknown>
@@ -40,4 +41,19 @@ export function parseConsultasTrauma(ficha: TraumatologiaFicha | undefined | nul
     }]
   }
   return list.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+}
+
+// ¿Pasó por traumatología? = tiene al menos una consulta cargada en su ficha de
+// trauma (incluye el formato legacy plano). Se resuelve sobre lo que ya está en
+// memoria (usePatients): no requiere leer turnos.
+export function tieneTrauma(p: Patient): boolean {
+  return parseConsultasTrauma(p.traumatologia).length > 0
+}
+
+// "Solo trauma" = tiene consultas de trauma y nunca registró una sesión de kine
+// (ni en los tratamientos del acordeón ni como "N-" en el historial libre legacy).
+export function esSoloTrauma(p: Patient): boolean {
+  if (!tieneTrauma(p)) return false
+  if (parseTratamientosRaw(p.tratamientos).some((t) => t.sesiones.length > 0)) return false
+  return countSesionesEnHistorial((p.sesiones ?? []).join(" ")) === 0
 }

@@ -518,12 +518,12 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
                         {getInitials(patient.nombre, patient.apellido)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        {/* El chip va fuera del texto truncado: si no, en pantallas angostas se corta ("Solo …") */}
+                        <p className="font-medium text-slate-800 truncate">{patient.nombre} {patient.apellido}</p>
+                        {/* El chip va en la 2ª línea y fuera del texto truncado: en pantallas angostas dentro del nombre se cortaba ("Sol…") */}
                         <div className="flex min-w-0 items-center gap-2">
-                          <p className="min-w-0 truncate font-medium text-slate-800">{patient.nombre} {patient.apellido}</p>
+                          <p className="min-w-0 truncate text-xs text-slate-500">{patient.obraSocial}{patient.telefono ? ` · ${patient.telefono}` : ""}</p>
                           {esTrauma && esSoloTrauma(patient) && <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">Solo trauma</span>}
                         </div>
-                        <p className="text-xs text-slate-500 truncate">{patient.obraSocial}{patient.telefono ? ` · ${patient.telefono}` : ""}</p>
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-emerald-600 rounded-lg" title="Agendar turno" onClick={() => handleAgendarTurno(patient)}>

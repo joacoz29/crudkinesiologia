@@ -527,11 +527,14 @@ export function Calendario({
                     className={[
                       "relative h-12 flex flex-col items-center justify-center gap-0.5 border-b border-gray-100",
                       "cursor-pointer transition-[background-color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97]",
-                      !inMonth
+                      // Un solo fondo por celda (dos clases bg-* compiten por orden de CSS, no de clase)
+                      today_
+                        ? "bg-blue-50 hover:bg-blue-100"
+                        : cierre
+                        ? "bg-red-50 hover:bg-red-100"
+                        : !inMonth
                         ? isWeekend ? "bg-gray-100 hover:bg-gray-200" : "bg-gray-50 hover:bg-gray-100"
-                        : isWeekend && !today_ ? "bg-gray-50/80 hover:bg-gray-100" : "hover:bg-slate-50",
-                      today_ && "bg-blue-50 hover:bg-blue-100",
-                      cierre && !today_ && "bg-red-50 hover:bg-red-100",
+                        : isWeekend ? "bg-gray-50/80 hover:bg-gray-100" : "hover:bg-slate-50",
                       isSelected && "ring-2 ring-inset ring-[#001633]",
                     ]
                       .filter(Boolean)

@@ -23,8 +23,12 @@ export async function marcarNoLaborable(desde: string, hasta: string, motivo: st
   const rango = fechas.length === 1 ? ddmm(desde) : `${ddmm(desde)} al ${ddmm(hasta)}`
   await writeLog({ accion: "marcar_no_laborable", detalle: `Marcó como no laborable el ${rango} (${motivo})` })
 
-  const turnos = await fetchTurnosPorRango(desde, hasta)
-  const pendientes = Object.values(turnos).flat().filter((t) => t.estado === "pendiente").length
+  // El marcado ya se guardó: si falla el conteo, no reportarlo como error
+  let pendientes = 0
+  try {
+    const turnos = await fetchTurnosPorRango(desde, hasta)
+    pendientes = Object.values(turnos).flat().filter((t) => t.estado === "pendiente").length
+  } catch {}
   return { dias: fechas.length, pendientes }
 }
 

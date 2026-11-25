@@ -3,7 +3,7 @@
 // negocio del cliente pasa por acá (best-effort: nunca rompe el flujo principal).
 
 import { ref, push } from "firebase/database"
-import { format } from "date-fns-tz"
+import { formatInTimeZone } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
 import { getUserDisplayName } from "@/lib/auth-helper"
 import { TZ } from "@/lib/domain/tiempo"
@@ -45,7 +45,7 @@ export async function writeLog(entry: {
   const user = auth.currentUser
   if (!user) return
   // Mes local de Argentina, no UTC (toISOString cae en el mes siguiente después de las 21:00 del último día)
-  const mes = format(new Date(), "yyyy-MM", { timeZone: TZ })
+  const mes = formatInTimeZone(new Date(), TZ, "yyyy-MM")
   try {
     await push(ref(db, `logs/${mes}`), {
       timestamp: new Date().toISOString(),

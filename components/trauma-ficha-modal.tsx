@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Bone, Lock, Plus, Trash2, Check, X, ChevronDown } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { format, parseISO, isValid } from "date-fns"
-import { format as formatTZ } from "date-fns-tz"
+import { formatInTimeZone } from "date-fns-tz"
 import { es } from "date-fns/locale"
 import { ref, update } from "firebase/database"
 import { auth, db } from "@/lib/firebase"
@@ -30,7 +30,7 @@ interface TraumaFichaModalProps {
 // Fecha local de Argentina, no UTC ni la del dispositivo (después de las 21:00
 // AR, toISOString cae en "mañana" — misma convención que el resto de helpers).
 const TZ = "America/Argentina/Buenos_Aires"
-const hoyISO = () => formatTZ(new Date(), "yyyy-MM-dd", { timeZone: TZ })
+const hoyISO = () => formatInTimeZone(new Date(), TZ, "yyyy-MM-dd")
 const nuevoId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
 function fmtFechaConsulta(f: string): string {

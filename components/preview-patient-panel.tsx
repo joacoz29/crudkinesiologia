@@ -3,7 +3,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { useEffect, useState, type ReactNode } from "react"
 import { format, isValid } from "date-fns"
-import { format as formatTZ } from "date-fns-tz"
+import { formatInTimeZone } from "date-fns-tz"
 import { Eye, X } from "lucide-react"
 import { parseTratamientosRaw } from "@/lib/domain/paciente"
 import { edadActual } from "@/lib/edad"
@@ -81,7 +81,7 @@ export function PreviewPatientPanel({ patient, onClose }: PreviewPatientPanelPro
   const uaFecha = ua?.fecha
     ? (() => {
         const d = new Date(ua.fecha)
-        return isValid(d) ? formatTZ(d, "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" }) : ua.fecha
+        return isValid(d) ? formatInTimeZone(d, "America/Argentina/Buenos_Aires", "dd/MM/yyyy HH:mm") : ua.fecha
       })()
     : null
 

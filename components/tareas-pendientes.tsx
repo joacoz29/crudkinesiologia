@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { addDays, subDays } from "date-fns"
-import { format } from "date-fns-tz"
+import { formatInTimeZone } from "date-fns-tz"
 import { usePatients } from "@/lib/patients-store"
 import { fetchTurnosPorRango } from "@/lib/data/turnos"
 import { horaToMin } from "@/lib/domain/tiempo"
@@ -66,8 +66,8 @@ const ORDEN_CATEGORIAS: TareaCategoria[] = ["operativo", "clinico", "datos"]
 function rangoTurnos() {
   const hoy = new Date()
   return {
-    start: format(subDays(hoy, 45), "yyyy-MM-dd", { timeZone: TZ }),
-    end: format(addDays(hoy, 120), "yyyy-MM-dd", { timeZone: TZ }),
+    start: formatInTimeZone(subDays(hoy, 45), TZ, "yyyy-MM-dd"),
+    end: formatInTimeZone(addDays(hoy, 120), TZ, "yyyy-MM-dd"),
   }
 }
 
@@ -337,8 +337,8 @@ export function TareasPendientes({
   )
 
   const tareas = useMemo(() => {
-    const hoyKey = format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
-    const nowMin = horaToMin(format(new Date(), "HH:mm", { timeZone: TZ }))
+    const hoyKey = formatInTimeZone(new Date(), TZ, "yyyy-MM-dd")
+    const nowMin = horaToMin(formatInTimeZone(new Date(), TZ, "HH:mm"))
     const dePacientes = computeTareasPacientes(patients)
     // Solo los turnos de la especialidad activa generan tareas (legacy sin tag = kine)
     const deTurnos = computeTareasTurnos(patients, filtrarTurnosPorEspecialidad(turnos, especialidad), hoyKey, nowMin)

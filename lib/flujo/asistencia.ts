@@ -5,7 +5,7 @@
 // especialidad vía el registry (lib/especialidades).
 
 import { ref, get, update } from "firebase/database"
-import { format } from "date-fns-tz"
+import { formatInTimeZone } from "date-fns-tz"
 import { db, auth } from "@/lib/firebase"
 import { Turno, TurnoEstado } from "@/types"
 import { ESPECIALIDADES, espDe } from "@/lib/especialidades"
@@ -38,7 +38,7 @@ export async function confirmarAsistencia(params: {
 
   // Guard de fecha: no se puede registrar asistencia de un turno futuro (todavía no
   // pasó). Defensa a nivel datos además del gateo en la UI. Hoy en TZ Argentina.
-  const hoyKey = format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
+  const hoyKey = formatInTimeZone(new Date(), TZ, "yyyy-MM-dd")
   if (fecha > hoyKey) throw new Error("TURNO_FUTURO")
 
   // Guard de idempotencia: si otro usuario ya lo confirmó, no duplicar la sesión

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { format, isValid } from "date-fns"
-import { format as formatTZ } from "date-fns-tz"
+import { formatInTimeZone } from "date-fns-tz"
 import { ChevronDown, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -92,7 +92,7 @@ function DoctorAutocomplete({
 }
 
 function getCurrentArgentinaDateTime() {
-  return formatTZ(new Date(), "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
+  return formatInTimeZone(new Date(), "America/Argentina/Buenos_Aires", "dd/MM/yyyy HH:mm")
 }
 
 export function sessionBadgeClass(used: number, authorized: number): string {

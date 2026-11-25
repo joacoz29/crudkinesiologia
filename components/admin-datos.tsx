@@ -61,7 +61,8 @@ type VistaAtenc = (typeof VISTAS_ATENC)[number]["k"]
 // Variación porcentual vs mes anterior (null si no hay base de comparación)
 function pctCambio(actual: number, anterior: number): number | null {
   if (!anterior) return null
-  return ((actual - anterior) / anterior) * 100
+  // abs: con base negativa (saldo en rojo) el signo se invertía (-1000 → +500 daba -150%)
+  return ((actual - anterior) / Math.abs(anterior)) * 100
 }
 
 function Trend({ pct, higherIsBetter = true, title = "vs mes anterior" }: { pct: number | null; higherIsBetter?: boolean; title?: string }) {

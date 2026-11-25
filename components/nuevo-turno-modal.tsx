@@ -712,9 +712,9 @@ export function NuevoTurnoModal({
                   />
                 </div>
                 <p className="text-xs text-gray-600">
-                  {fechasManuales.length === 0
+                  {fechasPreview.length === 0
                     ? "Ningún día seleccionado"
-                    : `${fechasManuales.length} día${fechasManuales.length !== 1 ? "s" : ""} seleccionado${fechasManuales.length !== 1 ? "s" : ""}`}
+                    : `${fechasPreview.length} día${fechasPreview.length !== 1 ? "s" : ""} seleccionado${fechasPreview.length !== 1 ? "s" : ""}`}
                   <span className="text-amber-600"> · los feriados se agendan igual</span>
                   <span className="text-red-500"> · los días no laborables (tachados) no</span>
                 </p>

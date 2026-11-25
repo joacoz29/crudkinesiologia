@@ -3,7 +3,7 @@
 // La normalización/criterios puros viven en lib/domain/libro.
 
 import { ref, get, update, query, orderByKey, startAt, endAt } from "firebase/database"
-import { format } from "date-fns-tz"
+import { formatInTimeZone } from "date-fns-tz"
 import { db } from "@/lib/firebase"
 import { Especialidad } from "@/types"
 import { ESPECIALIDADES_LIST, espDe } from "@/lib/especialidades"
@@ -48,7 +48,7 @@ export async function addToLibroDiario(entry: {
   fecha?: string
 }) {
   // Fecha local de Argentina, no UTC (toISOString cae en "mañana" después de las 21:00)
-  const dateKey = entry.fecha ?? format(new Date(), "yyyy-MM-dd", { timeZone: TZ })
+  const dateKey = entry.fecha ?? formatInTimeZone(new Date(), TZ, "yyyy-MM-dd")
   const result = await buildLibroDiarioEntry(dateKey, entry.nombreApellido, entry.obraSocial)
   if (!result) return
   await update(ref(db), {

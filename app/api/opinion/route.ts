@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createHash } from 'crypto'
 import { db } from '@/lib/firebase-admin'
-import { format } from 'date-fns-tz'
+import { formatInTimeZone } from 'date-fns-tz'
 
 // Endpoint PÚBLICO (los pacientes no tienen cuenta): toda la validación es server-side
 // y el cliente nunca toca la base. Anti-abuso: rate-limit por IP + 1 opinión por DNI cada 7 días.
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const mes = format(new Date(), 'yyyy-MM', { timeZone: TZ })
+    const mes = formatInTimeZone(new Date(), TZ, 'yyyy-MM')
     const opinionId = db.ref(`opiniones/${mes}`).push().key
     const fecha = new Date().toISOString()
 

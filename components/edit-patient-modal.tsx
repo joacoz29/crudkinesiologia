@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { MessageCircle, RefreshCw, Trash2, Loader2, Printer, ChevronDown } from "lucide-react"
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { format as formatTZ } from "date-fns-tz"
+import { formatInTimeZone } from "date-fns-tz"
 import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { ref, remove, update, get } from "firebase/database"
@@ -225,7 +225,7 @@ export function EditPatientModal({
   }, [open, isDirty])
 
   // "Hoy" en hora argentina (no UTC): después de las 21:00 el día UTC ya es mañana
-  const hoyKey = formatTZ(new Date(), "yyyy-MM-dd", { timeZone: "America/Argentina/Buenos_Aires" })
+  const hoyKey = formatInTimeZone(new Date(), "America/Argentina/Buenos_Aires", "yyyy-MM-dd")
   const turnosFuturos = turnos.filter((t) => t.fecha >= hoyKey)
   const pasadosPendientes = turnos.filter((t) => t.fecha < hoyKey && t.estado === "pendiente")
   const pasadosCount = turnos.length - turnosFuturos.length
@@ -727,7 +727,7 @@ export function EditPatientModal({
                 ? (() => {
                     const d = new Date(editedPatient.ultima_actualizacion!.fecha)
                     return isValid(d)
-                      ? formatTZ(d, "dd/MM/yyyy HH:mm", { timeZone: "America/Argentina/Buenos_Aires" })
+                      ? formatInTimeZone(d, "America/Argentina/Buenos_Aires", "dd/MM/yyyy HH:mm")
                       : editedPatient.ultima_actualizacion!.fecha
                   })()
                 : "N/A"}

@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { DatePicker } from "@/components/ui/date-picker"
-import { ref, push, get } from "firebase/database"
+import { ref, push, get, update } from "firebase/database"
 import { db } from "@/lib/firebase"
 import { writeLog } from "@/lib/audit/log"
 import { getSessionStats } from "@/lib/domain/paciente"
@@ -303,28 +303,33 @@ export function NuevoTurnoModal({
     }
     if (notas.trim()) turnoBase.notas = notas.trim()
 
-    const results = await Promise.allSettled(
-      fechasPreview.map((f) =>
-        push(ref(db, `turnos/${format(f, "yyyy-MM-dd")}`), turnoBase)
+    // Una sola escritura multi-path: se guardan todos los turnos o ninguno (un
+    // corte a mitad de camino ya no deja una serie incompleta). push().key genera
+    // el id localmente, sin escribir.
+    const updates: Record<string, unknown> = {}
+    for (const f of fechasPreview) {
+      const fechaKey = format(f, "yyyy-MM-dd")
+      const id = push(ref(db, `turnos/${fechaKey}`)).key!
+      updates[`turnos/${fechaKey}/${id}`] = turnoBase
+    }
+    const saved = fechasPreview.length
+
+    try {
+      await update(ref(db), updates)
+    } catch (err) {
+      console.error("[NuevoTurnoModal] save error:", err)
+      toast.error(
+        saved > 1
+          ? "No se guardó ningún turno de la serie. Revisá la conexión y probá de nuevo."
+          : "No se pudo guardar el turno. Revisá la conexión y probá de nuevo."
       )
-    )
-
-    const saved = results.filter((r) => r.status === "fulfilled").length
-    const failed = results.filter((r) => r.status === "rejected").length
-
-    if (failed === 0) {
-      toast.success(saved > 1 ? `${saved} turnos guardados` : "Turno guardado")
-    } else if (saved === 0) {
-      toast.error("No se pudo guardar ningún turno")
-    } else {
-      toast.warning(`${saved} turno${saved !== 1 ? "s" : ""} guardado${saved !== 1 ? "s" : ""}, ${failed} fallaron`)
+      return
     }
 
-    if (saved > 0) {
-      await writeLog({ accion: "crear_turno", detalle: `Creó ${saved} turno${saved !== 1 ? "s" : ""} para ${selectedPatient!.nombre} ${selectedPatient!.apellido} a las ${hora}`, entidadId: selectedPatient!.id })
-      onSaved()
-      onOpenChange(false)
-    }
+    toast.success(saved > 1 ? `${saved} turnos guardados` : "Turno guardado")
+    await writeLog({ accion: "crear_turno", detalle: `Creó ${saved} turno${saved !== 1 ? "s" : ""} para ${selectedPatient!.nombre} ${selectedPatient!.apellido} a las ${hora}`, entidadId: selectedPatient!.id })
+    onSaved()
+    onOpenChange(false)
   }
 
   const handleSave = async () => {

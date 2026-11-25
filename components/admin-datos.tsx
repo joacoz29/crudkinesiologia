@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, getDay, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
+import { formatInTimeZone } from "date-fns-tz"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { CalendarCheck, TrendingUp, UserX, Wallet, Inbox, AlertTriangle, Banknote, ArrowDownCircle, Coins, Star, ArrowUp, ArrowDown, UserPlus, Activity, Users, Stethoscope, Download, X } from "lucide-react"
@@ -16,6 +17,7 @@ import { usePatients } from "@/lib/patients-store"
 import { useCachedMonth } from "@/lib/monthly-cache"
 import { rankDerivantes } from "@/lib/doctores"
 import { edadActual } from "@/lib/edad"
+import { TZ } from "@/lib/domain/tiempo"
 import { Button } from "@/components/ui/button"
 import { Patient, Turno, Especialidad } from "@/types"
 
@@ -62,7 +64,7 @@ function pctCambio(actual: number, anterior: number): number | null {
   return ((actual - anterior) / anterior) * 100
 }
 
-function Trend({ pct, higherIsBetter = true }: { pct: number | null; higherIsBetter?: boolean }) {
+function Trend({ pct, higherIsBetter = true, title = "vs mes anterior" }: { pct: number | null; higherIsBetter?: boolean; title?: string }) {
   if (pct === null || !isFinite(pct)) return null
   if (Math.abs(pct) < 0.5) return <span className="text-[10px] text-slate-400 whitespace-nowrap">≈ mes ant.</span>
   const sube = pct > 0
@@ -71,7 +73,7 @@ function Trend({ pct, higherIsBetter = true }: { pct: number | null; higherIsBet
   return (
     <span
       className={`inline-flex items-center gap-0.5 text-[10px] font-semibold whitespace-nowrap ${bueno ? "text-emerald-600" : "text-red-500"}`}
-      title="vs mes anterior"
+      title={title}
     >
       <Icon className="h-3 w-3" />
       {Math.abs(pct).toFixed(0)}%
@@ -294,14 +296,31 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
 
   const isLoading = isLoadingTurnos || isLoadingPatients || isLoadingLibro
 
-  // Resumen del mes anterior (tendencias), satisfacción y pacientes nuevos
-  const prev = useMemo(() => resumenMes(turnosPrev, libroPrev.porDia), [turnosPrev, libroPrev])
+  // Mes en curso: las tendencias comparan contra el MISMO tramo del mes anterior
+  // (del 1 al día de hoy), no contra el mes completo. Meses cerrados: completo vs completo.
+  // Se recorta en memoria sobre lo ya cacheado → sin lecturas extra.
+  const diaCorte = esMesActual ? Number(formatInTimeZone(new Date(), TZ, "d")) : null
+  const trendTitle = diaCorte === null
+    ? "vs mes anterior"
+    : `vs 1–${diaCorte} de ${format(prevMonth, "MMMM", { locale: es })}`
+  const prev = useMemo(() => {
+    const enTramo = (fecha: string) => diaCorte === null || Number(fecha.slice(8, 10)) <= diaCorte
+    const recortar = <T,>(porDia: Record<string, T>) =>
+      Object.fromEntries(Object.entries(porDia).filter(([f]) => enTramo(f)))
+    return resumenMes(recortar(turnosPrev), recortar(libroPrev.porDia))
+  }, [turnosPrev, libroPrev, diaCorte])
   const satisfaccion = useMemo(() => {
     if (!opiniones.length) return { promedio: 0, count: 0 }
     return { promedio: opiniones.reduce((s, o) => s + o.rating, 0) / opiniones.length, count: opiniones.length }
   }, [opiniones])
   const pacientesNuevos = useMemo(() => logs.filter((l) => l.accion === "crear_paciente").length, [logs])
-  const pacientesNuevosPrev = useMemo(() => logsPrev.filter((l) => l.accion === "crear_paciente").length, [logsPrev])
+  const pacientesNuevosPrev = useMemo(
+    () => logsPrev.filter((l) =>
+      l.accion === "crear_paciente" &&
+      (diaCorte === null || Number(formatInTimeZone(new Date(l.timestamp), TZ, "d")) <= diaCorte),
+    ).length,
+    [logsPrev, diaCorte],
+  )
 
   // Origen de la recaudación (haber) por cobertura/tipo
   const fuentesRecaud = useMemo(() => {
@@ -671,7 +690,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
               label="Atenciones"
               value={String(metrics.atenciones)}
               detail={`en ${mesNombre}`}
-              trend={<Trend pct={pctCambio(metrics.atenciones, prev.atenciones)} />}
+              trend={<Trend title={trendTitle} pct={pctCambio(metrics.atenciones, prev.atenciones)} />}
             />
             <StatCard
               icon={TrendingUp}
@@ -684,7 +703,7 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
               label="Ausentismo"
               value={`${metrics.ausentismo.toFixed(0)}%`}
               detail={`${metrics.ausencias} falta${metrics.ausencias !== 1 ? "s" : ""}, ${metrics.justificadas} justif.`}
-              trend={<Trend pct={pctCambio(metrics.ausentismo, prev.ausentismo)} higherIsBetter={false} />}
+              trend={<Trend title={trendTitle} pct={pctCambio(metrics.ausentismo, prev.ausentismo)} higherIsBetter={false} />}
             />
             <StatCard
               icon={Wallet}
@@ -913,9 +932,9 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
         ) : (
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-              <MoneyCard icon={Banknote} label="Recaudado" value={formatMoney(metrics.totalHaber)} detail="ingresos (Haber)" tone="green" trend={<Trend pct={pctCambio(metrics.totalHaber, prev.recaudado)} />} />
-              <MoneyCard icon={ArrowDownCircle} label="Egresos" value={formatMoney(metrics.totalDebe)} detail="gastos (Debe)" tone="orange" trend={<Trend pct={pctCambio(metrics.totalDebe, prev.egresos)} higherIsBetter={false} />} />
-              <MoneyCard icon={Coins} label="Saldo neto" value={formatMoney(metrics.saldoMes)} detail={`en ${mesNombre}`} tone={metrics.saldoMes >= 0 ? "green" : "red"} trend={<Trend pct={pctCambio(metrics.saldoMes, prev.saldo)} />} />
+              <MoneyCard icon={Banknote} label="Recaudado" value={formatMoney(metrics.totalHaber)} detail="ingresos (Haber)" tone="green" trend={<Trend title={trendTitle} pct={pctCambio(metrics.totalHaber, prev.recaudado)} />} />
+              <MoneyCard icon={ArrowDownCircle} label="Egresos" value={formatMoney(metrics.totalDebe)} detail="gastos (Debe)" tone="orange" trend={<Trend title={trendTitle} pct={pctCambio(metrics.totalDebe, prev.egresos)} higherIsBetter={false} />} />
+              <MoneyCard icon={Coins} label="Saldo neto" value={formatMoney(metrics.saldoMes)} detail={`en ${mesNombre}`} tone={metrics.saldoMes >= 0 ? "green" : "red"} trend={<Trend title={trendTitle} pct={pctCambio(metrics.saldoMes, prev.saldo)} />} />
               <MoneyCard icon={Wallet} label="Ticket promedio" value={formatMoney(metrics.ticketPromedio)} detail="por atención" tone="slate" />
             </div>
 
@@ -1045,14 +1064,14 @@ export function AdminDatos({ currentMonth }: { currentMonth: Date }) {
           label="Pacientes nuevos"
           value={String(pacientesNuevos)}
           detail={`altas en ${mesNombre}`}
-          trend={<Trend pct={pctCambio(pacientesNuevos, pacientesNuevosPrev)} />}
+          trend={<Trend title={trendTitle} pct={pctCambio(pacientesNuevos, pacientesNuevosPrev)} />}
         />
         <StatCard
           icon={Activity}
           label="Pacientes activos"
           value={String(metrics.pacientesActivos)}
           detail="distintos atendidos"
-          trend={<Trend pct={pctCambio(metrics.pacientesActivos, prev.activos)} />}
+          trend={<Trend title={trendTitle} pct={pctCambio(metrics.pacientesActivos, prev.activos)} />}
         />
         <StatCard
           icon={CalendarCheck}

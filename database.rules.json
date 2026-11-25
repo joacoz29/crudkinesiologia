@@ -8,7 +8,21 @@
     },
     "turnos": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      ".write": "auth != null",
+      "$fecha": {
+        "$turnoId": {
+          ".validate": "data.exists() || !(root.child('config/diasNoLaborables/' + $fecha).exists() || $fecha.endsWith('-12-24') || $fecha.endsWith('-12-25') || $fecha.endsWith('-12-31') || $fecha.endsWith('-01-01'))"
+        }
+      }
+    },
+    "config": {
+      "diasNoLaborables": {
+        ".read": "auth != null",
+        "$fecha": {
+          ".write": "auth != null && (auth.token.email === 'joaco@joaco.com.ar' || auth.token.email === 'joaco@gmail.com' || auth.token.email === 'anatullio@kinesiologia.com.ar' || auth.token.email === 'kinesiologiaintegral@gmail.com' || auth.token.email === 'alanmartineztullio@kinesiologia.com.ar')",
+          ".validate": "$fecha.matches(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) && newData.child('motivo').isString() && newData.child('motivo').val().length > 0 && newData.child('motivo').val().length <= 100"
+        }
+      }
     },
     "libroDiario": {
       ".read": "auth != null",

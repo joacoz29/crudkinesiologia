@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -26,9 +26,10 @@ import { writeLog } from "@/lib/audit/log"
 import { getSessionStats } from "@/lib/domain/paciente"
 import { horaToMin, minToHora } from "@/lib/domain/tiempo"
 import { usePatients, queryPatients } from "@/lib/patients-store"
+import { useDiasNoLaborables } from "@/lib/no-laborables-store"
 import { Patient, Turno, Especialidad } from "@/types"
 import { toast } from "sonner"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, Ban } from "lucide-react"
 
 type Repeticion = "ninguna" | "intervalo" | "semanal" | "calendario"
 
@@ -95,7 +96,7 @@ function generarFechasSemanal(base: Date, diasJS: number[], numSemanas: number):
 
 // Weekday dates until numTurnos is reached, skipping holidays
 function generarFechasSemanalPorTurnos(
-  base: Date, diasJS: number[], numTurnos: number, feriadosSet: Set<string>
+  base: Date, diasJS: number[], numTurnos: number, omitir: (d: Date) => boolean
 ): Date[] {
   if (diasJS.length === 0) return []
   const lunes = lunesDeSemanaDe(base)
@@ -107,14 +108,14 @@ function generarFechasSemanalPorTurnos(
       const offset = dia === 0 ? 6 : dia - 1
       const d = new Date(lunes)
       d.setDate(d.getDate() + s * 7 + offset)
-      if (d >= baseNorm && !feriadosSet.has(format(d, "yyyy-MM-dd"))) fechas.push(new Date(d))
+      if (d >= baseNorm && !omitir(d)) fechas.push(new Date(d))
     }
   }
   return fechas.sort((a, b) => a.getTime() - b.getTime())
 }
 
-function filtrarFeriados(fechas: Date[], feriadosSet: Set<string>): Date[] {
-  return fechas.filter((d) => !feriadosSet.has(format(d, "yyyy-MM-dd")))
+function filtrarOmitidos(fechas: Date[], omitir: (d: Date) => boolean): Date[] {
+  return fechas.filter((d) => !omitir(d))
 }
 
 interface NuevoTurnoModalProps {
@@ -211,6 +212,14 @@ export function NuevoTurnoModal({
   }
 
   const feriadosSet = useMemo(() => new Set(Object.keys(feriados)), [feriados])
+  const esFeriadoFecha = useCallback((d: Date) => feriadosSet.has(format(d, "yyyy-MM-dd")), [feriadosSet])
+
+  // Días no laborables (cierre anual o marcado a mano): NO se agendan en ningún modo.
+  // A diferencia de los feriados, ni siquiera el modo calendario los permite.
+  const { noLaborable, isLoading: isLoadingNoLaborables } = useDiasNoLaborables()
+  const esNoLaborable = useCallback((d: Date) => !!noLaborable(format(d, "yyyy-MM-dd")), [noLaborable])
+  const esOmitido = useCallback((d: Date) => esFeriadoFecha(d) || esNoLaborable(d), [esFeriadoFecha, esNoLaborable])
+  const cierreBase = noLaborable(format(fechaBase, "yyyy-MM-dd"))
 
   const sessionStats = useMemo(
     () => (selectedPatient ? getSessionStats(selectedPatient) : null),
@@ -231,20 +240,22 @@ export function NuevoTurnoModal({
     return generarFechasSemanal(fechaBase, diasSemana, numSemanas)
   }, [repeticion, fechaBase, fechasManualesOrdenadas, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas])
 
-  // Dates that will actually be saved (holidays excluded). El modo calendario respeta
-  // la elección manual: no filtra feriados (el usuario eligió esos días a propósito).
+  // Dates that will actually be saved (holidays and no laborables excluded). El modo
+  // calendario respeta la elección manual de feriados (el usuario eligió esos días a
+  // propósito), pero nunca los no laborables.
   const fechasPreview = useMemo(() => {
-    if (repeticion === "ninguna") return [fechaBase]
-    if (repeticion === "calendario") return fechasManualesOrdenadas
+    if (repeticion === "ninguna") return filtrarOmitidos([fechaBase], esNoLaborable)
+    if (repeticion === "calendario") return filtrarOmitidos(fechasManualesOrdenadas, esNoLaborable)
     if (repeticion === "intervalo")
-      return filtrarFeriados(generarFechasIntervalo(fechaBase, intervalo, vecesTotal), feriadosSet)
+      return filtrarOmitidos(generarFechasIntervalo(fechaBase, intervalo, vecesTotal), esOmitido)
     if (tipoLimite === "turnos")
-      return generarFechasSemanalPorTurnos(fechaBase, diasSemana, numTurnos, feriadosSet)
-    return filtrarFeriados(generarFechasSemanal(fechaBase, diasSemana, numSemanas), feriadosSet)
-  }, [repeticion, fechaBase, fechasManualesOrdenadas, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas, numTurnos, feriadosSet])
+      return generarFechasSemanalPorTurnos(fechaBase, diasSemana, numTurnos, esOmitido)
+    return filtrarOmitidos(generarFechasSemanal(fechaBase, diasSemana, numSemanas), esOmitido)
+  }, [repeticion, fechaBase, fechasManualesOrdenadas, intervalo, vecesTotal, diasSemana, tipoLimite, numSemanas, numTurnos, esOmitido, esNoLaborable])
 
   const canSave =
     !!selectedPatient &&
+    !isLoadingNoLaborables &&
     (repeticion !== "semanal" || diasSemana.length > 0) &&
     fechasPreview.length > 0
 
@@ -390,10 +401,22 @@ export function NuevoTurnoModal({
               <DatePicker
                 date={fechaBase}
                 setDate={(d) => { if (d) setFechaBase(d) }}
-                disabled={{ before: hoy }}
+                disabled={[{ before: hoy }, esNoLaborable]}
                 defaultMonth={fechaBase}
                 className="border-[#001633] w-full"
               />
+            </div>
+          )}
+
+          {cierreBase && (
+            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              <Ban className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+              <span>
+                Consultorio cerrado este día — <strong>{cierreBase.motivo}</strong>.{" "}
+                {repeticion === "ninguna" || repeticion === "calendario"
+                  ? "No se pueden agendar turnos."
+                  : "Se omite de la repetición."}
+              </span>
             </div>
           )}
 
@@ -675,12 +698,12 @@ export function NuevoTurnoModal({
                     mode="multiple"
                     selected={fechasManuales}
                     onSelect={(dates) => setFechasManuales(dates ?? [])}
-                    disabled={{ before: hoy }}
+                    disabled={[{ before: hoy }, esNoLaborable]}
                     defaultMonth={fecha}
                     locale={es}
                     weekStartsOn={1}
-                    modifiers={{ feriado: (d) => feriadosSet.has(format(d, "yyyy-MM-dd")) }}
-                    modifiersClassNames={{ feriado: "text-amber-600 font-semibold" }}
+                    modifiers={{ feriado: esFeriadoFecha, noLaborable: esNoLaborable }}
+                    modifiersClassNames={{ feriado: "text-amber-600 font-semibold", noLaborable: "line-through text-red-300" }}
                     classNames={{
                       // `!` para que el estado seleccionado gane sobre el modifier de feriado
                       day_selected:
@@ -693,6 +716,7 @@ export function NuevoTurnoModal({
                     ? "Ningún día seleccionado"
                     : `${fechasManuales.length} día${fechasManuales.length !== 1 ? "s" : ""} seleccionado${fechasManuales.length !== 1 ? "s" : ""}`}
                   <span className="text-amber-600"> · los feriados se agendan igual</span>
+                  <span className="text-red-500"> · los días no laborables (tachados) no</span>
                 </p>
               </div>
             )}
@@ -704,7 +728,8 @@ export function NuevoTurnoModal({
               const displayDates = byTurnos ? fechasPreview : fechasTodasCandidatas
               const feriadosOmitidos = (byTurnos || esCalendario)
                 ? 0
-                : displayDates.filter((d) => feriadosSet.has(format(d, "yyyy-MM-dd"))).length
+                : displayDates.filter((d) => esFeriadoFecha(d) && !esNoLaborable(d)).length
+              const cerradosOmitidos = byTurnos ? 0 : displayDates.filter(esNoLaborable).length
               if (displayDates.length === 0) return null
               return (
                 <div className="bg-gray-50 rounded-md p-2.5 text-xs text-gray-600 space-y-1">
@@ -715,13 +740,19 @@ export function NuevoTurnoModal({
                         · {feriadosOmitidos} feriado{feriadosOmitidos !== 1 ? "s" : ""} omitido{feriadosOmitidos !== 1 ? "s" : ""}
                       </span>
                     )}
+                    {cerradosOmitidos > 0 && (
+                      <span className="ml-1.5 font-normal text-red-600">
+                        · {cerradosOmitidos} día{cerradosOmitidos !== 1 ? "s" : ""} no laborable{cerradosOmitidos !== 1 ? "s" : ""} omitido{cerradosOmitidos !== 1 ? "s" : ""}
+                      </span>
+                    )}
                     :
                   </p>
                   <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
                     {displayDates.map((f, i) => {
                       const fKey = format(f, "yyyy-MM-dd")
                       // En modo calendario no se tachan los feriados (se agendan igual)
-                      const esFeriado = !esCalendario && feriadosSet.has(fKey)
+                      const cierre = noLaborable(fKey)
+                      const esFeriado = !!cierre || (!esCalendario && feriadosSet.has(fKey))
                       const hasConflict =
                         !esFeriado &&
                         (turnosPorFecha[fKey] ?? []).some(
@@ -739,7 +770,9 @@ export function NuevoTurnoModal({
                               : "bg-white border-gray-200 text-gray-700",
                           ].join(" ")}
                           title={
-                            esFeriado
+                            cierre
+                              ? `No laborable: ${cierre.motivo}`
+                              : esFeriado
                               ? `Feriado: ${feriados[fKey]}`
                               : hasConflict
                               ? `Ya hay turnos a las ${hora} este día`

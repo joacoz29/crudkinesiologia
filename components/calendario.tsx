@@ -28,6 +28,19 @@ import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
 import { EditarTurnoModal } from "@/components/editar-turno-modal"
 import { AgendaDia } from "@/components/agenda-dia"
 import { ScrollFab } from "@/components/scroll-fab"
+import { MarcarNoLaborableDialog } from "@/components/marcar-no-laborable-dialog"
+import { useDiasNoLaborables } from "@/lib/no-laborables-store"
+import { quitarNoLaborable, marcarNoLaborable, cancelarPendientesDelDia, deshacerCancelarPendientes } from "@/lib/flujo/no-laborables"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 
 const DAYS_OF_WEEK = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
@@ -77,6 +90,7 @@ export function Calendario({
   irAFecha,
   irAFechaNonce = 0,
   especialidad = "kinesiologia",
+  puedeGestionarCierres = false,
 }: {
   refreshTrigger?: number
   /** Fecha (yyyy-MM-dd) a la que saltar (deep-link desde Pendientes) */
@@ -85,6 +99,8 @@ export function Calendario({
   irAFechaNonce?: number
   /** Especialidad activa: filtra la agenda y taggea los turnos nuevos */
   especialidad?: Especialidad
+  /** Admin: puede marcar/habilitar días no laborables (las reglas RTDB lo hacen cumplir) */
+  puedeGestionarCierres?: boolean
 }) {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()))
   const [turnosPorFecha, setTurnosPorFecha] = useState<Record<string, Turno[]>>({})
@@ -98,6 +114,11 @@ export function Calendario({
   const [selectedTurno, setSelectedTurno] = useState<Turno | null>(null)
   const [selectedTurnoFecha, setSelectedTurnoFecha] = useState("")
   const [editModalOpen, setEditModalOpen] = useState(false)
+
+  const { noLaborable } = useDiasNoLaborables()
+  const [marcarOpen, setMarcarOpen] = useState(false)
+  const [cancelarOpen, setCancelarOpen] = useState(false)
+  const [isCancelando, setIsCancelando] = useState(false)
 
   const today = new Date()
   const isCurrentMonth =
@@ -314,6 +335,58 @@ export function Calendario({
     }
   }
 
+  const handleQuitarNoLaborable = async (fecha: string) => {
+    const cierre = noLaborable(fecha)
+    if (!cierre || cierre.tipo !== "manual") return
+    try {
+      await quitarNoLaborable(fecha, cierre.motivo)
+      toast.success("Día habilitado de nuevo", {
+        duration: 8000,
+        action: {
+          label: "Deshacer",
+          onClick: () => {
+            marcarNoLaborable(fecha, fecha, cierre.motivo).catch(() => toast.error("No se pudo deshacer"))
+          },
+        },
+      })
+    } catch {
+      toast.error("No se pudo habilitar el día (¿tenés permisos de administrador?)")
+    }
+  }
+
+  const handleCancelarPendientes = async (fecha: string) => {
+    setIsCancelando(true)
+    try {
+      const { cancelados, revert } = await cancelarPendientesDelDia(fecha)
+      setCancelarOpen(false)
+      if (!revert) {
+        toast.info("No había turnos pendientes")
+      } else {
+        toast.success(`${cancelados} turno${cancelados !== 1 ? "s" : ""} cancelado${cancelados !== 1 ? "s" : ""}`, {
+          duration: 8000,
+          action: {
+            label: "Deshacer",
+            onClick: async () => {
+              try {
+                await deshacerCancelarPendientes(revert, fecha)
+                toast.success("Cancelación deshecha")
+                reloadTurnos(currentMonth)
+              } catch {
+                toast.error("No se pudo deshacer")
+              }
+            },
+          },
+        })
+      }
+      reloadTurnos(currentMonth)
+      loadPendientesPasados()
+    } catch {
+      toast.error("No se pudieron cancelar los turnos")
+    } finally {
+      setIsCancelando(false)
+    }
+  }
+
   const days = getCalendarDays(currentMonth)
   const weeks: Date[][] = []
   for (let i = 0; i < days.length; i += 7) {
@@ -445,6 +518,7 @@ export function Calendario({
                 const turnos = turnosVisibles[dateKey] ?? []
                 const turnosActivos = turnos.filter((t) => t.estado !== "cancelado")
                 const esFeriado = feriados[dateKey]
+                const cierre = noLaborable(dateKey)
 
                 return (
                   <div
@@ -457,16 +531,21 @@ export function Calendario({
                         ? isWeekend ? "bg-gray-100 hover:bg-gray-200" : "bg-gray-50 hover:bg-gray-100"
                         : isWeekend && !today_ ? "bg-gray-50/80 hover:bg-gray-100" : "hover:bg-slate-50",
                       today_ && "bg-blue-50 hover:bg-blue-100",
+                      cierre && !today_ && "bg-red-50 hover:bg-red-100",
                       isSelected && "ring-2 ring-inset ring-[#001633]",
                     ]
                       .filter(Boolean)
                       .join(" ")}
                   >
                     <span
+                      title={cierre ? `No laborable: ${cierre.motivo}` : undefined}
                       className={[
                         "text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
+                        cierre && "line-through",
                         today_
                           ? "bg-[#001633] text-white"
+                          : cierre
+                          ? "text-red-400"
                           : inMonth
                           ? "text-gray-800"
                           : "text-gray-400",
@@ -515,6 +594,10 @@ export function Calendario({
             <span className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold text-[9px]">35</span>
             26+
           </span>
+          <span className="flex items-center gap-1">
+            <span className="px-1 rounded bg-red-50 text-red-400 line-through text-[9px] font-semibold">24</span>
+            cerrado
+          </span>
         </div>
       </div>
 
@@ -544,6 +627,10 @@ export function Calendario({
           fecha={selectedDate}
           turnos={selectedDateTurnos}
           feriado={feriados[selectedDateKey]}
+          noLaborable={noLaborable(selectedDateKey)}
+          onMarcarNoLaborable={puedeGestionarCierres ? () => setMarcarOpen(true) : undefined}
+          onQuitarNoLaborable={puedeGestionarCierres ? () => handleQuitarNoLaborable(selectedDateKey) : undefined}
+          onCancelarPendientes={() => setCancelarOpen(true)}
           onNuevoTurno={(hora) => openNuevoTurno(selectedDate, hora)}
           onEditarTurno={(turno) => {
             setSelectedTurno(turno)
@@ -591,6 +678,36 @@ export function Calendario({
           onSaved={handleTurnoSaved}
         />
       )}
+
+      <MarcarNoLaborableDialog
+        open={marcarOpen}
+        onOpenChange={setMarcarOpen}
+        fechaInicial={selectedDate}
+        onSaved={() => reloadTurnos(currentMonth)}
+      />
+
+      <AlertDialog open={cancelarOpen} onOpenChange={(o) => { if (!isCancelando) setCancelarOpen(o) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cancelar los turnos pendientes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se cancelan todos los turnos pendientes del{" "}
+              <span className="font-medium capitalize">{format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}</span>{" "}
+              (de todas las especialidades). Quedan visibles como cancelados para que puedas avisar a cada paciente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCancelando}>Volver</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isCancelando}
+              onClick={(e) => { e.preventDefault(); handleCancelarPendientes(selectedDateKey) }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isCancelando ? "Cancelando..." : "Cancelar turnos"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* FAB de scroll: al fondo de la agenda del día, y de vuelta arriba */}
       <ScrollFab labelDown="Ir al final de la agenda" labelUp="Volver arriba" />

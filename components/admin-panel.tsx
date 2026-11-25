@@ -43,6 +43,10 @@ const ACCION_LABEL: Record<string, string> = {
   eliminar_turno: "Eliminar turno",
   eliminar_todos_turnos: "Eliminar turnos próximos",
   deshacer_eliminar_turnos: "Deshacer eliminación de turnos",
+  marcar_no_laborable: "Marcar día no laborable",
+  quitar_no_laborable: "Habilitar día",
+  cancelar_turnos_dia: "Cancelar turnos del día",
+  deshacer_cancelar_turnos: "Deshacer cancelación de turnos",
   editar_libro_diario: "Editar libro diario",
   eliminar_entrada_libro: "Eliminar entrada del libro",
   login: "Inicio de sesión",
@@ -58,6 +62,10 @@ function accionTheme(accion: string): { badge: string; dot: string } {
     return { badge: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" }
   if (accion === "reprogramar_turno")
     return { badge: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" }
+  if (accion === "marcar_no_laborable" || accion === "quitar_no_laborable")
+    return { badge: "bg-slate-100 text-slate-700 border-slate-300", dot: "bg-slate-500" }
+  if (accion === "cancelar_turnos_dia")
+    return { badge: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500" }
   if (accion === "editar_traumatologia")
     return { badge: "bg-indigo-50 text-indigo-700 border-indigo-200", dot: "bg-indigo-500" }
   if (accion.startsWith("crear"))

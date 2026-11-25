@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef } from "react"
 import { format, isToday } from "date-fns"
 import { es } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Plus, Search, X, Flag, CheckCircle2, Loader2, Printer, Clock } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Search, X, Flag, CheckCircle2, Loader2, Printer, Clock, Ban, CalendarOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Printable } from "@/components/printable"
 import { printScoped } from "@/lib/print"
 import { Turno, TurnoEstado } from "@/types"
+import { NoLaborable } from "@/lib/domain/no-laborables"
 
 const BASE_HOURS = Array.from({ length: 12 }, (_, i) => i + 8) // 8 → 19
 
@@ -53,6 +54,12 @@ interface AgendaDiaProps {
   fecha: Date
   turnos: Turno[]
   feriado?: string
+  /** Consultorio cerrado ese día: no se agendan turnos */
+  noLaborable?: NoLaborable | null
+  /** Solo se pasan a quien puede gestionar cierres (admins) */
+  onMarcarNoLaborable?: () => void
+  onQuitarNoLaborable?: () => void
+  onCancelarPendientes?: () => void
   onNuevoTurno: (hora: string) => void
   onEditarTurno: (turno: Turno) => void
   onPrevDay: () => void
@@ -60,7 +67,10 @@ interface AgendaDiaProps {
   onConfirmarAsistencia?: (turno: Turno, fecha: string) => Promise<void>
 }
 
-export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno, onPrevDay, onNextDay, onConfirmarAsistencia }: AgendaDiaProps) {
+export function AgendaDia({
+  fecha, turnos, feriado, noLaborable, onMarcarNoLaborable, onQuitarNoLaborable, onCancelarPendientes,
+  onNuevoTurno, onEditarTurno, onPrevDay, onNextDay, onConfirmarAsistencia,
+}: AgendaDiaProps) {
   const [filterEstado, setFilterEstado] = useState<TurnoEstado | null>(null)
   const [searchName, setSearchName] = useState("")
   const [confirmingIds, setConfirmingIds] = useState<Set<string>>(new Set())
@@ -72,6 +82,8 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
   }, [fecha])
 
   const hasFilter = filterEstado !== null || searchName.trim() !== ""
+  const cerrado = !!noLaborable
+  const pendientesDelDia = turnos.filter((t) => t.estado === "pendiente").length
 
   // Día futuro: no se puede confirmar asistencia (todavía no pasó)
   const esFuturo = (() => {
@@ -162,15 +174,29 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
           <p className="text-xs text-gray-400 mt-0.5">{subtitleText}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white text-xs"
-            onClick={() => onNuevoTurno(defaultNuevoHora)}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nuevo turno
-          </Button>
+          {!cerrado && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 border-[#001633] text-[#001633] hover:bg-[#001633] hover:text-white text-xs"
+              onClick={() => onNuevoTurno(defaultNuevoHora)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Nuevo turno
+            </Button>
+          )}
+          {!cerrado && onMarcarNoLaborable && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 border-gray-200 text-gray-600 hover:bg-gray-50 text-xs"
+              onClick={onMarcarNoLaborable}
+              title="Marcar este día (o un rango) como no laborable"
+            >
+              <CalendarOff className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">No laborable</span>
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -207,6 +233,48 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
           <Flag className="h-4 w-4 shrink-0 text-amber-500" />
           <span>Feriado nacional — <strong>{feriado}</strong></span>
+        </div>
+      )}
+
+      {/* Día no laborable */}
+      {noLaborable && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm">
+          <span className="flex items-center gap-2 min-w-0">
+            <Ban className="h-4 w-4 shrink-0 text-red-500" />
+            <span>
+              Consultorio cerrado — <strong>{noLaborable.motivo}</strong>
+              <span className="text-xs text-red-600/70">
+                {noLaborable.tipo === "anual" ? " · cierre anual" : noLaborable.por ? ` · marcado por ${noLaborable.por}` : ""}
+              </span>
+            </span>
+          </span>
+          <span className="flex items-center gap-2 ml-auto">
+            {pendientesDelDia > 0 && onCancelarPendientes && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-100"
+                onClick={onCancelarPendientes}
+              >
+                Cancelar pendientes ({pendientesDelDia})
+              </Button>
+            )}
+            {noLaborable.tipo === "manual" && onQuitarNoLaborable && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-red-700 hover:bg-red-100"
+                onClick={onQuitarNoLaborable}
+              >
+                Habilitar día
+              </Button>
+            )}
+          </span>
+          {pendientesDelDia > 0 && (
+            <p className="basis-full text-xs text-red-700">
+              Hay {pendientesDelDia} turno{pendientesDelDia !== 1 ? "s" : ""} pendiente{pendientesDelDia !== 1 ? "s" : ""}: reprogramalos o cancelalos.
+            </p>
+          )}
         </div>
       )}
 
@@ -286,7 +354,8 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
         </div>
       )}
 
-      {/* Timeline */}
+      {/* Timeline (un día cerrado sin turnos no muestra grilla: no hay nada que agendar) */}
+      {!(cerrado && turnos.length === 0) && (
       <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
         {hasFilter && filteredTurnos.length === 0 && (
           <div className="py-10 text-center text-sm text-gray-400">
@@ -298,6 +367,7 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
           const hourLabel = `${String(hour).padStart(2, "0")}:00`
           const horasTurnos = turnosPorHora[hour]
           const libre = horasTurnos.length === 0
+          const agendable = libre && !hasFilter && !cerrado
 
           return (
             <div
@@ -306,11 +376,11 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
               className={[
                 // scroll-mt compensa la barra sticky al saltar a una hora
                 "flex min-h-[52px] scroll-mt-16",
-                libre && !hasFilter ? "hover:bg-gray-50 group cursor-pointer" : "",
+                agendable ? "hover:bg-gray-50 group cursor-pointer" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
-              onClick={libre && !hasFilter ? () => onNuevoTurno(hourLabel) : undefined}
+              onClick={agendable ? () => onNuevoTurno(hourLabel) : undefined}
             >
               <div
                 className={[
@@ -327,12 +397,12 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
                   nowrap (la nota con truncate) fuerza el ancho de la fila y en
                   pantallas angostas los chips desbordan el viewport. */}
               <div className="flex-1 min-w-0 px-2 sm:px-3 py-2 flex flex-col gap-1.5 justify-center">
-                {libre && !hasFilter ? (
+                {agendable ? (
                   <span className="text-xs text-gray-300 group-hover:text-gray-400 flex items-center gap-1 transition-colors">
                     <Plus className="h-3 w-3" />
                     Agregar turno
                   </span>
-                ) : (
+                ) : libre && !hasFilter ? null : (
                   horasTurnos.map((turno) => {
                     const isConfirming = confirmingIds.has(turno.id)
                     const canQuickConfirm = turno.estado === "pendiente" && !!turno.patientId && !!onConfirmarAsistencia && !esFuturo
@@ -401,6 +471,7 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
           )
         })}
       </div>
+      )}
 
       {/* Región imprimible (oculta en pantalla): tabla limpia de la agenda del día.
           La dispara el botón "Imprimir" vía printScoped(). */}
@@ -415,6 +486,7 @@ export function AgendaDia({ fecha, turnos, feriado, onNuevoTurno, onEditarTurno,
             <p className="text-xs">
               {totalAgendados} turno{totalAgendados !== 1 ? "s" : ""} agendado{totalAgendados !== 1 ? "s" : ""}
               {feriado ? ` · Feriado: ${feriado}` : ""}
+              {noLaborable ? ` · Consultorio cerrado: ${noLaborable.motivo}` : ""}
             </p>
           </div>
           {totalAgendados === 0 ? (

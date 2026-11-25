@@ -749,6 +749,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
             irAFecha={calTarget?.fecha}
             irAFechaNonce={calTarget?.nonce}
             especialidad={especialidad}
+            puedeGestionarCierres={isAdminUser}
           />
         ) : activeTab === "pendientes" ? (
           (isAdminUser || canSeeLibroDiario)

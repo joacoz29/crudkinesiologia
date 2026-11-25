@@ -39,6 +39,7 @@ import { toast } from "sonner"
 import { confirmarAsistencia, desconfirmarAsistencia, reconciliarAusencia, deshacerAusente } from "@/lib/flujo/asistencia"
 import { writeLog, LogCambio } from "@/lib/audit/log"
 import { horaToMin, minToHora } from "@/lib/domain/tiempo"
+import { useDiasNoLaborables } from "@/lib/no-laborables-store"
 
 const ESTADO_OPTIONS: { value: TurnoEstado; label: string; color: string }[] = [
   { value: "pendiente", label: "Pendiente", color: "text-blue-700" },
@@ -82,6 +83,9 @@ export function EditarTurnoModal({
 
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
+
+  const { noLaborable } = useDiasNoLaborables()
+  const esNoLaborable = (d: Date) => !!noLaborable(format(d, "yyyy-MM-dd"))
 
   // Al elegir la fecha destino, traer los turnos de ese día (para ver la carga
   // alrededor de la hora). Excluye el turno actual y los cancelados.
@@ -261,6 +265,7 @@ export function EditarTurnoModal({
       estado: "pendiente",
     }
     if (turno.patientId) movido.patientId = turno.patientId
+    if (turno.especialidad) movido.especialidad = turno.especialidad
     if (notas.trim()) movido.notas = notas.trim()
 
     await update(ref(db), {
@@ -286,6 +291,11 @@ export function EditarTurnoModal({
     const nuevaKey = format(nuevaFecha, "yyyy-MM-dd")
     if (nuevaKey === fecha) {
       toast.error("Elegí una fecha distinta a la actual")
+      return
+    }
+    const cierre = noLaborable(nuevaKey)
+    if (cierre) {
+      toast.error(`Ese día el consultorio está cerrado (${cierre.motivo})`)
       return
     }
     // Aviso de duplicado reutilizando los turnos del día ya cargados por el panel de
@@ -576,7 +586,7 @@ export function EditarTurnoModal({
                       <DatePicker
                         date={nuevaFecha}
                         setDate={setNuevaFecha}
-                        disabled={{ before: hoy }}
+                        disabled={[{ before: hoy }, esNoLaborable]}
                         defaultMonth={nuevaFecha ?? parseISO(fecha)}
                         placeholder="Elegí la nueva fecha"
                         className="flex-1 min-w-0 sm:w-[200px] sm:flex-none border-[#001633]"

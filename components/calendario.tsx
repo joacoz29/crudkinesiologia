@@ -99,7 +99,7 @@ export function Calendario({
   irAFechaNonce?: number
   /** Especialidad activa: filtra la agenda y taggea los turnos nuevos */
   especialidad?: Especialidad
-  /** Admin: puede marcar/habilitar días no laborables (las reglas RTDB lo hacen cumplir) */
+  /** Admin o asistente: puede marcar/habilitar días no laborables (las reglas RTDB lo hacen cumplir) */
   puedeGestionarCierres?: boolean
 }) {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()))
@@ -350,7 +350,7 @@ export function Calendario({
         },
       })
     } catch {
-      toast.error("No se pudo habilitar el día (¿tenés permisos de administrador?)")
+      toast.error("No se pudo habilitar el día (¿tenés permisos?)")
     }
   }
 

@@ -18,6 +18,7 @@ import { fetchTurnosPorPaciente } from "@/lib/data/turnos"
 import { appendSesionAlHistorial, parseTratamientosRaw } from "@/lib/domain/paciente"
 import { parseConsultasTrauma } from "@/lib/domain/trauma"
 import { writeLog, LogCambio } from "@/lib/audit/log"
+import { useDiasNoLaborables } from "@/lib/no-laborables-store"
 import { edadDesdeFecha, edadActual } from "@/lib/edad"
 import { TratamientosAccordion } from "@/components/tratamientos-accordion"
 import { Patient, Tratamiento, TurnoConFecha, TurnoEstado } from "@/types"
@@ -229,6 +230,12 @@ export function EditPatientModal({
   const turnosFuturos = turnos.filter((t) => t.fecha >= hoyKey)
   const pasadosPendientes = turnos.filter((t) => t.fecha < hoyKey && t.estado === "pendiente")
   const pasadosCount = turnos.length - turnosFuturos.length
+  // Futuros en días no laborables: se CANCELAN en vez de borrarse. Las reglas RTDB
+  // no permiten crear turnos en días cerrados, así que el "Deshacer" no podría
+  // recrearlos (y al ser atómico fallaría entero); cambiar el estado sí se permite.
+  const { noLaborable } = useDiasNoLaborables()
+  const futurosABorrar = turnosFuturos.filter((t) => !noLaborable(t.fecha))
+  const futurosEnCierre = turnosFuturos.filter((t) => !!noLaborable(t.fecha) && t.estado !== "cancelado")
 
   const handleDeleteTurno = async (turno: TurnoConFecha) => {
     setDeletingTurnoId(turno.id)
@@ -254,7 +261,7 @@ export function EditPatientModal({
       const updates: Record<string, unknown> = {}
       const revert: Record<string, unknown> = {}
 
-      for (const t of turnosFuturos) {
+      for (const t of futurosABorrar) {
         updates[`turnos/${t.fecha}/${t.id}`] = null
         // Nodo completo para poder restaurar con "Deshacer" (sin id/fecha ni undefined)
         const { id: _id, fecha: _fecha, ...nodo } = t
@@ -262,23 +269,27 @@ export function EditPatientModal({
           Object.entries(nodo).filter(([, v]) => v !== undefined)
         )
       }
-      for (const t of pasadosPendientes) {
+      for (const t of [...pasadosPendientes, ...futurosEnCierre]) {
         updates[`turnos/${t.fecha}/${t.id}/estado`] = "cancelado"
-        revert[`turnos/${t.fecha}/${t.id}/estado`] = "pendiente"
+        revert[`turnos/${t.fecha}/${t.id}/estado`] = t.estado
       }
       if (Object.keys(updates).length === 0) return
 
       await update(ref(db), updates)
 
+      const borrados = new Set(futurosABorrar.map((t) => t.id))
+      const cancelados = new Set([...pasadosPendientes, ...futurosEnCierre].map((t) => t.id))
       setTurnos(
         turnosPrevios
-          .filter((t) => t.fecha < hoyKey)
-          .map((t) => (t.estado === "pendiente" ? { ...t, estado: "cancelado" as TurnoEstado } : t))
+          .filter((t) => !borrados.has(t.id))
+          .map((t) => (cancelados.has(t.id) ? { ...t, estado: "cancelado" as TurnoEstado } : t))
       )
 
       const partes: string[] = []
-      if (turnosFuturos.length > 0)
-        partes.push(`${turnosFuturos.length} turno${turnosFuturos.length !== 1 ? "s" : ""} eliminado${turnosFuturos.length !== 1 ? "s" : ""} desde hoy`)
+      if (futurosABorrar.length > 0)
+        partes.push(`${futurosABorrar.length} turno${futurosABorrar.length !== 1 ? "s" : ""} eliminado${futurosABorrar.length !== 1 ? "s" : ""} desde hoy`)
+      if (futurosEnCierre.length > 0)
+        partes.push(`${futurosEnCierre.length} en día${futurosEnCierre.length !== 1 ? "s" : ""} cerrado${futurosEnCierre.length !== 1 ? "s" : ""} cancelado${futurosEnCierre.length !== 1 ? "s" : ""}`)
       if (pasadosPendientes.length > 0)
         partes.push(`${pasadosPendientes.length} previo${pasadosPendientes.length !== 1 ? "s" : ""} cancelado${pasadosPendientes.length !== 1 ? "s" : ""}`)
 
@@ -293,7 +304,7 @@ export function EditPatientModal({
               toast.success("Turnos restaurados")
               await writeLog({
                 accion: "deshacer_eliminar_turnos",
-                detalle: `Restauró ${turnosFuturos.length} turno${turnosFuturos.length !== 1 ? "s" : ""} de ${nombrePaciente}`,
+                detalle: `Restauró ${futurosABorrar.length + futurosEnCierre.length} turno${futurosABorrar.length + futurosEnCierre.length !== 1 ? "s" : ""} de ${nombrePaciente}`,
               })
             } catch {
               toast.error("No se pudieron restaurar los turnos")
@@ -304,7 +315,11 @@ export function EditPatientModal({
 
       await writeLog({
         accion: "eliminar_todos_turnos",
-        detalle: `Eliminó ${turnosFuturos.length} turno${turnosFuturos.length !== 1 ? "s" : ""} desde hoy de ${nombrePaciente}${
+        detalle: `Eliminó ${futurosABorrar.length} turno${futurosABorrar.length !== 1 ? "s" : ""} desde hoy de ${nombrePaciente}${
+          futurosEnCierre.length > 0
+            ? `, canceló ${futurosEnCierre.length} en días no laborables`
+            : ""
+        }${
           pasadosPendientes.length > 0
             ? ` y marcó ${pasadosPendientes.length} turno${pasadosPendientes.length !== 1 ? "s" : ""} previo${pasadosPendientes.length !== 1 ? "s" : ""} como cancelado`
             : ""
@@ -741,9 +756,13 @@ export function EditPatientModal({
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar los turnos próximos?</AlertDialogTitle>
             <AlertDialogDescription>
-              {turnosFuturos.length > 0
-                ? `Se eliminarán ${turnosFuturos.length} turno${turnosFuturos.length !== 1 ? "s" : ""} desde hoy en adelante de ${editedPatient?.nombre} ${editedPatient?.apellido}. `
-                : `${editedPatient?.nombre} ${editedPatient?.apellido} no tiene turnos próximos. `}
+              {turnosFuturos.length === 0
+                ? `${editedPatient?.nombre} ${editedPatient?.apellido} no tiene turnos próximos. `
+                : futurosABorrar.length > 0
+                ? `Se eliminarán ${futurosABorrar.length} turno${futurosABorrar.length !== 1 ? "s" : ""} desde hoy en adelante de ${editedPatient?.nombre} ${editedPatient?.apellido}. `
+                : ""}
+              {futurosEnCierre.length > 0 &&
+                `(${futurosEnCierre.length === 1 ? "El que cae" : `Los ${futurosEnCierre.length} que caen`} en día no laborable se marca${futurosEnCierre.length !== 1 ? "n" : ""} como cancelado${futurosEnCierre.length !== 1 ? "s" : ""}, para poder deshacer.) `}
               {pasadosCount > 0 && (
                 <>
                   Los {pasadosCount} turno{pasadosCount !== 1 ? "s" : ""} anteriores quedan registrados

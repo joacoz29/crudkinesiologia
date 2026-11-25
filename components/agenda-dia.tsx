@@ -56,7 +56,7 @@ interface AgendaDiaProps {
   feriado?: string
   /** Consultorio cerrado ese día: no se agendan turnos */
   noLaborable?: NoLaborable | null
-  /** Solo se pasan a quien puede gestionar cierres (admins) */
+  /** Solo se pasan a quien puede gestionar cierres (admins y asistentes) */
   onMarcarNoLaborable?: () => void
   onQuitarNoLaborable?: () => void
   onCancelarPendientes?: () => void

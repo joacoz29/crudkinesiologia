@@ -23,7 +23,7 @@ import { useRouter } from "next/navigation"
 import { onAuthStateChanged, signOut, User } from "firebase/auth"
 import { DeletePatientDialog } from "@/components/delete-patient-dialog"
 import { Patient, Turno, Especialidad } from "@/types"
-import { getUserDisplayName, isAdmin, canAccessLibroDiario, especialidadDe, puedeCambiarEspecialidad } from "@/lib/auth-helper"
+import { getUserDisplayName, isAdmin, canAccessLibroDiario, canGestionarCierres, especialidadDe, puedeCambiarEspecialidad } from "@/lib/auth-helper"
 import { ESPECIALIDADES, ESPECIALIDADES_LIST, ESP_DEFAULT } from "@/lib/especialidades"
 import { AdminPanel } from "@/components/admin-panel"
 import { TareasPendientes } from "@/components/tareas-pendientes"
@@ -84,6 +84,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   const [currentPage, setCurrentPage] = useState(1)
   const [currentUser, setCurrentUser] = useState<string | null>(null)
   const [isAdminUser, setIsAdminUser] = useState(false)
+  const [puedeGestionarCierres, setPuedeGestionarCierres] = useState(false)
   const [canSeeLibroDiario, setCanSeeLibroDiario] = useState(false)
   // Contexto de especialidad activa (Fase 1). Fijo por rol; el admin puede alternar.
   const [especialidad, setEspecialidad] = useState<Especialidad>("kinesiologia")
@@ -168,6 +169,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
         setCurrentUser(displayName)
         setIsAdminUser(isAdmin(user))
         setCanSeeLibroDiario(canAccessLibroDiario(user))
+        setPuedeGestionarCierres(canGestionarCierres(user))
         setEspecialidad(especialidadDe(user))
         setPuedeElegirEsp(puedeCambiarEspecialidad(user))
       } else {
@@ -749,7 +751,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
             irAFecha={calTarget?.fecha}
             irAFechaNonce={calTarget?.nonce}
             especialidad={especialidad}
-            puedeGestionarCierres={isAdminUser}
+            puedeGestionarCierres={puedeGestionarCierres}
           />
         ) : activeTab === "pendientes" ? (
           (isAdminUser || canSeeLibroDiario)

@@ -40,6 +40,13 @@ export function canAccessLibroDiario(user: User | null): boolean {
   return rol === 'admin' || rol === 'asistente'
 }
 
+// Días no laborables: admins y asistentes (recepción). Lo hace cumplir database.rules.json
+// (config/diasNoLaborables): si se cambia este set, actualizar los emails de las reglas.
+export function canGestionarCierres(user: User | null): boolean {
+  const rol = getUserRole(user)
+  return rol === 'admin' || rol === 'asistente'
+}
+
 const userNameMap: Record<string, string> = {
   'kinesiologiaintegral@gmail.com': 'Ana la Jefa',
   'karina@kinesiologia.com.ar': 'Karina',

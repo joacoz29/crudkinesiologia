@@ -63,7 +63,7 @@ export function MarcarNoLaborableDialog({
       onOpenChange(false)
     } catch (err) {
       console.error("[MarcarNoLaborable]", err)
-      toast.error("No se pudo marcar el día (¿tenés permisos de administrador?)")
+      toast.error("No se pudo marcar el día (¿tenés permisos?)")
     } finally {
       setIsSaving(false)
     }

@@ -19,7 +19,7 @@
       "diasNoLaborables": {
         ".read": "auth != null",
         "$fecha": {
-          ".write": "auth != null && (auth.token.email === 'joaco@joaco.com.ar' || auth.token.email === 'joaco@gmail.com' || auth.token.email === 'anatullio@kinesiologia.com.ar' || auth.token.email === 'kinesiologiaintegral@gmail.com' || auth.token.email === 'alanmartineztullio@kinesiologia.com.ar')",
+          ".write": "auth != null && (auth.token.email === 'joaco@joaco.com.ar' || auth.token.email === 'joaco@gmail.com' || auth.token.email === 'anatullio@kinesiologia.com.ar' || auth.token.email === 'kinesiologiaintegral@gmail.com' || auth.token.email === 'alanmartineztullio@kinesiologia.com.ar' || auth.token.email === 'karina@kinesiologia.com.ar' || auth.token.email === 'karinadiaz@kinesiologia.com.ar' || auth.token.email === 'sofia@kinesiologia.com.ar' || auth.token.email === 'sofianussli@kinesiologia.com.ar' || auth.token.email === 'eugenia@kinesiologia.com' || auth.token.email === 'eugeniafunk@kinesiologia.com')",
           ".validate": "$fecha.matches(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) && newData.child('motivo').isString() && newData.child('motivo').val().length > 0 && newData.child('motivo').val().length <= 100"
         }
       }

@@ -5,6 +5,7 @@ import { ref, onValue, off, DataSnapshot } from "firebase/database"
 import { onAuthStateChanged } from "firebase/auth"
 import { db, auth } from "@/lib/firebase"
 import { Patient } from "@/types"
+import { altaPacienteMs } from "@/lib/domain/paciente"
 
 // Caché compartida de la colección `pacientes`.
 //
@@ -102,26 +103,6 @@ export function usePatients(): State {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
-// Las keys de Firebase push() (20 chars) codifican el ms de creación en sus
-// primeros 8 chars (alfabeto propio, ordenable lexicográficamente por tiempo).
-// Lo usamos como fecha de alta para los pacientes legacy sin `createdAt`.
-const PUSH_CHARS = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
-function pushKeyTime(id: string): number {
-  if (!id || id.length !== 20) return 0
-  let ms = 0
-  for (let i = 0; i < 8; i++) {
-    const c = PUSH_CHARS.indexOf(id[i])
-    if (c === -1) return 0 // no es una push key válida → al fondo
-    ms = ms * 64 + c
-  }
-  return ms
-}
-// Momento de alta del paciente (epoch ms): el sello explícito si existe, si no
-// el derivado de la push key. Ambos en la misma escala (ms desde epoch).
-function pacienteTime(p: Patient): number {
-  return typeof p.createdAt === "number" ? p.createdAt : pushKeyTime(p.id)
-}
-
 /**
  * Filtra, ordena y pagina en memoria. Orden: pacientes recién ingresados primero
  * (por `createdAt` / push key), con desempate alfabético. Búsqueda por
@@ -156,7 +137,7 @@ export function queryPatients(
   }
 
   const sorted = [...filtered].sort((a, b) => {
-    const diff = pacienteTime(b) - pacienteTime(a) // más reciente primero
+    const diff = altaPacienteMs(b) - altaPacienteMs(a) // más reciente primero
     return diff !== 0 ? diff : a.nombre.localeCompare(b.nombre)
   })
   const totalItems = sorted.length

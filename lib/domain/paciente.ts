@@ -71,3 +71,23 @@ export function getSessionStats(patient: Patient): { used: number; authorized: n
   const used = countSesionesEnHistorial(sesionesText)
   return { used, authorized }
 }
+
+// Las keys de Firebase push() (20 chars) codifican el ms de creación en sus
+// primeros 8 chars (alfabeto propio, ordenable lexicográficamente por tiempo).
+// Lo usamos como fecha de alta para los pacientes legacy sin `createdAt`.
+const PUSH_CHARS = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+function pushKeyTime(id: string): number {
+  if (!id || id.length !== 20) return 0
+  let ms = 0
+  for (let i = 0; i < 8; i++) {
+    const c = PUSH_CHARS.indexOf(id[i])
+    if (c === -1) return 0 // no es una push key válida → al fondo
+    ms = ms * 64 + c
+  }
+  return ms
+}
+// Momento de alta del paciente (epoch ms): el sello explícito si existe, si no
+// el derivado de la push key. Ambos en la misma escala (ms desde epoch).
+export function altaPacienteMs(p: Patient): number {
+  return typeof p.createdAt === "number" ? p.createdAt : pushKeyTime(p.id)
+}

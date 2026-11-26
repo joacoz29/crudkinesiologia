@@ -1,5 +1,7 @@
 import { Patient, Turno } from "@/types"
-import { getSessionStats, parseTratamientosRaw } from "@/lib/domain/paciente"
+import { getSessionStats, parseTratamientosRaw, altaPacienteMs } from "@/lib/domain/paciente"
+import { formatInTimeZone } from "date-fns-tz"
+import { TZ } from "@/lib/domain/tiempo"
 import { horaToMin } from "@/lib/domain/tiempo"
 import { edadActual } from "@/lib/edad"
 
@@ -31,6 +33,8 @@ export interface Tarea {
   patientId?: string
   /** Para el CTA "Marcar asistencia": abre el modal de edición de ese turno */
   turnoRef?: { fecha: string; turnoId: string }
+  /** Paciente con actividad reciente (ver recenciaPacientes): "Vino hace 3 días" */
+  reciente?: string
 }
 
 // Campos de la ficha que consideramos "básicos". Editable acá para sumar/quitar
@@ -286,4 +290,66 @@ export function computeTareasTurnos(
   }
 
   return tareas
+}
+
+// ── Recencia: priorizar a los pacientes que están viniendo ──────────────────
+// En recepción conviene completar primero los datos de quien vino hace poco (o
+// se dio de alta): lo tienen enfrente o lo van a volver a ver pronto.
+
+export type Recencia = { fecha: string; motivo: "vino" | "alta" }
+
+const restarDias = (key: string, dias: number): string => {
+  const [y, m, d] = key.split("-").map(Number)
+  return new Date(Date.UTC(y, m - 1, d - dias)).toISOString().slice(0, 10)
+}
+const diasEntre = (desde: string, hasta: string): number =>
+  Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000)
+
+/**
+ * Pacientes con actividad en los últimos `dias` (hasta hoy inclusive): última
+ * asistencia ("vino") o fecha de alta. Si hay ambas, gana la más reciente.
+ */
+export function recenciaPacientes(
+  patients: Patient[],
+  turnosPorFecha: Record<string, Turno[]>,
+  hoyKey: string,
+  dias = 30,
+): Map<string, Recencia> {
+  const desde = restarDias(hoyKey, dias)
+  const out = new Map<string, Recencia>()
+  const proponer = (id: string, r: Recencia) => {
+    const prev = out.get(id)
+    if (!prev || r.fecha > prev.fecha || (r.fecha === prev.fecha && r.motivo === "vino")) out.set(id, r)
+  }
+  for (const [fecha, turnos] of Object.entries(turnosPorFecha)) {
+    if (fecha < desde || fecha > hoyKey) continue
+    for (const t of turnos) if (t.patientId && t.estado === "asistio") proponer(t.patientId, { fecha, motivo: "vino" })
+  }
+  for (const p of patients) {
+    const ms = altaPacienteMs(p)
+    if (!ms) continue
+    const fecha = formatInTimeZone(new Date(ms), TZ, "yyyy-MM-dd")
+    if (fecha >= desde && fecha <= hoyKey) proponer(p.id, { fecha, motivo: "alta" })
+  }
+  return out
+}
+
+export function etiquetaRecencia(r: Recencia, hoyKey: string): string {
+  const n = diasEntre(r.fecha, hoyKey)
+  const cuando = n <= 0 ? "hoy" : n === 1 ? "ayer" : `hace ${n} días`
+  return r.motivo === "vino" ? `Vino ${cuando}` : `Alta ${cuando}`
+}
+
+/**
+ * Primero las tareas de pacientes recientes (el más reciente arriba), después
+ * el resto en el orden que traían (por severidad). Orden estable.
+ */
+export function ordenarPorRecencia(tareas: Tarea[], recencia: Map<string, Recencia>, hoyKey: string): Tarea[] {
+  return tareas
+    .map((t, i) => {
+      const r = t.patientId ? recencia.get(t.patientId) : undefined
+      return { t: r ? { ...t, reciente: etiquetaRecencia(r, hoyKey) } : t, f: r?.fecha ?? "", i }
+    })
+    .sort((a, b) => (a.f === b.f ? a.i - b.i : a.f < b.f ? 1 : -1))
+    .map((x) => x.t)
 }

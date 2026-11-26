@@ -12,6 +12,8 @@ import {
   computeTareasPacientes,
   computeTareasTurnos,
   ordenarTareas,
+  ordenarPorRecencia,
+  recenciaPacientes,
   tareaKind,
   type Tarea,
   type TareaCategoria,
@@ -211,7 +213,14 @@ function CategoriaSeccion({
               title={`Prioridad ${t.severidad}`}
             />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-900">{t.titulo}</p>
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-medium text-slate-900">
+                {t.titulo}
+                {t.reciente && (
+                  <span className="rounded-full border border-sky-200 bg-sky-50 px-1.5 py-px text-[10px] font-medium text-sky-700">
+                    {t.reciente}
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-slate-600 mt-0.5 break-words">{t.descripcion}</p>
             </div>
             {t.turnoRef ? (
@@ -398,11 +407,16 @@ export function TareasPendientes({
   // (`usePatients` live) — cero lecturas nuevas.
   const duplicados = useMemo(() => gruposDuplicados(patients), [patients])
 
+  // Datos faltantes: primero los pacientes que vinieron (o se dieron de alta) en
+  // los últimos 30 días — los tenemos enfrente. Usa los turnos ya cargados (todas
+  // las especialidades: vino al consultorio igual) → sin lecturas extra.
   const porCategoria = useMemo(() => {
     const map: Record<TareaCategoria, Tarea[]> = { datos: [], clinico: [], operativo: [] }
     for (const t of tareas) map[t.categoria].push(t)
+    const hoyKey = formatInTimeZone(new Date(), TZ, "yyyy-MM-dd")
+    map.datos = ordenarPorRecencia(map.datos, recenciaPacientes(patients, turnos, hoyKey), hoyKey)
     return map
-  }, [tareas])
+  }, [tareas, patients, turnos])
 
   // Cada grupo de duplicados cuenta como un pendiente urgente (antes era una tarea
   // `dni_duplicado` por grupo) → los totales del encabezado y el badge no se mueven.

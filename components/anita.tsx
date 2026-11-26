@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { formatInTimeZone } from "date-fns-tz"
-import { X, GitMerge, PencilLine, ArrowRight, ArrowLeft, Copy, MessageSquareHeart, Inbox, Loader2, ChevronLeft } from "lucide-react"
+import { X, GitMerge, PencilLine, ArrowRight, ArrowLeft, Copy, MessageSquareHeart, Inbox, Loader2, ChevronLeft, BellRing, UserRound, CalendarX2, ClipboardCheck, RefreshCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -18,7 +18,11 @@ import {
   type Sugerencia,
   type TipoSugerencia,
 } from "@/lib/data/sugerencias"
-import { TZ } from "@/lib/domain/tiempo"
+import { TZ, horaToMin } from "@/lib/domain/tiempo"
+import { fetchTurnosPorRango } from "@/lib/data/turnos"
+import { useDiasNoLaborables } from "@/lib/no-laborables-store"
+import { computeAvisosRecepcion, type AvisoRecepcion, type CierreConPendientes } from "@/lib/avisos-recepcion"
+import { Turno } from "@/types"
 import { toast } from "sonner"
 
 // Anita: asistente del consultorio. Vive en la esquina inferior derecha para todo
@@ -28,7 +32,7 @@ import { toast } from "sonner"
 // sugerencias recibidas. Conteos sobre datos ya en memoria; las sugerencias del
 // mes solo las baja un admin (misma clave de caché que la vista del panel).
 
-type Guardado = { dia: string; ultimo: number }
+type Guardado = { dia: string; ultimo: number; vistos?: string[] }
 type Panel = "aviso" | "menu" | "sugerencia" | "gracias" | null
 
 function leer(key: string): Guardado | null {
@@ -47,6 +51,20 @@ function guardar(key: string, v: Guardado) {
 }
 
 const hoyAR = () => formatInTimeZone(new Date(), TZ, "yyyy-MM-dd")
+const sumarDias = (key: string, n: number) => {
+  const [y, m, d] = key.split("-").map(Number)
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10)
+}
+const DIAS_CIERRES = 14 // días cerrados próximos a revisar
+const REFRESCO_MS = 30 * 60_000
+const REFRESCO_MIN_MS = 2 * 60_000
+
+const ICONO_AVISO: Record<AvisoRecepcion["tipo"], typeof Copy> = {
+  reautorizar: RefreshCcw,
+  cierre: CalendarX2,
+  datos: UserRound,
+  sin_marcar: ClipboardCheck,
+}
 
 function AnitaDibujo({ className = "" }: { className?: string }) {
   return (
@@ -196,32 +214,37 @@ const PASOS: { titulo: string; texto: React.ReactNode; ilustracion: React.ReactN
 ]
 
 const TIPOS: TipoSugerencia[] = ["mejora", "problema", "otro"]
+const MAX_AVISOS_VISIBLES = 4
 
 export function Anita({
   userEmail,
   userName,
-  puedeDuplicados,
+  esRecepcion,
   esAdmin,
   ocultarAviso,
   pestana,
   onIrARevisar,
   onVerSugerencias,
+  onAbrirFicha,
+  onIrCalendario,
 }: {
   userEmail: string | null
   userName: string | null
-  /** Admins y asistentes: reciben el aviso de duplicados */
-  puedeDuplicados: boolean
+  /** Admins y asistentes: reciben los avisos de recepción y el de duplicados */
+  esRecepcion: boolean
   /** Admins: ven las sugerencias recibidas */
   esAdmin: boolean
-  /** No mostrar el aviso automático (p. ej. ya está en Recepción) */
+  /** No abrir sola (p. ej. ya está en Recepción) */
   ocultarAviso: boolean
   /** Pestaña actual: se adjunta a la sugerencia como contexto */
   pestana: string
   onIrARevisar: () => void
   onVerSugerencias: () => void
+  onAbrirFicha: (patientId: string) => void
+  onIrCalendario: (fecha: string) => void
 }) {
   const { patients, isLoading } = usePatients()
-  const grupos = useMemo(() => (puedeDuplicados ? gruposDuplicados(patients) : []), [patients, puedeDuplicados])
+  const grupos = useMemo(() => (esRecepcion ? gruposDuplicados(patients) : []), [patients, esRecepcion])
   const total = grupos.length
   const faciles = grupos.filter((g) => g.tipo === "misma_persona").length
 
@@ -233,38 +256,115 @@ export function Anita({
   )
   const nuevas = esAdmin ? sugerencias.filter((s) => s.estado === "nueva").length : 0
 
+  // ── Avisos de recepción: turnos de hoy/mañana + días cerrados próximos ──
+  const [ahora, setAhora] = useState(() => Date.now())
+  const [turnosProx, setTurnosProx] = useState<Record<string, Turno[]>>({})
+  const [cierres, setCierres] = useState<CierreConPendientes[]>([])
+  // Recién con la primera lectura hecha se decide si abrir sola (evita mostrar
+  // duplicados y cambiar a los avisos un segundo después)
+  const [avisosListos, setAvisosListos] = useState(false)
+  const ultimoFetch = useRef(0)
+  const { noLaborable, isLoading: cargandoCierres } = useDiasNoLaborables()
+
+  const hoyKey = formatInTimeZone(new Date(ahora), TZ, "yyyy-MM-dd")
+  const mananaKey = sumarDias(hoyKey, 1)
+  const nowMin = horaToMin(formatInTimeZone(new Date(ahora), TZ, "HH:mm"))
+
+  // Reloj de 5 min: re-evalúa avisos por hora (los "sin marcar" son desde las 17)
+  useEffect(() => {
+    const id = setInterval(() => setAhora(Date.now()), 5 * 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const refrescar = useRef<() => void>(() => {})
+  refrescar.current = () => {
+    if (!esRecepcion || cargandoCierres) return
+    if (Date.now() - ultimoFetch.current < REFRESCO_MIN_MS) return
+    ultimoFetch.current = Date.now()
+    const hoy = hoyAR()
+    const diasCerrados = Array.from({ length: DIAS_CIERRES }, (_, i) => sumarDias(hoy, i)).filter((f) => noLaborable(f))
+    Promise.all([
+      fetchTurnosPorRango(hoy, sumarDias(hoy, 1)),
+      Promise.all(diasCerrados.map((f) => fetchTurnosPorRango(f, f).then((r) => ({ f, turnos: r[f] ?? [] })))),
+    ])
+      .then(([prox, dias]) => {
+        setTurnosProx(prox)
+        setCierres(
+          dias.map(({ f, turnos }) => ({
+            fecha: f,
+            motivo: noLaborable(f)?.motivo ?? "cerrado",
+            pendientes: turnos.filter((t) => t.estado === "pendiente").length,
+          })),
+        )
+      })
+      .catch(() => {})
+      .finally(() => setAvisosListos(true))
+  }
+
+  // Al cargar, cada 30 min, al volver a la ventana y al cambiar de pestaña (con un mínimo de 2 min entre lecturas)
+  useEffect(() => { refrescar.current() }, [esRecepcion, cargandoCierres, hoyKey, pestana])
+  useEffect(() => {
+    const id = setInterval(() => refrescar.current(), REFRESCO_MS)
+    const onFocus = () => refrescar.current()
+    window.addEventListener("focus", onFocus)
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus) }
+  }, [])
+
+  const avisos = useMemo(
+    () =>
+      esRecepcion
+        ? computeAvisosRecepcion({ patients, turnosPorFecha: turnosProx, hoyKey, mananaKey, nowMin, cierres })
+        : [],
+    [esRecepcion, patients, turnosProx, hoyKey, mananaKey, nowMin, cierres],
+  )
+
   const [panel, setPanel] = useState<Panel>(null)
+  const [panelAuto, setPanelAuto] = useState(false)
+  const [verTodos, setVerTodos] = useState(false)
   const [previo, setPrevio] = useState<number | null>(null)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [paso, setPaso] = useState(0)
   const [tipo, setTipo] = useState<TipoSugerencia>("mejora")
   const [texto, setTexto] = useState("")
   const [enviando, setEnviando] = useState(false)
-  const avisoEvaluado = useRef(false)
 
-  const storageKey = userEmail ? `kine-aviso-duplicados:${userEmail}` : null
+  const storageKey = userEmail ? `kine-anita:${userEmail}` : null
 
-  // El aviso de duplicados sale solo una vez por día (por usuario), cuando ya
-  // se sabe cuántos hay. Después Anita queda quieta hasta que la llamen.
+  // Qué hay para avisar hoy: los avisos de recepción o, si no hay ninguno, el de duplicados
+  const idsAviso = useMemo(
+    () => (avisos.length > 0 ? avisos.map((a) => a.id) : total > 0 ? [`duplicados:${hoyKey}`] : []),
+    [avisos, total, hoyKey],
+  )
+
+  // Se abre sola cuando aparece algo que todavía no vio hoy (por usuario). Así un
+  // aviso nuevo de la tarde vuelve a avisar, pero lo ya visto no insiste.
   useEffect(() => {
-    if (avisoEvaluado.current || !storageKey || isLoading || !puedeDuplicados) return
-    avisoEvaluado.current = true
+    if (!storageKey || isLoading || !esRecepcion || !avisosListos || panel !== null || tutorialOpen) return
     const g = leer(storageKey)
     setPrevio(g?.ultimo ?? null)
-    if (total > 0 && g?.dia !== hoyAR()) setPanel("aviso")
-  }, [storageKey, isLoading, puedeDuplicados, total])
+    const vistos = new Set(g?.dia === hoyKey ? g.vistos ?? [] : [])
+    if (idsAviso.some((id) => !vistos.has(id))) {
+      setPanel("aviso")
+      setPanelAuto(true)
+    }
+    // panel/tutorialOpen no van en deps: cerrar el globo no debe reabrirlo
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey, isLoading, esRecepcion, avisosListos, idsAviso, hoyKey])
 
-  const posponerAviso = () => {
-    if (storageKey) guardar(storageKey, { dia: hoyAR(), ultimo: total })
+  const marcarVistos = () => {
+    if (!storageKey) return
+    const g = leer(storageKey)
+    const prev = g?.dia === hoyKey ? g.vistos ?? [] : []
+    guardar(storageKey, { dia: hoyKey, ultimo: total, vistos: [...new Set([...prev, ...idsAviso])] })
   }
 
   const cerrar = () => {
-    if (panel === "aviso") posponerAviso()
+    if (panel === "aviso") marcarVistos()
     setPanel(null)
   }
 
   const abrirTutorial = () => {
-    posponerAviso()
+    marcarVistos()
     setPanel(null)
     setPaso(0)
     setTutorialOpen(true)
@@ -276,8 +376,16 @@ export function Anita({
   }
 
   const tocarAnita = () => {
-    if (panel === "aviso") posponerAviso()
+    if (panel === "aviso") marcarVistos()
+    setPanelAuto(false)
     setPanel((p) => (p === null || p === "aviso" ? "menu" : null))
+  }
+
+  const ejecutar = (a: AvisoRecepcion) => {
+    // El globo queda abierto: la ficha/agenda se abre encima y al volver siguen los demás avisos
+    setPanelAuto(false)
+    if (a.accion.tipo === "ficha") onAbrirFicha(a.accion.patientId)
+    else onIrCalendario(a.accion.fecha)
   }
 
   const enviar = async () => {
@@ -301,7 +409,7 @@ export function Anita({
     return () => clearTimeout(t)
   }, [panel])
 
-  const mostrarPanel = panel !== null && !(panel === "aviso" && ocultarAviso) && !tutorialOpen
+  const mostrarPanel = panel !== null && !(panel === "aviso" && panelAuto && ocultarAviso) && !tutorialOpen
   const visible = !!userEmail
 
   // Reserva lugar a la derecha en escritorio para que Anita no tape contenido
@@ -315,8 +423,10 @@ export function Anita({
   if (!visible) return null
 
   const nombre = (userName ?? "").split(" ")[0]
+  const saludo = nowMin < 13 * 60 ? "¡Buen día" : nowMin < 20 * 60 ? "¡Buenas tardes" : "¡Buenas noches"
   const avance = previo !== null && previo > total ? previo - total : 0
   const ultimoPaso = paso === PASOS.length - 1
+  const avisosVisibles = verTodos ? avisos : avisos.slice(0, MAX_AVISOS_VISIBLES)
 
   const opcion = (Icon: typeof Copy, label: string, onClick: () => void, extra?: React.ReactNode) => (
     <button
@@ -342,13 +452,57 @@ export function Anita({
             <button
               type="button"
               onClick={cerrar}
-              aria-label={panel === "aviso" ? "Cerrar hasta mañana" : "Cerrar"}
+              aria-label={panel === "aviso" ? "Cerrar (ya lo vi)" : "Cerrar"}
               className="absolute right-2 top-2 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
             >
               <X className="h-3.5 w-3.5" />
             </button>
 
-            {panel === "aviso" && (
+            {panel === "aviso" && avisos.length > 0 && (
+              <>
+                <p className="pr-5 text-sm font-semibold text-[#001633]">{saludo}{nombre ? ` ${nombre}` : ""}! 👋</p>
+                <p className="mt-0.5 text-xs text-slate-500">Para hoy en recepción:</p>
+                <ul className={`mt-2.5 space-y-1.5 ${verTodos ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
+                  {avisosVisibles.map((a) => {
+                    const Icon = ICONO_AVISO[a.tipo]
+                    return (
+                      <li key={a.id}>
+                        <button
+                          type="button"
+                          onClick={() => ejecutar(a)}
+                          className={`flex w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-left text-[13px] leading-snug transition-colors ${
+                            a.tipo === "reautorizar" || a.tipo === "cierre"
+                              ? "border-red-200 bg-red-50/60 text-red-900 hover:bg-red-50"
+                              : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${a.tipo === "reautorizar" || a.tipo === "cierre" ? "text-red-500" : "text-[#001633]"}`} />
+                          <span className="flex-1">{a.texto}</span>
+                          <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {avisos.length > MAX_AVISOS_VISIBLES && !verTodos && (
+                  <button type="button" onClick={() => setVerTodos(true)} className="mt-1.5 text-xs font-medium text-[#001633] hover:underline">
+                    Ver todos ({avisos.length})
+                  </button>
+                )}
+                {total > 0 && (
+                  <button type="button" onClick={abrirTutorial} className="mt-2 block text-left text-xs text-slate-500 hover:text-slate-700">
+                    Además quedan <strong>{total}</strong> fichas duplicadas · <span className="underline">ver cómo</span>
+                  </button>
+                )}
+                <div className="mt-3">
+                  <Button size="sm" className="h-8 bg-[#001633] text-xs hover:bg-[#002966]" onClick={cerrar}>
+                    Entendido
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {panel === "aviso" && avisos.length === 0 && (
               <>
                 <p className="pr-5 text-sm font-semibold text-[#001633]">¡Hola{nombre ? ` ${nombre}` : ""}! 👋</p>
                 {avance > 0 && (
@@ -356,18 +510,24 @@ export function Anita({
                     ¡Bien ahí! Desde la última vez se resolvieron {avance} 🎉
                   </p>
                 )}
-                <p className="mt-1 text-sm text-slate-600">
-                  Recuerden revisar las <strong>fichas duplicadas</strong>: quedan <strong className="tabular-nums">{total}</strong>
-                  {faciles > 0 && <> y {faciles} son fáciles de resolver</>}.
-                </p>
-                <div className="mt-3 flex items-center gap-2">
-                  <Button size="sm" className="h-8 bg-[#001633] text-xs hover:bg-[#002966]" onClick={abrirTutorial}>
-                    Ver cómo se hace
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-8 text-xs text-slate-500" onClick={cerrar}>
-                    Mañana
-                  </Button>
-                </div>
+                {total > 0 ? (
+                  <>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Recuerden revisar las <strong>fichas duplicadas</strong>: quedan <strong className="tabular-nums">{total}</strong>
+                      {faciles > 0 && <> y {faciles} son fáciles de resolver</>}.
+                    </p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <Button size="sm" className="h-8 bg-[#001633] text-xs hover:bg-[#002966]" onClick={abrirTutorial}>
+                        Ver cómo se hace
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-8 text-xs text-slate-500" onClick={cerrar}>
+                        Mañana
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-600">No hay nada pendiente para hoy. ¡Todo al día! ✨</p>
+                )}
               </>
             )}
 
@@ -378,7 +538,12 @@ export function Anita({
                 </p>
                 <p className="mt-0.5 text-sm text-slate-600">¿En qué te puedo ayudar?</p>
                 <div className="mt-3 space-y-1.5">
-                  {puedeDuplicados && total > 0 &&
+                  {esRecepcion &&
+                    opcion(BellRing, "Avisos de hoy", () => { setPanelAuto(false); setPanel("aviso") },
+                      avisos.length > 0 ? (
+                        <span className="rounded-full bg-amber-100 px-1.5 text-[11px] font-semibold tabular-nums text-amber-800">{avisos.length}</span>
+                      ) : undefined)}
+                  {esRecepcion && total > 0 &&
                     opcion(Copy, "Revisar fichas duplicadas", abrirTutorial,
                       <span className="rounded-full bg-indigo-50 px-1.5 text-[11px] font-semibold tabular-nums text-indigo-700">{total}</span>)}
                   {opcion(MessageSquareHeart, "Dejar una sugerencia o contar algo que pasó", () => setPanel("sugerencia"))}
@@ -390,7 +555,6 @@ export function Anita({
                 </div>
               </>
             )}
-
             {panel === "sugerencia" && (
               <>
                 <button

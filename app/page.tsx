@@ -29,7 +29,9 @@ import { ESPECIALIDADES, ESPECIALIDADES_LIST, ESP_DEFAULT } from "@/lib/especial
 import { AdminPanel } from "@/components/admin-panel"
 import { TareasPendientes } from "@/components/tareas-pendientes"
 import { ConnectionStatus } from "@/components/connection-status"
-import { computeTareasPacientes } from "@/lib/tareas"
+import { computeTareasPacientes, pacientesActivos } from "@/lib/tareas"
+import { formatInTimeZone } from "date-fns-tz"
+import { TZ } from "@/lib/domain/tiempo"
 import { fetchFeriados } from "@/lib/feriados"
 import { toast } from "sonner"
 
@@ -140,7 +142,14 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   // disparar una lectura de turnos a nivel page.
   // Las tareas `dni_duplicado` siguen contando: la Recepción las presenta como la
   // sección "Fichas duplicadas" (1 tarea = 1 grupo), así que el total no cambia.
-  const pendientesCount = useMemo(() => computeTareasPacientes(allPatients).length, [allPatients])
+  // Las de fichas antiguas (sin actividad en ~6 meses) no cuentan: en Recepción
+  // van plegadas aparte. Acá la actividad sale solo de la ficha (sin turnos).
+  const pendientesCount = useMemo(() => {
+    const activos = pacientesActivos(allPatients, {}, formatInTimeZone(new Date(), TZ, "yyyy-MM-dd"))
+    return computeTareasPacientes(allPatients).filter(
+      (t) => t.id.startsWith("dni_duplicado") || !t.patientId || activos.has(t.patientId),
+    ).length
+  }, [allPatients])
   const error = mutationError ?? storeError
   const router = useRouter()
 
@@ -810,7 +819,9 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
       <Anita
         userEmail={userEmail}
         userName={currentUser}
-        puedeDuplicados={isAdminUser || canSeeLibroDiario}
+        esRecepcion={isAdminUser || canSeeLibroDiario}
+        onAbrirFicha={handleAbrirFicha}
+        onIrCalendario={handleIrCalendario}
         esAdmin={isAdminUser}
         ocultarAviso={activeTab === "pendientes"}
         pestana={activeTab}

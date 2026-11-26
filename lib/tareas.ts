@@ -79,6 +79,14 @@ export function ordenarTareas(tareas: Tarea[]): Tarea[] {
 }
 
 /** Tareas derivadas SOLO de la ficha del paciente (cero lecturas extra). */
+const faltaCampo = (p: Patient, campo: (typeof CAMPOS_BASICOS)[number]): boolean =>
+  campo.check ? campo.check(p) : campo.digits ? soloDigitos(p[campo.key]) === "" : esVacio(p[campo.key])
+
+/** Datos básicos que le faltan a la ficha ("teléfono", "DNI"…), en el orden de CAMPOS_BASICOS. */
+export function camposFaltantes(p: Patient): string[] {
+  return CAMPOS_BASICOS.filter((c) => faltaCampo(p, c)).map((c) => c.label)
+}
+
 export function computeTareasPacientes(patients: Patient[]): Tarea[] {
   const tareas: Tarea[] = []
 
@@ -87,12 +95,7 @@ export function computeTareasPacientes(patients: Patient[]): Tarea[] {
 
     // 1) Datos básicos faltantes
     for (const campo of CAMPOS_BASICOS) {
-      const faltante = campo.check
-        ? campo.check(p)
-        : campo.digits
-        ? soloDigitos(p[campo.key]) === ""
-        : esVacio(p[campo.key])
-      if (faltante) {
+      if (faltaCampo(p, campo)) {
         tareas.push({
           id: `falta_${String(campo.key)}:${p.id}`,
           categoria: "datos",
@@ -352,4 +355,44 @@ export function ordenarPorRecencia(tareas: Tarea[], recencia: Map<string, Recenc
     })
     .sort((a, b) => (a.f === b.f ? a.i - b.i : a.f < b.f ? 1 : -1))
     .map((x) => x.t)
+}
+
+// ── Actividad: separar fichas antiguas ──────────────────────────────────────
+// Las tareas de pacientes que no vienen hace mucho (la mayoría de la base) se
+// separan para que Recepción vea primero lo accionable. Actividad = alta,
+// última edición/asistencia (ultima_actualizacion: ISO o legacy "HH:mm:ss d/M/yyyy",
+// día/mes) o un turno reciente/próximo en el rango ya cargado.
+
+function parseUltimaActualizacion(fecha: unknown): number {
+  if (typeof fecha !== "string" || !fecha) return 0
+  const legacy = fecha.match(/^(\d{1,2}):(\d{2}):(\d{2}) (\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (legacy) {
+    const [, h, mi, se, d, m, y] = legacy.map(Number)
+    return Date.UTC(y, m - 1, d, h + 3, mi, se) // hora AR (UTC-3)
+  }
+  const ms = Date.parse(fecha)
+  return Number.isNaN(ms) ? 0 : ms
+}
+
+export function ultimaActividadMs(p: Patient): number {
+  return Math.max(altaPacienteMs(p), parseUltimaActualizacion(p.ultima_actualizacion?.fecha))
+}
+
+export const MESES_FICHA_ANTIGUA = 6
+
+/** Pacientes con actividad en los últimos ~6 meses (o con un turno desde entonces, incluidos los próximos). */
+export function pacientesActivos(
+  patients: Patient[],
+  turnosPorFecha: Record<string, Turno[]>,
+  hoyKey: string,
+): Set<string> {
+  const desdeKey = restarDias(hoyKey, MESES_FICHA_ANTIGUA * 30)
+  const desdeMs = Date.parse(`${desdeKey}T03:00:00Z`)
+  const activos = new Set<string>()
+  for (const p of patients) if (ultimaActividadMs(p) >= desdeMs) activos.add(p.id)
+  for (const [fecha, turnos] of Object.entries(turnosPorFecha)) {
+    if (fecha < desdeKey) continue
+    for (const t of turnos) if (t.patientId && t.estado !== "cancelado") activos.add(t.patientId)
+  }
+  return activos
 }

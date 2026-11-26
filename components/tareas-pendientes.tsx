@@ -14,6 +14,8 @@ import {
   ordenarTareas,
   ordenarPorRecencia,
   recenciaPacientes,
+  pacientesActivos,
+  MESES_FICHA_ANTIGUA,
   tareaKind,
   type Tarea,
   type TareaCategoria,
@@ -36,6 +38,7 @@ import {
   ChevronDown,
   Copy,
   Loader2,
+  Archive,
 } from "lucide-react"
 
 const TZ = "America/Argentina/Buenos_Aires"
@@ -78,6 +81,7 @@ function rangoTurnos() {
 // tiene su propio contenido en vez de una lista de tareas.
 function SeccionShell({
   label,
+  nota,
   Icon,
   iconWrap,
   count,
@@ -89,6 +93,7 @@ function SeccionShell({
   children,
 }: {
   label: string
+  nota?: string
   Icon: typeof UserCog
   iconWrap: string
   count: number
@@ -146,6 +151,7 @@ function SeccionShell({
           <Icon className="h-[18px] w-[18px]" />
         </span>
         <h2 className="text-sm font-semibold text-[#001633]">{label}</h2>
+        {nota && <span className="hidden text-xs text-slate-400 sm:inline">{nota}</span>}
         <span className={`text-xs font-semibold rounded-full px-2 py-0.5 tabular-nums ${countClass}`}>
           {count}
         </span>
@@ -175,6 +181,9 @@ function SeccionShell({
 function CategoriaSeccion({
   cat,
   items,
+  meta,
+  defaultExpanded,
+  sinUrgencias = false,
   onAbrirFicha,
   onAbrirTurno,
   onAgendar,
@@ -182,14 +191,18 @@ function CategoriaSeccion({
 }: {
   cat: TareaCategoria
   items: Tarea[]
+  /** Para secciones que no son una categoría (p. ej. "Fichas antiguas") */
+  meta?: { label: string; Icon: typeof UserCog; iconWrap: string; count: string; nota?: string }
+  defaultExpanded?: boolean
+  sinUrgencias?: boolean
   onAbrirFicha: (patientId: string) => void
   onAbrirTurno: (ref: { fecha: string; turnoId: string }) => void
   onAgendar: (patientId: string) => void
   onIrCalendario: (fecha: string) => void
 }) {
   const [page, setPage] = useState(1)
-  const { label, Icon, iconWrap, count } = CATEGORIA_META[cat]
-  const altaCount = items.filter((t) => t.severidad === "alta").length
+  const { label, Icon, iconWrap, count, nota } = { nota: undefined, ...(meta ?? CATEGORIA_META[cat]) }
+  const altaCount = sinUrgencias ? 0 : items.filter((t) => t.severidad === "alta").length
 
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
   const pageClamped = Math.min(page, totalPages) // auto-corrige si bajó la cantidad
@@ -199,11 +212,13 @@ function CategoriaSeccion({
   return (
     <SeccionShell
       label={label}
+      nota={nota}
       Icon={Icon}
       iconWrap={iconWrap}
       count={items.length}
       countClass={count}
       altaCount={altaCount}
+      defaultExpanded={defaultExpanded}
     >
       <ul className="divide-y divide-slate-100">
         {visibles.map((t) => (
@@ -410,20 +425,29 @@ export function TareasPendientes({
   // Datos faltantes: primero los pacientes que vinieron (o se dieron de alta) en
   // los últimos 30 días — los tenemos enfrente. Usa los turnos ya cargados (todas
   // las especialidades: vino al consultorio igual) → sin lecturas extra.
-  const porCategoria = useMemo(() => {
-    const map: Record<TareaCategoria, Tarea[]> = { datos: [], clinico: [], operativo: [] }
-    for (const t of tareas) map[t.categoria].push(t)
+  // Las tareas de datos/seguimiento de pacientes sin actividad en ~6 meses van a
+  // "Fichas antiguas" (plegada, fuera del total): son la mayoría y tapaban lo
+  // accionable. Los turnos (operativo) siempre son actuales.
+  const { porCategoria, antiguas } = useMemo(() => {
     const hoyKey = formatInTimeZone(new Date(), TZ, "yyyy-MM-dd")
+    const activos = pacientesActivos(patients, turnos, hoyKey)
+    const map: Record<TareaCategoria, Tarea[]> = { datos: [], clinico: [], operativo: [] }
+    const antiguas: Tarea[] = []
+    for (const t of tareas) {
+      if (t.categoria !== "operativo" && t.patientId && !activos.has(t.patientId)) antiguas.push(t)
+      else map[t.categoria].push(t)
+    }
     map.datos = ordenarPorRecencia(map.datos, recenciaPacientes(patients, turnos, hoyKey), hoyKey)
-    return map
+    return { porCategoria: map, antiguas }
   }, [tareas, patients, turnos])
 
   // Cada grupo de duplicados cuenta como un pendiente urgente (antes era una tarea
   // `dni_duplicado` por grupo) → los totales del encabezado y el badge no se mueven.
-  const total = tareas.length + duplicados.length
+  const activas = useMemo(() => Object.values(porCategoria).flat(), [porCategoria])
+  const total = activas.length + duplicados.length
   const urgentes = useMemo(
-    () => tareas.filter((t) => t.severidad === "alta").length + duplicados.length,
-    [tareas, duplicados],
+    () => activas.filter((t) => t.severidad === "alta").length + duplicados.length,
+    [activas, duplicados],
   )
 
   if (patientsLoading) {
@@ -470,7 +494,7 @@ export function TareasPendientes({
         </div>
       </div>
 
-      {!turnosLoading && total === 0 ? (
+      {!turnosLoading && total === 0 && antiguas.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-20 text-slate-400 bg-white rounded-xl border border-slate-200">
           <CheckCircle2 className="h-12 w-12 text-emerald-400" />
           <p className="font-medium text-slate-600">¡Todo al día!</p>
@@ -493,6 +517,28 @@ export function TareasPendientes({
               />
             )
           })}
+
+          {/* Fichas antiguas: tareas de pacientes sin actividad hace +6 meses.
+              Plegada y sin urgencias: se atienden si el paciente vuelve. */}
+          {antiguas.length > 0 && (
+            <CategoriaSeccion
+              cat="datos"
+              items={antiguas}
+              meta={{
+                label: "Fichas antiguas",
+                Icon: Archive,
+                iconWrap: "bg-slate-100 text-slate-500",
+                count: "bg-slate-100 text-slate-600",
+                nota: `sin actividad hace más de ${MESES_FICHA_ANTIGUA} meses`,
+              }}
+              defaultExpanded={false}
+              sinUrgencias
+              onAbrirFicha={onAbrirFicha}
+              onAbrirTurno={abrirTurno}
+              onAgendar={agendarTurno}
+              onIrCalendario={onIrCalendario}
+            />
+          )}
 
           {/* Fichas duplicadas: va última y plegada por default — es trabajo de
               limpieza de a tandas, no del día a día del mostrador. El índigo la

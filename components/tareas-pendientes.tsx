@@ -99,14 +99,26 @@ function SeccionShell({
   children: React.ReactNode
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
+  const [resaltada, setResaltada] = useState(false)
   const sectionRef = useRef<HTMLElement>(null)
+  // Se desplaza DESPUÉS de expandir (200ms): si la sección está al fondo, la página
+  // recién tiene alto suficiente para llevarla arriba cuando su contenido creció.
   useEffect(() => {
     if (!enfocar) return
     setExpanded(true)
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    sectionRef.current?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" })
-    onEnfocada?.()
+    const t = setTimeout(() => {
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      sectionRef.current?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" })
+      setResaltada(true)
+      onEnfocada?.()
+    }, 220)
+    return () => clearTimeout(t)
   }, [enfocar, onEnfocada])
+  useEffect(() => {
+    if (!resaltada) return
+    const t = setTimeout(() => setResaltada(false), 2000)
+    return () => clearTimeout(t)
+  }, [resaltada])
 
   // El contenido queda en el DOM aunque esté colapsado (para animar la altura con
   // grid-rows); `inert` lo saca del foco de teclado mientras la sección está cerrada.
@@ -116,7 +128,12 @@ function SeccionShell({
   }, [expanded])
 
   return (
-    <section ref={sectionRef} className="scroll-mt-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <section
+      ref={sectionRef}
+      className={`scroll-mt-4 bg-white rounded-xl border shadow-sm overflow-hidden transition-[box-shadow,border-color] duration-500 ${
+        resaltada ? "border-indigo-300 ring-4 ring-indigo-200" : "border-slate-200"
+      }`}
+    >
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -475,7 +492,7 @@ export function TareasPendientes({
               countClass="bg-indigo-50 text-indigo-700"
               altaCount={duplicados.length}
               defaultExpanded={false}
-              enfocar={enfocarDuplicados}
+              enfocar={enfocarDuplicados && !turnosLoading}
               onEnfocada={onDuplicadosEnfocados}
             >
               <PacientesDuplicados grupos={duplicados} onAbrirFicha={onAbrirFicha} />

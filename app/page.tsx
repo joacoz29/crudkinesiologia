@@ -9,7 +9,7 @@ import { TraumaFichaModal } from "@/components/trauma-ficha-modal"
 import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
-import { AvisoDuplicados } from "@/components/aviso-duplicados"
+import { Anita } from "@/components/anita"
 import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users, CalendarPlus, Bone } from "lucide-react"
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { db, auth } from "@/lib/firebase"
@@ -86,6 +86,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   const [currentUser, setCurrentUser] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [enfocarDuplicados, setEnfocarDuplicados] = useState(false)
+  const [adminVistaPedida, setAdminVistaPedida] = useState<{ vista: "sugerencias"; nonce: number } | null>(null)
   const handleDuplicadosEnfocados = useCallback(() => setEnfocarDuplicados(false), [])
   const [isAdminUser, setIsAdminUser] = useState(false)
   const [puedeGestionarCierres, setPuedeGestionarCierres] = useState(false)
@@ -338,7 +339,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-[#001633] text-white p-4 shadow-md">
-        <div className="max-w-7xl mx-auto kini-shift">
+        <div className="max-w-7xl mx-auto anita-shift">
           <div className="flex flex-col sm:flex-row items-center justify-between mb-4">
             <div className="mb-4 sm:mb-0 text-center sm:text-left">
               <h1 className="text-xl font-semibold tracking-tight">Kinesiología Integral</h1>
@@ -427,7 +428,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto py-8 px-4 kini-shift">
+      <main className="max-w-7xl mx-auto py-8 px-4 anita-shift">
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -763,7 +764,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
             ? <TareasPendientes onAbrirFicha={handleAbrirFicha} onIrCalendario={handleIrCalendario} especialidad={especialidad} enfocarDuplicados={enfocarDuplicados} onDuplicadosEnfocados={handleDuplicadosEnfocados} />
             : null
         ) : (
-          isAdminUser ? <AdminPanel /> : null
+          isAdminUser ? <AdminPanel vistaPedida={adminVistaPedida} /> : null
         )}
       </main>
 
@@ -804,17 +805,26 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
         />
       )}
 
-      {/* Banner global de "sin conexión" (overlay fijo abajo-centro). */}
-      {/* Aviso de fichas duplicadas para quien ve la Recepción (admins y asistentes) */}
-      <AvisoDuplicados
+      {/* Anita: asistente para todo el equipo (aviso de duplicados a quien ve la
+          Recepción, sugerencias para todos, bandeja para admins) */}
+      <Anita
         userEmail={userEmail}
         userName={currentUser}
-        oculto={activeTab === "pendientes" || !(isAdminUser || canSeeLibroDiario)}
+        puedeDuplicados={isAdminUser || canSeeLibroDiario}
+        esAdmin={isAdminUser}
+        ocultarAviso={activeTab === "pendientes"}
+        pestana={activeTab}
         onIrARevisar={() => {
           setEnfocarDuplicados(true)
           goToTab("pendientes")
         }}
+        onVerSugerencias={() => {
+          setAdminVistaPedida({ vista: "sugerencias", nonce: Date.now() })
+          goToTab("admin")
+        }}
       />
+
+      {/* Banner global de "sin conexión" (overlay fijo abajo-centro). */}
 
       <ConnectionStatus />
     </div>

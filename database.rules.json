@@ -36,6 +36,15 @@
         }
       }
     },
+    "sugerencias": {
+      "$mes": {
+        ".read": "auth != null && (auth.token.email === 'joaco@joaco.com.ar' || auth.token.email === 'joaco@gmail.com' || auth.token.email === 'anatullio@kinesiologia.com.ar' || auth.token.email === 'kinesiologiaintegral@gmail.com' || auth.token.email === 'alanmartineztullio@kinesiologia.com.ar')",
+        "$id": {
+          ".write": "auth != null && (!data.exists() || (auth.token.email === 'joaco@joaco.com.ar' || auth.token.email === 'joaco@gmail.com' || auth.token.email === 'anatullio@kinesiologia.com.ar' || auth.token.email === 'kinesiologiaintegral@gmail.com' || auth.token.email === 'alanmartineztullio@kinesiologia.com.ar'))",
+          ".validate": "newData.hasChildren(['tipo', 'texto', 'email', 'creadoEn', 'estado']) && newData.child('texto').isString() && newData.child('texto').val().length > 0 && newData.child('texto').val().length <= 1000 && (data.exists() || (newData.child('email').val() === auth.token.email && newData.child('estado').val() === 'nueva'))"
+        }
+      }
+    },
     "opiniones": {
       "$mes": {
         ".read": "auth != null && (auth.token.email === 'joaco@joaco.com.ar' || auth.token.email === 'joaco@gmail.com' || auth.token.email === 'anatullio@kinesiologia.com.ar' || auth.token.email === 'kinesiologiaintegral@gmail.com' || auth.token.email === 'alanmartineztullio@kinesiologia.com.ar')"

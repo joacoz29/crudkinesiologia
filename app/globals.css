@@ -155,3 +155,25 @@ body {
     display: block !important;
   }
 }
+
+/* Personaje del aviso de duplicados: flota suave, saluda con la mano y el globo
+   entra con un pop corto. Sin movimiento en reduced-motion. */
+@keyframes kiniFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes kiniWave {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  15%, 45% { transform: rotate(-18deg); }
+  30% { transform: rotate(10deg); }
+}
+@keyframes kiniBubbleIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.kini-float { animation: kiniFloat 3.2s ease-in-out infinite; }
+.kini-wave { transform-box: fill-box; transform-origin: 20% 90%; animation: kiniWave 2.6s ease-in-out infinite; }
+.kini-bubble { transform-origin: bottom right; animation: kiniBubbleIn 260ms var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) {
+  .kini-float, .kini-wave, .kini-bubble { animation: none; }
+}

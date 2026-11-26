@@ -9,8 +9,9 @@ import { TraumaFichaModal } from "@/components/trauma-ficha-modal"
 import { LibroDiario } from "@/components/libro-diario"
 import { Calendario } from "@/components/calendario"
 import { NuevoTurnoModal } from "@/components/nuevo-turno-modal"
+import { AvisoDuplicados } from "@/components/aviso-duplicados"
 import { Pencil, Trash2, Search, ChevronLeft, ChevronRight, LogOut, User2, AlertCircle, UserPlus, Users, CalendarPlus, Bone } from "lucide-react"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { db, auth } from "@/lib/firebase"
 import { ref, update } from "firebase/database"
 import { countSesionesEnHistorial } from "@/lib/domain/paciente"
@@ -83,6 +84,9 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [currentUser, setCurrentUser] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [enfocarDuplicados, setEnfocarDuplicados] = useState(false)
+  const handleDuplicadosEnfocados = useCallback(() => setEnfocarDuplicados(false), [])
   const [isAdminUser, setIsAdminUser] = useState(false)
   const [puedeGestionarCierres, setPuedeGestionarCierres] = useState(false)
   const [canSeeLibroDiario, setCanSeeLibroDiario] = useState(false)
@@ -167,6 +171,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
       if (user) {
         const displayName = getUserDisplayName(user)
         setCurrentUser(displayName)
+        setUserEmail(user.email)
         setIsAdminUser(isAdmin(user))
         setCanSeeLibroDiario(canAccessLibroDiario(user))
         setPuedeGestionarCierres(canGestionarCierres(user))
@@ -755,7 +760,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
           />
         ) : activeTab === "pendientes" ? (
           (isAdminUser || canSeeLibroDiario)
-            ? <TareasPendientes onAbrirFicha={handleAbrirFicha} onIrCalendario={handleIrCalendario} especialidad={especialidad} />
+            ? <TareasPendientes onAbrirFicha={handleAbrirFicha} onIrCalendario={handleIrCalendario} especialidad={especialidad} enfocarDuplicados={enfocarDuplicados} onDuplicadosEnfocados={handleDuplicadosEnfocados} />
             : null
         ) : (
           isAdminUser ? <AdminPanel /> : null
@@ -800,6 +805,17 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
       )}
 
       {/* Banner global de "sin conexión" (overlay fijo abajo-centro). */}
+      {/* Aviso de fichas duplicadas para quien ve la Recepción (admins y asistentes) */}
+      <AvisoDuplicados
+        userEmail={userEmail}
+        userName={currentUser}
+        oculto={activeTab === "pendientes" || !(isAdminUser || canSeeLibroDiario)}
+        onIrARevisar={() => {
+          setEnfocarDuplicados(true)
+          goToTab("pendientes")
+        }}
+      />
+
       <ConnectionStatus />
     </div>
   )

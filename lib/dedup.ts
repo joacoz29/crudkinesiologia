@@ -4,6 +4,7 @@ import { Patient } from "@/types"
 import { soloDigitos, dniEsValido } from "@/lib/tareas"
 import { fetchTurnosPorPaciente } from "@/lib/data/turnos"
 import { writeLog } from "@/lib/audit/log"
+import { clasificarDuplicado, type TipoDuplicado } from "@/lib/domain/duplicados"
 
 // Depuración de pacientes duplicados (mismo DNI VÁLIDO en 2+ fichas). Ver el
 // análisis con scripts/dni-audit.mjs. La fusión es asistida (el admin revisa
@@ -13,6 +14,7 @@ import { writeLog } from "@/lib/audit/log"
 export interface GrupoDuplicado {
   dni: string
   pacientes: Patient[]
+  tipo: TipoDuplicado
 }
 
 /** Grupos de pacientes que comparten un DNI válido (candidatos a fusionar). */
@@ -27,7 +29,7 @@ export function gruposDuplicados(patients: Patient[]): GrupoDuplicado[] {
   }
   const grupos: GrupoDuplicado[] = []
   for (const [dni, pacientes] of byDni) {
-    if (pacientes.length > 1) grupos.push({ dni, pacientes })
+    if (pacientes.length > 1) grupos.push({ dni, pacientes, tipo: clasificarDuplicado(pacientes) })
   }
   // Más registros primero (los peores), luego por DNI para orden estable
   return grupos.sort((a, b) => b.pacientes.length - a.pacientes.length || a.dni.localeCompare(b.dni))

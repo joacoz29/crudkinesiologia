@@ -82,6 +82,8 @@ function SeccionShell({
   countClass,
   altaCount,
   defaultExpanded = true,
+  enfocar = false,
+  onEnfocada,
   children,
 }: {
   label: string
@@ -91,9 +93,20 @@ function SeccionShell({
   countClass: string
   altaCount: number
   defaultExpanded?: boolean
+  /** Abrir la sección y desplazarse hasta ella (p. ej. desde el aviso de duplicados) */
+  enfocar?: boolean
+  onEnfocada?: () => void
   children: React.ReactNode
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
+  const sectionRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!enfocar) return
+    setExpanded(true)
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    sectionRef.current?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" })
+    onEnfocada?.()
+  }, [enfocar, onEnfocada])
 
   // El contenido queda en el DOM aunque esté colapsado (para animar la altura con
   // grid-rows); `inert` lo saca del foco de teclado mientras la sección está cerrada.
@@ -103,7 +116,7 @@ function SeccionShell({
   }, [expanded])
 
   return (
-    <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <section ref={sectionRef} className="scroll-mt-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -265,9 +278,14 @@ export function TareasPendientes({
   onAbrirFicha,
   onIrCalendario,
   especialidad = "kinesiologia",
+  enfocarDuplicados = false,
+  onDuplicadosEnfocados,
 }: {
   onAbrirFicha: (patientId: string) => void
   onIrCalendario: (fecha: string) => void
+  /** Llegó desde el aviso de duplicados: abrir esa sección y desplazarse */
+  enfocarDuplicados?: boolean
+  onDuplicadosEnfocados?: () => void
   // Las tareas de turnos se filtran por la especialidad activa (los turnos de
   // trauma no deben aparecer como "sin marcar" en la Recepción de kine).
   especialidad?: Especialidad
@@ -457,8 +475,10 @@ export function TareasPendientes({
               countClass="bg-indigo-50 text-indigo-700"
               altaCount={duplicados.length}
               defaultExpanded={false}
+              enfocar={enfocarDuplicados}
+              onEnfocada={onDuplicadosEnfocados}
             >
-              <PacientesDuplicados grupos={duplicados} />
+              <PacientesDuplicados grupos={duplicados} onAbrirFicha={onAbrirFicha} />
             </SeccionShell>
           )}
         </div>

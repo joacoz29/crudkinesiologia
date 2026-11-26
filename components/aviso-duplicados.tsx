@@ -221,6 +221,16 @@ export function AvisoDuplicados({
     onIrARevisar()
   }
 
+  const mostrando = !isLoading && total > 0 && visible && !oculto && !tutorialOpen
+
+  // Mientras se ve el personaje, el layout se corre a la izquierda para dejarle
+  // lugar en pantallas de escritorio (ver .kini-shift en globals.css)
+  useEffect(() => {
+    if (!mostrando) return
+    document.documentElement.classList.add("kini-activo")
+    return () => document.documentElement.classList.remove("kini-activo")
+  }, [mostrando])
+
   if (isLoading || total === 0) return null
 
   const nombre = (userName ?? "").split(" ")[0]
@@ -229,11 +239,11 @@ export function AvisoDuplicados({
 
   return (
     <>
-      {visible && !oculto && !tutorialOpen && (
-        <div className="fixed bottom-4 right-4 z-40 flex items-end gap-1 print:hidden sm:bottom-6 sm:right-6">
+      {mostrando && (
+        <div className="fixed bottom-4 right-4 z-40 flex w-64 flex-col items-end gap-1 print:hidden sm:bottom-6 sm:right-6">
           <div
             role="status"
-            className="kini-bubble relative mb-10 w-64 rounded-2xl rounded-br-sm border border-slate-200 bg-white p-3.5 shadow-xl sm:w-72"
+            className="kini-bubble relative w-full rounded-2xl rounded-br-sm border border-slate-200 bg-white p-3.5 shadow-xl"
           >
             <button
               type="button"

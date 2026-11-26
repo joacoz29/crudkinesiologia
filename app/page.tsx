@@ -338,7 +338,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-[#001633] text-white p-4 shadow-md">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto kini-shift">
           <div className="flex flex-col sm:flex-row items-center justify-between mb-4">
             <div className="mb-4 sm:mb-0 text-center sm:text-left">
               <h1 className="text-xl font-semibold tracking-tight">Kinesiología Integral</h1>
@@ -427,7 +427,7 @@ export default function Page({ searchParams }: { searchParams: { [key: string]: 
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto py-8 px-4">
+      <main className="max-w-7xl mx-auto py-8 px-4 kini-shift">
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />

@@ -177,3 +177,21 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .kini-float, .kini-wave, .kini-bubble { animation: none; }
 }
+
+/* Con el personaje visible, en escritorio el layout (header + main, ambos
+   max-w-7xl centrados) se corre a la izquierda para dejar ~19rem libres a la
+   derecha: globo (16rem) + margen. En pantallas muy anchas queda centrado (ya
+   entra); si no alcanza, el contenedor se angosta. En móvil no se toca. */
+.kini-shift {
+  transition: margin-left 300ms var(--ease-out), max-width 300ms var(--ease-out);
+}
+@media (min-width: 1024px) {
+  html.kini-activo .kini-shift {
+    margin-left: clamp(1rem, calc(100vw - 80rem - 19rem), calc((100vw - 80rem) / 2));
+    margin-right: auto;
+    max-width: min(80rem, calc(100vw - 20rem));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kini-shift { transition: none; }
+}
